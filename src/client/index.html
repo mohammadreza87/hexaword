@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>HexaWord - Hexagonal Word Puzzle</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      
+      html, body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+      }
+      
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
+      
+      h1 {
+        color: white;
+        text-align: center;
+        font-size: clamp(1.5rem, 4vw, 2.5rem);
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+        margin-bottom: 1rem;
+        position: absolute;
+        top: 1rem;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 10;
+      }
+      
+      #hex-grid-container {
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        position: relative;
+        width: 90vmin;
+        height: 90vmin;
+        max-width: 600px;
+        max-height: 600px;
+        min-width: 320px;
+        min-height: 320px;
+      }
+      
+      /* Mobile adjustments */
+      @media (max-width: 480px) {
+        h1 {
+          font-size: 1.2rem;
+          margin-bottom: 0.5rem;
+        }
+        
+        #hex-grid-container {
+          width: 95vmin;
+          height: 95vmin;
+          border-radius: 15px;
+        }
+      }
+      
+      /* Landscape adjustment */
+      @media (orientation: landscape) and (max-height: 600px) {
+        h1 {
+          position: static;
+          transform: none;
+          margin-bottom: 0.5rem;
+        }
+        
+        #hex-grid-container {
+          width: 80vmin;
+          height: 80vmin;
+        }
+      }
+      
+      /* Large screens */
+      @media (min-width: 1024px) {
+        #hex-grid-container {
+          width: 70vmin;
+          height: 70vmin;
+          max-width: 700px;
+          max-height: 700px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>HexaWord</h1>
+    <div id="hex-grid-container">
+      <!-- Canvas will be inserted here -->
+    </div>
+    <script type="module" src="main.ts"></script>
+  </body>
+</html>
