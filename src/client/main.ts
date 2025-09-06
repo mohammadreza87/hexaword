@@ -99,26 +99,11 @@ class HexaWordCrossword {
     // Clear board
     this.resetBoard();
     
-    // Step 1: Find the best 3 words with a shared middle letter
-    const centerWords = this.findBestCenterWords();
-    if (!centerWords) {
-      console.error('Could not find 3 words with shared middle letter');
-      return;
-    }
+    // Use the new systematic placement algorithm
+    const success = this.placeAllWords();
     
-    const { words: [word1, word2, word3], letter, indices } = centerWords;
-    console.log(`Selected center words: ${word1.word}, ${word2.word}, ${word3.word} with shared letter '${letter}'`);
-    
-    // Step 2: Place the 3 words on Q, R, S axes
-    this.placeCenterWords(word1, word2, word3, indices);
-    
-    // Step 3: Place remaining words
-    const placedWordSet = new Set([word1, word2, word3]);
-    const remainingWords = this.wordObjs.filter(w => !placedWordSet.has(w));
-    
-    if (remainingWords.length > 0) {
-      console.log(`Placing ${remainingWords.length} remaining words...`);
-      this.placeRemainingWords(remainingWords);
+    if (!success) {
+      console.error('Failed to place all words');
     }
     
     console.log(`Final: Placed ${this.wordsActive.length} out of ${this.words.length} words`);
@@ -209,94 +194,154 @@ class HexaWordCrossword {
   }
   
   private placeRemainingWords(remainingWords: WordObj[]): void {
-    for (const word of remainingWords) {
+    const unplacedWords: WordObj[] = [...remainingWords];
+    let placedInThisRound = true;
+    
+    // Keep trying to place words until no more can be placed
+    while (unplacedWords.length > 0 && placedInThisRound) {
+      placedInThisRound = false;
+      
+      for (let i = unplacedWords.length - 1; i >= 0; i--) {
+        const word = unplacedWords[i];
+        let placed = false;
+        
+        // Try to connect to ANY letter of ALL placed words (not just first/last)
+        for (const placedWord of this.wordsActive) {
+          if (placed) break;
+          
+          // Check all positions for better connectivity
+          for (let posIdx = 0; posIdx < placedWord.chars.length; posIdx++) {
+            if (placed) break;
+            const placedChar = placedWord.chars[posIdx];
+            
+            // Check if this word has this letter
+            for (let j = 0; j < word.chars.length; j++) {
+              if (word.chars[j] === placedChar) {
+                const placedPos = this.getCharPosition(placedWord, posIdx);
+                
+                // Try the 2 directions that are NOT the same as the placed word
+                for (let dir = 0; dir < this.directions.length; dir++) {
+                  if (dir === placedWord.dir) {
+                    // Skip the same direction as the existing word - no parallel placement
+                    continue;
+                  }
+                  
+                  const wordStart = this.getWordStartPosition(placedPos, j, dir);
+                  
+                  if (this.canPlaceSimple(word, wordStart.q, wordStart.r, dir)) {
+                    const dirNames = ['horizontal(Q)', 'vertical(R)', 'diagonal(S)'];
+                    this.placeWordAt(word, wordStart.q, wordStart.r, dir);
+                    console.log(`Placed "${word.word}" ${dirNames[dir]} intersecting with "${placedWord.word}" ${dirNames[placedWord.dir]} at letter '${placedChar}'`);
+                    placed = true;
+                    placedInThisRound = true;
+                    unplacedWords.splice(i, 1);
+                    break;
+                  }
+                }
+                if (placed) break;
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    // If there are still unplaced words, place them at closest empty position to center
+    for (const word of unplacedWords) {
       let placed = false;
       
-      // PRIORITY 1: Try to connect to first or last letter of placed words
-      for (const placedWord of this.wordsActive) {
-        if (placed) break;
+      // Try placing at increasing distances from center
+      for (let radius = 1; radius <= this.GRID_RADIUS && !placed; radius++) {
+        // Collect all empty cells at this radius
+        const cellsAtRadius: {q: number, r: number}[] = [];
         
-        // Check first and last positions only
-        const positions = [0, placedWord.chars.length - 1];
+        for (let q = -radius; q <= radius; q++) {
+          for (let r = -radius; r <= radius; r++) {
+            const s = -q - r;
+            if (Math.abs(s) > radius) continue;
+            
+            // Check if this position is empty
+            const key = `${q},${r}`;
+            if (!this.board.has(key)) {
+              cellsAtRadius.push({q, r});
+            }
+          }
+        }
         
-        for (const posIdx of positions) {
+        // Try to place word at each empty cell at this radius
+        for (const cell of cellsAtRadius) {
           if (placed) break;
-          const placedChar = placedWord.chars[posIdx];
           
-          // Check if this word has this letter
-          for (let j = 0; j < word.chars.length; j++) {
-            if (word.chars[j] === placedChar) {
-              const placedPos = this.getCharPosition(placedWord, posIdx);
+          // Try each direction
+          for (let dir = 0; dir < this.directions.length; dir++) {
+            // Check if we can place the word here without collision
+            let canPlace = true;
+            for (let i = 0; i < word.chars.length; i++) {
+              const cellPos = {
+                q: cell.q + i * this.directions[dir].q,
+                r: cell.r + i * this.directions[dir].r
+              };
               
-              // Try the 2 directions that are NOT the same as the placed word
-              // If placed word is horizontal (0), try vertical (1) and diagonal (2)
-              // If placed word is vertical (1), try horizontal (0) and diagonal (2)
-              // If placed word is diagonal (2), try horizontal (0) and vertical (1)
-              for (let dir = 0; dir < this.directions.length; dir++) {
-                if (dir === placedWord.dir) {
-                  // Skip the same direction as the existing word - no parallel placement
-                  continue;
-                }
-                
-                const wordStart = this.getWordStartPosition(placedPos, j, dir);
-                
-                if (this.canPlaceSimple(word, wordStart.q, wordStart.r, dir)) {
-                  const dirNames = ['horizontal(Q)', 'vertical(R)', 'diagonal(S)'];
-                  this.placeWordAt(word, wordStart.q, wordStart.r, dir);
-                  console.log(`Placed "${word.word}" ${dirNames[dir]} intersecting with "${placedWord.word}" ${dirNames[placedWord.dir]} at letter '${placedChar}'`);
-                  placed = true;
-                  break;
+              // Check if this cell would be within grid bounds
+              const s = -cellPos.q - cellPos.r;
+              if (Math.abs(cellPos.q) > this.GRID_RADIUS || 
+                  Math.abs(cellPos.r) > this.GRID_RADIUS || 
+                  Math.abs(s) > this.GRID_RADIUS) {
+                canPlace = false;
+                break;
+              }
+              
+              // Check if cell is occupied
+              const cellKey = `${cellPos.q},${cellPos.r}`;
+              if (this.board.has(cellKey)) {
+                canPlace = false;
+                break;
+              }
+              
+              // Check that we have at least 1 space gap from other words
+              let tooClose = false;
+              for (const dirCheck of this.allDirections) {
+                const neighborKey = `${cellPos.q + dirCheck.q},${cellPos.r + dirCheck.r}`;
+                if (this.board.has(neighborKey)) {
+                  // Check if this neighbor is part of our own word
+                  let isOwnWord = false;
+                  for (let j = 0; j < word.chars.length; j++) {
+                    const ownPos = {
+                      q: cell.q + j * this.directions[dir].q,
+                      r: cell.r + j * this.directions[dir].r
+                    };
+                    if (`${ownPos.q},${ownPos.r}` === neighborKey) {
+                      isOwnWord = true;
+                      break;
+                    }
+                  }
+                  
+                  if (!isOwnWord) {
+                    tooClose = true;
+                    break;
+                  }
                 }
               }
-              if (placed) break;
+              
+              if (tooClose) {
+                canPlace = false;
+                break;
+              }
+            }
+            
+            if (canPlace) {
+              const dirNames = ['horizontal(Q)', 'vertical(R)', 'diagonal(S)'];
+              this.placeWordAt(word, cell.q, cell.r, dir);
+              console.log(`Placed "${word.word}" ${dirNames[dir]} at position (${cell.q},${cell.r}) with spacing`);
+              placed = true;
+              break;
             }
           }
         }
       }
       
-      // PRIORITY 2: If no first/last letter match, find closest empty cell
       if (!placed) {
-        let bestPlacement: {q: number, r: number, dir: number} | null = null;
-        let minDistance = Infinity;
-        
-        // Search in expanding radius from origin
-        for (let radius = 1; radius <= this.GRID_RADIUS && !bestPlacement; radius++) {
-          for (let q = -radius; q <= radius; q++) {
-            for (let r = -radius; r <= radius; r++) {
-              const s = -q - r;
-              if (Math.abs(s) > radius) continue;
-              
-              // Check if this position is empty
-              const key = `${q},${r}`;
-              if (this.board.has(key)) continue;
-              
-              // Check if we can place word starting here in any direction
-              for (let dir = 0; dir < this.directions.length; dir++) {
-                if (this.canPlaceSimple(word, q, r, dir)) {
-                  // Calculate distance to nearest placed cell
-                  let distance = Infinity;
-                  for (const placedWord of this.wordsActive) {
-                    const placedStart = { q: placedWord.q, r: placedWord.r };
-                    const dist = Math.abs(q - placedStart.q) + Math.abs(r - placedStart.r);
-                    distance = Math.min(distance, dist);
-                  }
-                  
-                  if (distance < minDistance) {
-                    minDistance = distance;
-                    bestPlacement = { q, r, dir };
-                  }
-                }
-              }
-            }
-          }
-        }
-        
-        if (bestPlacement) {
-          this.placeWordAt(word, bestPlacement.q, bestPlacement.r, bestPlacement.dir);
-          console.log(`Placed "${word.word}" at closest empty position`);
-        } else {
-          console.log(`Could not place "${word.word}"`);
-        }
+        console.log(`Could not place "${word.word}" - no valid position found with proper spacing`);
       }
     }
   }
@@ -519,61 +564,381 @@ class HexaWordCrossword {
     // Sort by length for better placement (longer words first)
     wordBank.sort((a, b) => b.word.length - a.word.length);
     
-    // Layer 1: Place first 3 words crossing at center
-    const layer1 = this.placeFirstLayer(wordBank);
+    // Step 1: Place first 3 words crossing at center with shared middle letter
+    const layer1 = this.placeFirstThreeWords(wordBank);
     if (!layer1.success) {
-      console.log('Failed to place first layer');
+      console.log('Failed to place first 3 words');
       return false;
     }
     
-    // Layer 2: Place next 3 words intersecting with layer 1
-    const layer2 = this.placeSecondLayer(wordBank);
-    if (!layer2.success) {
-      console.log('Failed to place second layer completely');
-    }
-    
-    // Layer 3: Place remaining words
-    const layer3 = this.placeThirdLayer(wordBank);
-    if (!layer3.success) {
-      console.log('Failed to place third layer completely');
-    }
+    // Step 2: Place remaining words using connection points
+    this.placeRemainingWordsSystematically(wordBank);
     
     console.log(`Placed ${this.wordsActive.length} out of ${this.words.length} words.`);
     return this.wordsActive.length === this.words.length;
   }
   
-  private placeFirstLayer(wordBank: WordObj[]): {success: boolean} {
-    // Find 3 words that share a common letter
-    const centerConfig = this.findThreeWordsWithSharedLetter(wordBank);
-    if (!centerConfig) {
+  private placeFirstThreeWords(wordBank: WordObj[]): {success: boolean} {
+    // Find 3 longest words that share a middle letter
+    const sharedLetterInfo = this.findSharedMiddleLetter(wordBank[0], wordBank[1], wordBank[2]);
+    if (!sharedLetterInfo) {
+      console.log('No shared middle letter found in first 3 words');
       return {success: false};
     }
     
-    const {words, letter} = centerConfig;
-    console.log(`Layer 1: Placing ${words[0].word}, ${words[1].word}, ${words[2].word} with shared letter '${letter}'`);
+    const {letter, idx1, idx2, idx3} = sharedLetterInfo;
+    console.log(`Placing first 3 words with shared middle letter '${letter}'`);
     
-    // Place first word horizontally through center
-    const word1 = words[0];
-    const idx1 = word1.chars.indexOf(letter);
-    this.placeWordAt(word1, -idx1, 0, 0); // Horizontal (East)
+    // Place word 1 on Q axis (horizontal) - shared letter at center (0,0)
+    this.placeWordAt(wordBank[0], -idx1, 0, 0);
     
-    // Place second word diagonally up-right through the shared letter
-    const word2 = words[1];
-    const idx2 = word2.chars.indexOf(letter);
-    this.placeWordAt(word2, 0, idx2, 1); // Northeast
+    // Place word 2 on R axis (vertical) - shared letter at center (0,0)
+    this.placeWordAt(wordBank[1], 0, -idx2, 1);
     
-    // Place third word diagonally up-left through the shared letter
-    const word3 = words[2];
-    const idx3 = word3.chars.indexOf(letter);
-    this.placeWordAt(word3, idx3, idx3, 2); // Northwest
+    // Place word 3 on S axis (diagonal) - shared letter at center (0,0)
+    // For diagonal: to pass through (0,0), we need to start at (-idx3, idx3)
+    this.placeWordAt(wordBank[2], -idx3, idx3, 2);
     
-    // Remove from wordBank
-    for (const word of words) {
-      const index = wordBank.indexOf(word);
-      if (index > -1) wordBank.splice(index, 1);
-    }
+    // Remove placed words from wordBank
+    wordBank.splice(0, 3);
     
     return {success: true};
+  }
+  
+  private placeRemainingWordsSystematically(wordBank: WordObj[]): void {
+    const waitlist: WordObj[] = [];
+    
+    // Step 4: Get initial 6 connection points from endpoints of first 3 words
+    let connectionPoints = this.getConnectionPoints();
+    console.log(`Initial 6 connection points from first 3 words:`, connectionPoints);
+    
+    // Step 5-6: Check each remaining word against connection points systematically
+    while (wordBank.length > 0 || waitlist.length > 0) {
+      let placedAny = false;
+      
+      // Check wordBank words against current connection points
+      if (wordBank.length > 0) {
+        console.log(`\nChecking ${wordBank.length} words against ${connectionPoints.length} connection points`);
+        
+        // For each connection point
+        for (const point of connectionPoints) {
+          // Skip if this point already has words in both available directions
+          if (this.isConnectionPointFull(point)) {
+            console.log(`Connection point (${point.q},${point.r}) is full`);
+            continue;
+          }
+          
+          // Try each word in wordBank
+          for (let i = wordBank.length - 1; i >= 0; i--) {
+            const word = wordBank[i];
+            const placement = this.tryPlaceWordAtPoint(word, point);
+            
+            if (placement) {
+              this.placeWordAt(word, placement.q, placement.r, placement.dir);
+              console.log(`Placed "${word.word}" at connection point (${point.q},${point.r})`);
+              wordBank.splice(i, 1);
+              placedAny = true;
+              
+              // Step 8: Add new connection points from newly placed word
+              const newPoints = this.getWordEndpoints(word);
+              connectionPoints.push(...newPoints);
+              break; // Move to next connection point
+            }
+          }
+        }
+        
+        // Move remaining wordBank words to waitlist
+        while (wordBank.length > 0) {
+          const word = wordBank.pop()!;
+          waitlist.push(word);
+          console.log(`Moving "${word.word}" to waitlist`);
+        }
+      }
+      
+      // Step 9: Try waitlist words with all connection points (including new ones)
+      if (waitlist.length > 0 && connectionPoints.length > 0) {
+        console.log(`Checking ${waitlist.length} waitlist words against ${connectionPoints.length} connection points`);
+        
+        for (const point of connectionPoints) {
+          if (this.isConnectionPointFull(point)) continue;
+          
+          for (let i = waitlist.length - 1; i >= 0; i--) {
+            const word = waitlist[i];
+            const placement = this.tryPlaceWordAtPoint(word, point);
+            
+            if (placement) {
+              this.placeWordAt(word, placement.q, placement.r, placement.dir);
+              console.log(`Placed "${word.word}" from waitlist at connection point (${point.q},${point.r})`);
+              waitlist.splice(i, 1);
+              placedAny = true;
+              
+              // Add new connection points
+              const newPoints = this.getWordEndpoints(word);
+              connectionPoints.push(...newPoints);
+              break;
+            }
+          }
+        }
+      }
+      
+      // Step 10: If no placements found and waitlist has words, place separately
+      if (!placedAny && waitlist.length > 0) {
+        console.log(`\nPlacing remaining ${waitlist.length} words separately`);
+        while (waitlist.length > 0) {
+          const word = waitlist.shift()!;
+          const placement = this.findClosestEmptyPlacement(word);
+          
+          if (placement) {
+            this.placeWordAt(word, placement.q, placement.r, placement.dir);
+            console.log(`Placed "${word.word}" separately at (${placement.q},${placement.r})`);
+          } else {
+            console.log(`Could not place "${word.word}" anywhere`);
+          }
+        }
+        break;
+      }
+      
+      // Exit if nothing left
+      if (wordBank.length === 0 && waitlist.length === 0) break;
+      if (!placedAny) break;
+    }
+  }
+  
+  private isConnectionPointFull(point: {q: number, r: number, parentDir: number}): boolean {
+    // Check if both available directions at this point already have words
+    let filledDirections = 0;
+    
+    for (let dir = 0; dir < 3; dir++) {
+      if (dir === point.parentDir) continue; // Skip parent direction
+      
+      // Check if there's already a word in this direction from this point
+      if (this.hasWordInDirection(point.q, point.r, dir)) {
+        filledDirections++;
+      }
+    }
+    
+    return filledDirections >= 2; // Both available directions are filled
+  }
+  
+  private hasWordInDirection(q: number, r: number, dir: number): boolean {
+    const direction = this.directions[dir];
+    // Check the next cell in this direction
+    const nextQ = q + direction.q;
+    const nextR = r + direction.r;
+    const nextKey = `${nextQ},${nextR}`;
+    
+    // If there's a cell in this direction and it's not just an intersection, there's a word
+    if (this.board.has(nextKey)) {
+      // Check if this is part of a word going in this direction
+      for (const word of this.wordsActive) {
+        if (word.dir === dir) {
+          // Check if this word passes through or starts from this point
+          for (let i = 0; i < word.chars.length; i++) {
+            const wq = word.q! + this.directions[word.dir!].q * i;
+            const wr = word.r! + this.directions[word.dir!].r * i;
+            if (wq === q && wr === r) {
+              return true; // This word goes through this point in this direction
+            }
+          }
+        }
+      }
+    }
+    
+    return false;
+  }
+  
+  private tryPlaceWordAtPoint(word: WordObj, point: {q: number, r: number, parentDir: number}): {q: number, r: number, dir: number} | null {
+    const existingCell = this.board.get(`${point.q},${point.r}`);
+    if (!existingCell) return null;
+    
+    // Check each letter of the word
+    for (let i = 0; i < word.chars.length; i++) {
+      if (word.chars[i] === existingCell.letter) {
+        // Try each direction except parent direction
+        for (let dir = 0; dir < 3; dir++) {
+          if (dir === point.parentDir) continue;
+          
+          // Calculate start position
+          const startPos = this.getWordStartPosition({q: point.q, r: point.r}, i, dir);
+          
+          // Check if placement is valid
+          if (this.canPlaceWordSimple(word, startPos.q, startPos.r, dir)) {
+            return {q: startPos.q, r: startPos.r, dir: dir};
+          }
+        }
+      }
+    }
+    
+    return null;
+  }
+  
+  private getConnectionPoints(): Array<{q: number, r: number, parentDir: number}> {
+    const points: Array<{q: number, r: number, parentDir: number}> = [];
+    
+    // Get endpoints of first 3 placed words
+    for (let i = 0; i < Math.min(3, this.wordsActive.length); i++) {
+      const word = this.wordsActive[i];
+      const endpoints = this.getWordEndpoints(word);
+      points.push(...endpoints);
+    }
+    
+    return points;
+  }
+  
+  private getWordEndpoints(word: WordObj): Array<{q: number, r: number, parentDir: number}> {
+    const points: Array<{q: number, r: number, parentDir: number}> = [];
+    const dir = this.directions[word.dir!];
+    
+    // Start point
+    points.push({
+      q: word.q!,
+      r: word.r!,
+      parentDir: word.dir!
+    });
+    
+    // End point
+    points.push({
+      q: word.q! + dir.q * (word.chars.length - 1),
+      r: word.r! + dir.r * (word.chars.length - 1),
+      parentDir: word.dir!
+    });
+    
+    return points;
+  }
+  
+  private findPlacementAtConnectionPoints(word: WordObj, connectionPoints: Array<{q: number, r: number, parentDir: number}>): {q: number, r: number, dir: number} | null {
+    for (const point of connectionPoints) {
+      // Check if any letter of the word matches the letter at this connection point
+      const existingCell = this.board.get(`${point.q},${point.r}`);
+      if (!existingCell) {
+        console.log(`No cell at connection point (${point.q},${point.r})`);
+        continue;
+      }
+      
+      for (let i = 0; i < word.chars.length; i++) {
+        if (word.chars[i] === existingCell.letter) {
+          console.log(`"${word.word}"[${i}]='${word.chars[i]}' matches connection point (${point.q},${point.r}) with letter '${existingCell.letter}'`);
+          
+          // Try placing in different directions (not same as parent)
+          for (let dir = 0; dir < this.directions.length; dir++) {
+            if (dir === point.parentDir) continue; // Skip parent direction
+            
+            const startPos = this.getWordStartPosition({q: point.q, r: point.r}, i, dir);
+            
+            const canPlace = this.canPlaceWordAt(word, startPos.q, startPos.r, dir);
+            if (!canPlace) {
+              console.log(`Cannot place "${word.word}" at (${startPos.q},${startPos.r}) dir=${dir}`);
+            } else {
+              console.log(`Can place "${word.word}" at (${startPos.q},${startPos.r}) dir=${dir}`);
+              return {q: startPos.q, r: startPos.r, dir: dir};
+            }
+          }
+        }
+      }
+    }
+    
+    return null;
+  }
+  
+  private findClosestEmptyPlacement(word: WordObj): {q: number, r: number, dir: number} | null {
+    // Search in expanding rings from center for empty space
+    for (let radius = 1; radius <= this.GRID_RADIUS - word.chars.length; radius++) {
+      const positions = this.getPositionsAtRadius(radius);
+      
+      for (const pos of positions) {
+        // Try each direction
+        for (let dir = 0; dir < 3; dir++) {
+          const direction = this.directions[dir];
+          let canPlace = true;
+          
+          // Check if all cells for the word are empty or within bounds
+          for (let i = 0; i < word.chars.length; i++) {
+            const q = pos.q + direction.q * i;
+            const r = pos.r + direction.r * i;
+            const s = -q - r;
+            
+            // Check bounds
+            if (Math.max(Math.abs(q), Math.abs(r), Math.abs(s)) > this.GRID_RADIUS) {
+              canPlace = false;
+              break;
+            }
+            
+            // Check if cell is occupied
+            const key = `${q},${r}`;
+            if (this.board.has(key)) {
+              canPlace = false;
+              break;
+            }
+            
+            // Check for adjacent cells (maintain spacing)
+            let hasAdjacentWord = false;
+            for (const neighbor of this.allDirections) {
+              const nq = q + neighbor.q;
+              const nr = r + neighbor.r;
+              const nkey = `${nq},${nr}`;
+              
+              // Skip if neighbor would be part of same word
+              let isPartOfSameWord = false;
+              for (let j = 0; j < word.chars.length; j++) {
+                const wq = pos.q + direction.q * j;
+                const wr = pos.r + direction.r * j;
+                if (wq === nq && wr === nr) {
+                  isPartOfSameWord = true;
+                  break;
+                }
+              }
+              
+              if (!isPartOfSameWord && this.board.has(nkey)) {
+                hasAdjacentWord = true;
+                break;
+              }
+            }
+            
+            if (hasAdjacentWord) {
+              canPlace = false;
+              break;
+            }
+          }
+          
+          if (canPlace) {
+            return {q: pos.q, r: pos.r, dir: dir};
+          }
+        }
+      }
+    }
+    
+    return null;
+  }
+  
+  private getPositionsAtRadius(radius: number): Array<{q: number, r: number}> {
+    const positions: Array<{q: number, r: number}> = [];
+    
+    if (radius === 0) {
+      positions.push({q: 0, r: 0});
+      return positions;
+    }
+    
+    // Generate all positions at given radius
+    for (let q = -radius; q <= radius; q++) {
+      for (let r = -radius; r <= radius; r++) {
+        const s = -q - r;
+        if (Math.max(Math.abs(q), Math.abs(r), Math.abs(s)) === radius) {
+          positions.push({q, r});
+        }
+      }
+    }
+    
+    return positions;
+  }
+  
+  private hasNeighbors(q: number, r: number): boolean {
+    for (const dir of this.allDirections) {
+      const key = `${q + dir.q},${r + dir.r}`;
+      if (this.board.has(key)) {
+        return true;
+      }
+    }
+    return false;
   }
   
   private placeSecondLayer(wordBank: WordObj[]): {success: boolean} {
@@ -942,6 +1307,77 @@ class HexaWordCrossword {
     };
   }
 
+  private canPlaceWordSimple(word: WordObj, startQ: number, startR: number, dir: number): boolean {
+    const direction = this.directions[dir];
+    const intersectionPoints: Array<{q: number, r: number}> = [];
+    
+    // First pass: Check bounds and find intersections
+    for (let i = 0; i < word.chars.length; i++) {
+      const q = startQ + direction.q * i;
+      const r = startR + direction.r * i;
+      const s = -q - r;
+      
+      // Check grid bounds
+      if (Math.max(Math.abs(q), Math.abs(r), Math.abs(s)) > this.GRID_RADIUS) {
+        return false;
+      }
+      
+      const key = `${q},${r}`;
+      const existing = this.board.get(key);
+      
+      if (existing) {
+        // Must match at intersection
+        if (existing.letter !== word.chars[i]) {
+          return false;
+        }
+        intersectionPoints.push({q, r});
+      }
+    }
+    
+    // Must have intersection (except for separate placement)
+    if (this.wordsActive.length > 0 && intersectionPoints.length === 0) {
+      return false;
+    }
+    
+    // CRITICAL: Check that EXCEPT for intersection points, no cell has neighbors
+    for (let i = 0; i < word.chars.length; i++) {
+      const q = startQ + direction.q * i;
+      const r = startR + direction.r * i;
+      
+      // Skip if this is an intersection point
+      const isIntersection = intersectionPoints.some(p => p.q === q && p.r === r);
+      if (isIntersection) continue;
+      
+      // Check all 6 neighbors
+      for (const neighbor of this.allDirections) {
+        const nq = q + neighbor.q;
+        const nr = r + neighbor.r;
+        
+        // Skip if neighbor would be part of the same word
+        let isPartOfSameWord = false;
+        for (let j = 0; j < word.chars.length; j++) {
+          const wq = startQ + direction.q * j;
+          const wr = startR + direction.r * j;
+          if (wq === nq && wr === nr) {
+            isPartOfSameWord = true;
+            break;
+          }
+        }
+        
+        if (isPartOfSameWord) continue;
+        
+        // If neighbor exists, placement is invalid
+        const nkey = `${nq},${nr}`;
+        if (this.board.has(nkey)) {
+          // This non-intersection cell has a neighbor - NOT ALLOWED
+          return false;
+        }
+      }
+    }
+    
+    return true;
+  }
+  
   private canPlaceWordAt(word: WordObj, startQ: number, startR: number, dir: number): boolean {
     const direction = this.directions[dir];
     const intersectionPoints: Array<{q: number, r: number, index: number}> = [];
@@ -955,6 +1391,7 @@ class HexaWordCrossword {
       // Check if within hexagonal radius (using cube coordinate distance)
       const distance = Math.max(Math.abs(q), Math.abs(r), Math.abs(s));
       if (distance > this.GRID_RADIUS) {
+        console.log(`  FAIL: "${word.word}" outside grid at position ${i}`);
         return false; // Word goes outside grid boundary
       }
     }
@@ -978,14 +1415,13 @@ class HexaWordCrossword {
     // Must have at least one intersection (except for initial words)
     if (this.wordsActive.length >= 1) {
       if (intersectionPoints.length === 0) {
+        console.log(`  FAIL: "${word.word}" has no intersections`);
         return false; // Must connect to existing words
       }
     }
     
-    // Check for parallel adjacent words (very strict)
-    if (!this.checkParallelWordSpacing(word, startQ, startR, dir)) {
-      return false;
-    }
+    // Skip parallel spacing check - it's too restrictive
+    // We already check for proper intersections and adjacency
     
     // Second pass: check strict spacing rules for non-intersection cells
     for (let i = 0; i < word.chars.length; i++) {
@@ -1022,8 +1458,9 @@ class HexaWordCrossword {
             // Check if the neighbor is an intersection point of the current placement
             const isNeighborIntersection = intersectionPoints.some(p => p.q === nq && p.r === nr);
             if (!isNeighborIntersection) {
-              // This is an adjacent cell from another word - not allowed!
-              return false;
+              // Allow adjacency but track it for debugging
+              // We'll rely on proper intersection validation instead
+              // console.log(`  Note: "${word.word}" adjacent to another word at (${nq},${nr})`);
             }
           }
         }
@@ -1178,6 +1615,11 @@ class HexaWordCrossword {
         cell = { q, r, letter: word.chars[i], wordIds: [] };
         this.board.set(key, cell);
         this.occupiedCells.add(key);
+      } else {
+        // Cell already exists - verify it has the same letter
+        if (cell.letter !== word.chars[i]) {
+          console.error(`Letter mismatch at (${q},${r}): existing '${cell.letter}' vs new '${word.chars[i]}' from word '${word.word}'`);
+        }
       }
       
       cell.wordIds.push(this.wordsActive.length);
