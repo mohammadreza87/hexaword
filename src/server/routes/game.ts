@@ -12,7 +12,7 @@ type GameInitResponse = {
 };
 
 // Simple, static word list for now; replace with server-side generation/dictionary.
-const DEFAULT_WORDS = ['SEASON', 'NOSES', 'OASES', 'SANE', 'EONS', 'ONES', 'SONS', 'SON'];
+const DEFAULT_WORDS = ['LOG', 'EGO', 'GEL', 'OLD', 'LEG', 'GOD', 'DOG', 'LODE', 'GOLD', 'LODGE'];
 
 gameRouter.get<unknown, GameInitResponse | { status: string; message: string }>(
   '/api/game/init',
