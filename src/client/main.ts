@@ -25,7 +25,7 @@ class HexaWordCrossword {
   private container: HTMLElement;
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
-  private words: string[] = ['RUT', 'FUR', 'HUT', 'TURF', 'THRU', 'HURT', 'HURL', 'HURTFUL'];
+  private words: string[] = ['FOE', 'REF', 'GIG', 'RIG', 'FIG', 'FIRE', 'FROG', 'RIFE', 'FORE', 'OGRE', 'GORE', 'FORGE', 'GORGE', 'GRIEF', 'FOGGIER'];
   private wordObjs: WordObj[] = [];
   private board: Map<string, HexCell> = new Map();
   private wordsActive: WordObj[] = [];
