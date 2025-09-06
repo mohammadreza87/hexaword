@@ -1,6 +1,6 @@
 import { defineHex, Grid, rectangle } from 'honeycomb-grid';
 
-console.log('HexaWord Crossword Generator v3');
+console.log('HexaWord Crossword Generator v3.1');
 
 interface WordObj {
   word: string;
@@ -25,7 +25,7 @@ class HexaWordCrossword {
   private container: HTMLElement;
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
-  private words: string[] = ['LOG', 'EGO', 'GEL', 'OLD', 'LEG', 'GOD', 'DOG', 'LODE', 'GOLD', 'LODGE'];
+  private words: string[] = ['RUT', 'FUR', 'HUT', 'TURF', 'THRU', 'HURT', 'HURL', 'HURTFUL'];
   private wordObjs: WordObj[] = [];
   private board: Map<string, HexCell> = new Map();
   private wordsActive: WordObj[] = [];
@@ -99,64 +99,240 @@ class HexaWordCrossword {
     // Clear board
     this.resetBoard();
     
-    // Step 1: Sort words by length (longest first)
-    const sortedWords = [...this.wordObjs].sort((a, b) => b.word.length - a.word.length);
-    console.log('Sorted words by length:', sortedWords.map(w => `${w.word}(${w.word.length})`).join(', '));
-    
-    // Step 2: Place the longest word horizontally at center (left to right)
-    const firstWord = sortedWords[0];  // LODGE
-    const word2 = sortedWords[1];       // LODE
-    const word3 = sortedWords[2];       // GOLD
-    
-    console.log(`First 3 longest words: ${firstWord.word}, ${word2.word}, ${word3.word}`);
-    
-    // Find shared letter among middle positions of these 3 words
-    const sharedLetter = this.findSharedMiddleLetter(firstWord, word2, word3);
-    if (!sharedLetter) {
-      console.log('No shared middle letter found, using fallback');
-      // Fallback: just place first word
-      const startQ = -Math.floor(firstWord.chars.length / 2);
-      this.placeWordAt(firstWord, startQ, 0, 0);
-      this.render();
+    // Step 1: Find the best 3 words with a shared middle letter
+    const centerWords = this.findBestCenterWords();
+    if (!centerWords) {
+      console.error('Could not find 3 words with shared middle letter');
       return;
     }
     
-    console.log(`Found shared middle letter '${sharedLetter.letter}' at positions: ${firstWord.word}[${sharedLetter.idx1}], ${word2.word}[${sharedLetter.idx2}], ${word3.word}[${sharedLetter.idx3}]`);
+    const { words: [word1, word2, word3], letter, indices } = centerWords;
+    console.log(`Selected center words: ${word1.word}, ${word2.word}, ${word3.word} with shared letter '${letter}'`);
     
-    // Place first word along Q axis (horizontal, left to right) with shared letter at origin (0,0)
-    const startQ1 = -sharedLetter.idx1;  // Position so shared letter is at origin
-    const startR1 = 0;
-    this.placeWordAt(firstWord, startQ1, startR1, 0); // Direction 0: Q axis
-    console.log(`Placed "${firstWord.word}" on Q axis (horizontal) with '${sharedLetter.letter}' at origin`);
+    // Step 2: Place the 3 words on Q, R, S axes
+    this.placeCenterWords(word1, word2, word3, indices);
     
-    // Place second word along R axis (vertical, up to down) with shared letter at origin
-    const startQ2 = 0;
-    const startR2 = -sharedLetter.idx2;  // Position so shared letter is at origin
-    this.placeWordAt(word2, startQ2, startR2, 1); // Direction 1: R axis
-    console.log(`Placed "${word2.word}" on R axis (vertical) with '${sharedLetter.letter}' at origin`);
+    // Step 3: Place remaining words
+    const placedWordSet = new Set([word1, word2, word3]);
+    const remainingWords = this.wordObjs.filter(w => !placedWordSet.has(w));
     
-    // Place third word diagonally (NW to SE) with shared letter at origin
-    // For diagonal direction (1, -1), to have letter at index i at origin:
-    // We need to start at (-i, i) so it reaches (0, 0) at position i
-    const startQ3 = -sharedLetter.idx3;
-    const startR3 = sharedLetter.idx3;
-    this.placeWordAt(word3, startQ3, startR3, 2); // Direction 2: NW to SE diagonal
-    console.log(`Placed "${word3.word}" diagonally (NW to SE) with '${sharedLetter.letter}' at origin`);
+    if (remainingWords.length > 0) {
+      console.log(`Placing ${remainingWords.length} remaining words...`);
+      this.placeRemainingWords(remainingWords);
+    }
     
-    console.log('Step complete: Placed first 3 words crossing at shared letter');
+    console.log(`Final: Placed ${this.wordsActive.length} out of ${this.words.length} words`);
     this.render();
+  }
+  
+  private findBestCenterWords(): {words: [WordObj, WordObj, WordObj], letter: string, indices: [number, number, number]} | null {
+    const sortedWords = [...this.wordObjs].sort((a, b) => b.word.length - a.word.length);
+    
+    // Try to find 3 words with a shared middle letter
+    let bestMatch: {words: [WordObj, WordObj, WordObj], letter: string, indices: [number, number, number], score: number} | null = null;
+    
+    // Check all combinations of 3 words
+    for (let i = 0; i < sortedWords.length - 2; i++) {
+      for (let j = i + 1; j < sortedWords.length - 1; j++) {
+        for (let k = j + 1; k < sortedWords.length; k++) {
+          const result = this.findSharedMiddleLetter(sortedWords[i], sortedWords[j], sortedWords[k]);
+          if (result && result.idx3 !== -1) {
+            // Calculate score based on word lengths and middle position
+            const avgLength = (sortedWords[i].word.length + sortedWords[j].word.length + sortedWords[k].word.length) / 3;
+            const midDistance = Math.abs(result.idx1 - sortedWords[i].word.length/2) + 
+                               Math.abs(result.idx2 - sortedWords[j].word.length/2) + 
+                               Math.abs(result.idx3 - sortedWords[k].word.length/2);
+            const score = avgLength * 10 - midDistance;
+            
+            if (!bestMatch || score > bestMatch.score) {
+              bestMatch = {
+                words: [sortedWords[i], sortedWords[j], sortedWords[k]],
+                letter: result.letter,
+                indices: [result.idx1, result.idx2, result.idx3],
+                score
+              };
+            }
+          }
+        }
+      }
+    }
+    
+    if (bestMatch) {
+      return {
+        words: bestMatch.words,
+        letter: bestMatch.letter,
+        indices: bestMatch.indices
+      };
+    }
+    
+    // Fallback: use first 3 longest words even if no perfect middle match
+    if (sortedWords.length >= 3) {
+      const word1 = sortedWords[0];
+      const word2 = sortedWords[1]; 
+      const word3 = sortedWords[2];
+      
+      // Try to find any shared letter (not just middle)
+      for (const letter of word1.chars) {
+        const idx1 = word1.chars.indexOf(letter);
+        const idx2 = word2.chars.indexOf(letter);
+        const idx3 = word3.chars.indexOf(letter);
+        
+        if (idx1 !== -1 && idx2 !== -1 && idx3 !== -1) {
+          return {
+            words: [word1, word2, word3],
+            letter,
+            indices: [idx1, idx2, idx3]
+          };
+        }
+      }
+    }
+    
+    return null;
+  }
+  
+  private placeCenterWords(word1: WordObj, word2: WordObj, word3: WordObj, indices: [number, number, number]): void {
+    // Place first word along Q axis (horizontal)
+    const startQ1 = -indices[0];
+    this.placeWordAt(word1, startQ1, 0, 0);
+    console.log(`Placed "${word1.word}" horizontally with shared letter at origin`);
+    
+    // Place second word along R axis (vertical)
+    const startR2 = -indices[1];
+    this.placeWordAt(word2, 0, startR2, 1);
+    console.log(`Placed "${word2.word}" vertically with shared letter at origin`);
+    
+    // Place third word along S axis (diagonal NW to SE)
+    const startQ3 = -indices[2];
+    const startR3 = indices[2];
+    this.placeWordAt(word3, startQ3, startR3, 2);
+    console.log(`Placed "${word3.word}" diagonally with shared letter at origin`);
+  }
+  
+  private placeRemainingWords(remainingWords: WordObj[]): void {
+    for (const word of remainingWords) {
+      let placed = false;
+      
+      // PRIORITY 1: Try to connect to first or last letter of placed words
+      for (const placedWord of this.wordsActive) {
+        if (placed) break;
+        
+        // Check first and last positions only
+        const positions = [0, placedWord.chars.length - 1];
+        
+        for (const posIdx of positions) {
+          if (placed) break;
+          const placedChar = placedWord.chars[posIdx];
+          
+          // Check if this word has this letter
+          for (let j = 0; j < word.chars.length; j++) {
+            if (word.chars[j] === placedChar) {
+              const placedPos = this.getCharPosition(placedWord, posIdx);
+              
+              // Try the 2 directions that are NOT the same as the placed word
+              // If placed word is horizontal (0), try vertical (1) and diagonal (2)
+              // If placed word is vertical (1), try horizontal (0) and diagonal (2)
+              // If placed word is diagonal (2), try horizontal (0) and vertical (1)
+              for (let dir = 0; dir < this.directions.length; dir++) {
+                if (dir === placedWord.dir) {
+                  // Skip the same direction as the existing word - no parallel placement
+                  continue;
+                }
+                
+                const wordStart = this.getWordStartPosition(placedPos, j, dir);
+                
+                if (this.canPlaceSimple(word, wordStart.q, wordStart.r, dir)) {
+                  const dirNames = ['horizontal(Q)', 'vertical(R)', 'diagonal(S)'];
+                  this.placeWordAt(word, wordStart.q, wordStart.r, dir);
+                  console.log(`Placed "${word.word}" ${dirNames[dir]} intersecting with "${placedWord.word}" ${dirNames[placedWord.dir]} at letter '${placedChar}'`);
+                  placed = true;
+                  break;
+                }
+              }
+              if (placed) break;
+            }
+          }
+        }
+      }
+      
+      // PRIORITY 2: If no first/last letter match, find closest empty cell
+      if (!placed) {
+        let bestPlacement: {q: number, r: number, dir: number} | null = null;
+        let minDistance = Infinity;
+        
+        // Search in expanding radius from origin
+        for (let radius = 1; radius <= this.GRID_RADIUS && !bestPlacement; radius++) {
+          for (let q = -radius; q <= radius; q++) {
+            for (let r = -radius; r <= radius; r++) {
+              const s = -q - r;
+              if (Math.abs(s) > radius) continue;
+              
+              // Check if this position is empty
+              const key = `${q},${r}`;
+              if (this.board.has(key)) continue;
+              
+              // Check if we can place word starting here in any direction
+              for (let dir = 0; dir < this.directions.length; dir++) {
+                if (this.canPlaceSimple(word, q, r, dir)) {
+                  // Calculate distance to nearest placed cell
+                  let distance = Infinity;
+                  for (const placedWord of this.wordsActive) {
+                    const placedStart = { q: placedWord.q, r: placedWord.r };
+                    const dist = Math.abs(q - placedStart.q) + Math.abs(r - placedStart.r);
+                    distance = Math.min(distance, dist);
+                  }
+                  
+                  if (distance < minDistance) {
+                    minDistance = distance;
+                    bestPlacement = { q, r, dir };
+                  }
+                }
+              }
+            }
+          }
+        }
+        
+        if (bestPlacement) {
+          this.placeWordAt(word, bestPlacement.q, bestPlacement.r, bestPlacement.dir);
+          console.log(`Placed "${word.word}" at closest empty position`);
+        } else {
+          console.log(`Could not place "${word.word}"`);
+        }
+      }
+    }
   }
   
   private findSharedMiddleLetter(word1: WordObj, word2: WordObj, word3: WordObj): {letter: string, idx1: number, idx2: number, idx3: number} | null {
     // Find a letter that appears in the MIDDLE (not first or last) of all 3 words
     
-    // Check each possible middle position in word1
-    for (let i = 1; i < word1.chars.length - 1; i++) {  // Skip first and last
+    // Helper function to get middle indices, prioritizing actual middle
+    const getMiddleIndices = (word: WordObj): number[] => {
+      const indices: number[] = [];
+      const len = word.chars.length;
+      if (len <= 2) return [];
+      
+      const mid = Math.floor(len / 2);
+      indices.push(mid);
+      
+      // Add indices working outward from middle
+      for (let offset = 1; offset < Math.max(mid, len - mid - 1); offset++) {
+        if (mid - offset > 0) indices.push(mid - offset);
+        if (mid + offset < len - 1) indices.push(mid + offset);
+      }
+      
+      return indices;
+    };
+    
+    const indices1 = getMiddleIndices(word1);
+    const indices2 = getMiddleIndices(word2);
+    const indices3 = getMiddleIndices(word3);
+    
+    // Check each position in word1, starting from actual middle
+    for (const i of indices1) {
       const letter = word1.chars[i];
       
-      // Check if this letter exists in middle of word2
+      // Check if this letter exists in middle of word2, prioritizing middle
       let idx2 = -1;
-      for (let j = 1; j < word2.chars.length - 1; j++) {  // Skip first and last
+      for (const j of indices2) {
         if (word2.chars[j] === letter) {
           idx2 = j;
           break;
@@ -164,9 +340,9 @@ class HexaWordCrossword {
       }
       if (idx2 === -1) continue;
       
-      // Check if this letter exists in middle of word3
+      // Check if this letter exists in middle of word3, prioritizing middle
       let idx3 = -1;
-      for (let k = 1; k < word3.chars.length - 1; k++) {  // Skip first and last
+      for (const k of indices3) {
         if (word3.chars[k] === letter) {
           idx3 = k;
           break;
@@ -179,26 +355,30 @@ class HexaWordCrossword {
       return { letter, idx1: i, idx2, idx3 };
     }
     
-    // If no middle letter shared by all 3, try to find one shared by 2
-    // For LODGE(5), LODE(4), GOLD(4):
-    // LODGE: L-O-D-G-E (middle: O, D, G)
-    // LODE: L-O-D-E (middle: O, D)
-    // GOLD: G-O-L-D (middle: O, L)
-    // Common middle letter: O or D
+    // If no perfect middle letter match, relax constraints
+    console.log('No shared middle letter in all 3 words, relaxing constraints...');
     
-    console.log('No shared middle letter in all 3 words, looking for best match...');
-    
-    // Try 'O' which is in middle of LODGE[1], LODE[1], GOLD[1]
-    if (word1.word === 'LODGE' && word2.word === 'LODE' && word3.word === 'GOLD') {
-      return { letter: 'O', idx1: 1, idx2: 1, idx3: 1 };
-    }
-    
-    // Try 'D' which is in middle of LODGE[2], LODE[2]
-    if (word1.chars[2] === 'D' && word2.chars[2] === 'D') {
-      // For GOLD, find D position
-      const idx3 = word3.chars.indexOf('D');
-      if (idx3 !== -1) {
-        return { letter: 'D', idx1: 2, idx2: 2, idx3 };
+    // Try to find a letter shared by all 3, even if not all are middle positions
+    for (let i = 0; i < word1.chars.length; i++) {
+      const letter = word1.chars[i];
+      const idx2 = word2.chars.indexOf(letter);
+      const idx3 = word3.chars.indexOf(letter);
+      
+      if (idx2 !== -1 && idx3 !== -1) {
+        // Prefer positions closer to middle
+        const score1 = Math.abs(i - word1.chars.length / 2);
+        const score2 = Math.abs(idx2 - word2.chars.length / 2);
+        const score3 = Math.abs(idx3 - word3.chars.length / 2);
+        const totalScore = score1 + score2 + score3;
+        
+        // Accept if at least one is in middle and total score is reasonable
+        const isMiddle1 = i > 0 && i < word1.chars.length - 1;
+        const isMiddle2 = idx2 > 0 && idx2 < word2.chars.length - 1;
+        const isMiddle3 = idx3 > 0 && idx3 < word3.chars.length - 1;
+        
+        if ((isMiddle1 || isMiddle2 || isMiddle3) && totalScore < 4) {
+          return { letter, idx1: i, idx2, idx3 };
+        }
       }
     }
     
