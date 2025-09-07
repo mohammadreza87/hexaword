@@ -44,10 +44,16 @@ class App {
     const gameData = await fetchGameDataWithFallback();
     
     // Force uncommon occupations theme words
-    const occupationWords = [
+    const allOccupationWords = [
       'GOLFER', 'ATHLETE', 'CAPTAIN', 'PAINTER', 'DESIGNER',
       'DIRECTOR', 'MAGICIAN', 'MUSICIAN', 'BALLERINA', 'PLAYWRIGHT'
     ];
+    
+    // Deterministically select 6 words maximum based on seed
+    const seedHash = gameData.seed.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const rng = this.mulberry32(seedHash);
+    const shuffled = [...allOccupationWords].sort(() => rng() - 0.5);
+    const occupationWords = shuffled.slice(0, Math.min(6, shuffled.length));
     
     console.log(`Starting game with seed: ${gameData.seed}, words: ${occupationWords.length}`);
     
@@ -273,6 +279,18 @@ class App {
   private isDevelopment(): boolean {
     return window.location.hostname === 'localhost' || 
            window.location.hostname === '127.0.0.1';
+  }
+  
+  /**
+   * Mulberry32 seeded random number generator
+   */
+  private mulberry32(seed: number): () => number {
+    return function() {
+      let t = seed += 0x6D2B79F5;
+      t = Math.imul(t ^ t >>> 15, t | 1);
+      t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
   }
 }
 
