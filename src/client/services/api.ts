@@ -1,7 +1,9 @@
 import { GameInitResponse, isGameInitResponse } from '../../shared/types/api';
 
-export async function getGameInit(): Promise<GameInitResponse> {
-  const res = await fetch('/api/game/init', { method: 'GET' });
+export async function getGameInit(level: number = 1): Promise<GameInitResponse> {
+  const url = new URL('/api/game/init', window.location.origin);
+  url.searchParams.set('level', String(level));
+  const res = await fetch(url.toString(), { method: 'GET' });
   if (!res.ok) {
     throw new Error(`init request failed: ${res.status}`);
   }
@@ -12,10 +14,12 @@ export async function getGameInit(): Promise<GameInitResponse> {
   return data;
 }
 
-export async function fetchGameDataWithFallback(): Promise<{
+export async function fetchGameDataWithFallback(level: number = 1): Promise<{
   seed: string;
   words: string[];
   postId: string;
+  level: number;
+  clue?: string;
 }> {
   const defaultWords = [
     'GOLFER', 'ATHLETE', 'CAPTAIN', 'PAINTER', 'DESIGNER',
@@ -23,17 +27,21 @@ export async function fetchGameDataWithFallback(): Promise<{
   ];
 
   try {
-    const init = await getGameInit();
+    const init = await getGameInit(level);
     return {
       seed: init.seed || getLocalSeed(),
       words: init.words?.length ? init.words : defaultWords,
       postId: init.postId || 'unknown',
+      level: init.level ?? level,
+      clue: init.clue,
     };
   } catch (e) {
     return {
       seed: getLocalSeed(),
       words: defaultWords,
       postId: 'local',
+      level,
+      clue: 'RANDOM MIX',
     };
   }
 }

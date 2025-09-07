@@ -31,6 +31,8 @@ export interface GameInitResponse {
   words: string[];
   username?: string;
   createdAt?: string;
+  level?: number;
+  clue?: string;
 }
 
 export interface ApiErrorResponse {

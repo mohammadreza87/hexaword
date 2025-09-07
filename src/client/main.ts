@@ -8,6 +8,7 @@ console.log('HexaWord Crossword Generator v4.0 - Modular Architecture');
  */
 class App {
   private game: HexaWordGame | null = null;
+  private currentLevel = 1;
   
   constructor() {
     this.initialize();
@@ -40,31 +41,20 @@ class App {
       }
     } catch {}
     
-    // Fetch game data with automatic fallback
-    const gameData = await fetchGameDataWithFallback();
+    // Fetch level 1 data with automatic fallback
+    const gameData = await fetchGameDataWithFallback(this.currentLevel);
     
-    // Force uncommon occupations theme words
-    const allOccupationWords = [
-      'GOLFER', 'ATHLETE', 'CAPTAIN', 'PAINTER', 'DESIGNER',
-      'DIRECTOR', 'MAGICIAN', 'MUSICIAN', 'BALLERINA', 'PLAYWRIGHT'
-    ];
-    
-    // Deterministically select 6 words maximum based on seed
-    const seedHash = gameData.seed.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    const rng = this.mulberry32(seedHash);
-    const shuffled = [...allOccupationWords].sort(() => rng() - 0.5);
-    const occupationWords = shuffled.slice(0, Math.min(6, shuffled.length));
-    
-    console.log(`Starting game with seed: ${gameData.seed}, words: ${occupationWords.length}`);
+    const levelWords = gameData.words.slice(0, Math.min(6, gameData.words.length));
+    console.log(`Starting game with seed: ${gameData.seed}, level: ${gameData.level}, words: ${levelWords.length}`);
     
     // Create game instance with occupations theme
     this.game = new HexaWordGame({
       containerId: 'hex-grid-container',
-      words: occupationWords,  // Use occupation words instead of API words
-      clue: 'UNCOMMON OCCUPATIONS',  // Clue for occupations theme
+      words: levelWords,
+      clue: gameData.clue || 'RANDOM MIX',
       seed: gameData.seed,
       gridRadius: 10,
-      level: 1,  // Start at level 1
+      level: gameData.level || 1,
       theme: 'dark',  // Default to dark theme
       onReady: () => {
         console.log('Game ready with seed:', gameData.seed);
@@ -73,6 +63,19 @@ class App {
         // Show non-blocking toast if using fallback
         if (gameData.postId === 'local') {
           this.showToast('Playing in offline mode', 'info');
+        }
+      },
+      onLevelComplete: async (level) => {
+        try {
+          // Advance to next level
+          this.currentLevel = level + 1;
+          const next = await fetchGameDataWithFallback(this.currentLevel);
+          const nextWords = next.words.slice(0, Math.min(6, next.words.length));
+          await this.game?.loadLevel({ words: nextWords, seed: next.seed, clue: next.clue, level: next.level });
+          this.showToast(`Level ${this.currentLevel} loaded`, 'info');
+        } catch (e) {
+          console.error('Failed to load next level:', e);
+          this.showToast('Failed to load next level', 'error');
         }
       },
       onError: (error) => {

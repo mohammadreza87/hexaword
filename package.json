@@ -6,9 +6,10 @@
   "type": "module",
   "scripts": {
     "postinstall": "npm run build",
+    "build:levels": "node tools/scripts/build-words.mjs",
     "build:client": "cd src/client && vite build",
     "build:server": "cd src/server && vite build",
-    "build": "npm run build:client && npm run build:server",
+    "build": "npm run build:levels && npm run build:client && npm run build:server",
     "deploy": "npm run build && devvit upload",
     "dev": "concurrently -k -p \"[{name}]\" -n \"CLIENT,SERVER,DEVVIT\" -c \"blue,green,magenta\" \"npm run dev:client\" \"npm run dev:server\" \"npm run dev:devvit\"",
     "dev:client": "cd src/client && vite build --watch",

@@ -16,6 +16,7 @@ export interface GameConfig {
   theme?: 'dark' | 'light';
   onReady?: () => void;
   onError?: (error: Error) => void;
+  onLevelComplete?: (level: number) => void;
 }
 
 export class HexaWordGame {
@@ -35,6 +36,7 @@ export class HexaWordGame {
   private typedWord: string = '';  // Track typed word
   private solvedCells: Set<string> = new Set();  // Track solved cells
   private foundWords: Set<string> = new Set();  // Track found words
+  private levelCompleted: boolean = false;  // Ensure completion fires once per level
   private currentClue: string = '';  // Current level clue
   
   // Default word list - Uncommon Occupations theme
@@ -93,6 +95,7 @@ export class HexaWordGame {
       
       // Mark as initialized
       this.isInitialized = true;
+      this.levelCompleted = false;
       
       // Initial render with animation
       this.animationService.animateGameStart(() => {
@@ -141,6 +144,7 @@ export class HexaWordGame {
     
     // Generate new puzzle for new level
     await this.generateCrossword();
+    this.levelCompleted = false;
     this.render();
   }
   
@@ -692,10 +696,30 @@ export class HexaWordGame {
           delete (window as any).__greenCells;
         }
         this.render();
+        // Only check for level completion after the final animation finishes
+        this.checkLevelCompletion();
       }
     );
     
     console.log(`Found word: ${word.word}`);
+  }
+
+  /**
+   * Checks if all words are found and triggers completion callback
+   */
+  private checkLevelCompletion(): void {
+    if (this.levelCompleted) return;
+    if (this.placedWords.length === 0) return;
+    const allFound = this.foundWords.size >= this.placedWords.length;
+    if (!allFound) return;
+    this.levelCompleted = true;
+    if (this.config.onLevelComplete) {
+      try {
+        this.config.onLevelComplete(this.currentLevel);
+      } catch (e) {
+        console.warn('onLevelComplete callback error', e);
+      }
+    }
   }
   
   /**
@@ -843,5 +867,44 @@ export class HexaWordGame {
    */
   public getBoard(): Map<string, HexCell> {
     return this.board;
+  }
+
+  /**
+   * Public API: number of found words
+   */
+  public getFoundCount(): number {
+    return this.foundWords.size;
+  }
+
+  /**
+   * Public API: total words placed
+   */
+  public getTotalWords(): number {
+    return this.placedWords.length;
+  }
+
+  /**
+   * Public API: load a new level with fresh words/seed/clue
+   */
+  public async loadLevel(data: { words: string[]; seed: string; clue?: string; level?: number }): Promise<void> {
+    // Reset state
+    this.foundWords.clear();
+    this.solvedCells.clear();
+    this.typedWord = '';
+    this.levelCompleted = false;
+
+    // Update config/state
+    this.config.words = data.words;
+    this.config.seed = data.seed;
+    this.currentClue = data.clue || this.defaultClue;
+    if (data.level) {
+      this.currentLevel = data.level;
+      await this.initializeColorPalette();
+    }
+
+    // Reinitialize generator with new seed/words
+    this.generator.updateConfig({ seed: this.config.seed, words: data.words });
+    await this.generateCrossword(data.words);
+    this.render();
   }
 }

@@ -1,6 +1,8 @@
 import express from 'express';
 import { context, reddit } from '@devvit/web/server';
 import { GameInitResponse, ApiErrorResponse, ApiErrorCode } from '../../shared/types/api';
+import { LevelSelector } from '../services/LevelSelector';
+import { LevelRepository } from '../services/LevelRepository';
 
 export const gameRouter = express.Router();
 
@@ -43,7 +45,7 @@ function createErrorResponse(code: ApiErrorCode, message: string, details?: unkn
 
 gameRouter.get<unknown, GameInitResponse | ApiErrorResponse>(
   '/api/game/init',
-  async (_req, res): Promise<void> => {
+  async (req, res): Promise<void> => {
     try {
       const { postId } = context;
       
@@ -68,21 +70,52 @@ gameRouter.get<unknown, GameInitResponse | ApiErrorResponse>(
         // Continue with anonymous
       }
       
-      // Generate deterministic seed from postId
-      // Could enhance with date for daily puzzles: `${postId}_${new Date().toISOString().split('T')[0]}`
-      const seed = postId;
-      
-      // Validate words
+      // Determine requested level (default 1)
+      const levelParam = Number((req.query?.level as string) ?? '1');
+      const level = Number.isFinite(levelParam) && levelParam > 0 ? Math.floor(levelParam) : 1;
+
+      // Deterministic seed: postId + level (optionally add date for daily cycles)
+      const seed = `${postId}:${level}`;
+
+      // Try to source words from CSV row for this level; if missing, fallback to seeded picker
+      const levelRepo = LevelRepository.getInstance();
+      const csvLevel = levelRepo.getLevel(level);
+
       let words: string[];
+      let derivedClue: string | undefined;
+      if (csvLevel) {
+        // Respect CSV flow: use its word count (capped at 6)
+        const count = Math.min(6, csvLevel.numWords || csvLevel.words.length);
+        // Deterministically shuffle the row's words with the seed and take first count
+        const selector = new LevelSelector();
+        const rowPick = selector.pickWords(seed, count, new Set());
+        // But constrain to the row's word list only
+        const rowSet = new Set(csvLevel.words);
+        words = rowPick.words.filter(w => rowSet.has(w)).slice(0, count);
+        // If for some reason filtering made it short, top up deterministically from row words
+        if (words.length < count) {
+          const topUp = csvLevel.words.filter(w => !words.includes(w)).slice(0, count - words.length);
+          words = words.concat(topUp);
+        }
+        derivedClue = csvLevel.clue;
+      } else {
+        // Fallback: pick exactly 6 deterministically from the global pool
+        const selector = new LevelSelector();
+        const selection = selector.pickWords(seed, 6);
+        words = selection.words;
+        derivedClue = selection.clue;
+      }
+
+      // Validate words
       try {
-        words = validateWords(DEFAULT_WORDS);
+        validateWords(words);
       } catch (err) {
         console.error('Word validation failed:', err);
         res.status(500).json(
           createErrorResponse(
             ApiErrorCode.SERVER_ERROR,
             'Failed to prepare word list',
-            { originalError: err instanceof Error ? err.message : 'Unknown error' }
+            { originalError: err instanceof Error ? (err as Error).message : 'Unknown error' }
           )
         );
         return;
@@ -95,10 +128,12 @@ gameRouter.get<unknown, GameInitResponse | ApiErrorResponse>(
         username,
         seed,
         words,
-        createdAt: new Date().toISOString()
+        level,
+        clue: derivedClue,
+        createdAt: new Date().toISOString(),
       };
       
-      console.log(`Game init successful for post ${postId}, seed: ${seed}`);
+      console.log(`Game init successful for post ${postId}, level ${level}, seed: ${seed}`);
       res.json(response);
       
     } catch (err) {
@@ -117,4 +152,3 @@ gameRouter.get<unknown, GameInitResponse | ApiErrorResponse>(
     }
   }
 );
-

@@ -49,92 +49,100 @@ export class WordPlacementService {
   }
 
   /**
-   * Places the first three words intersecting at the center
+   * Places the first three words by selecting any three that share a common letter.
+   * Prefer indices near the middle for nicer layouts.
    */
   private placeFirstThreeWords(wordBank: WordObject[]): boolean {
     if (wordBank.length < 3) return false;
-    
-    const sharedLetterInfo = this.findSharedMiddleLetter(wordBank[0], wordBank[1], wordBank[2]);
-    if (!sharedLetterInfo) {
-      console.log('No shared middle letter found in first 3 words');
+
+    const triplet = this.findSharedLetterTriplet(wordBank);
+    if (!triplet) {
+      console.log('No shared letter triplet found among candidate words');
       return false;
     }
-    
-    const {letter, idx1, idx2, idx3} = sharedLetterInfo;
-    console.log(`Placing first 3 words with shared middle letter '${letter}'`);
-    
+
+    const { aIndex, bIndex, cIndex, idx1, idx2, idx3, letter } = triplet;
+    const w1 = wordBank[aIndex];
+    const w2 = wordBank[bIndex];
+    const w3 = wordBank[cIndex];
+
+    console.log(`Placing first 3 words sharing '${letter}' at indices`, { idx1, idx2, idx3 });
+
     // Place word 1 on Q axis (horizontal)
-    this.placeWordAt(wordBank[0], -idx1, 0, 0);
-    
+    this.placeWordAt(w1, -idx1, 0, 0);
     // Place word 2 on R axis (vertical)
-    this.placeWordAt(wordBank[1], 0, -idx2, 1);
-    
+    this.placeWordAt(w2, 0, -idx2, 1);
     // Place word 3 on S axis (diagonal)
-    this.placeWordAt(wordBank[2], -idx3, idx3, 2);
-    
-    // Remove placed words from wordBank
-    wordBank.splice(0, 3);
-    
+    this.placeWordAt(w3, -idx3, idx3, 2);
+
+    // Remove these three words from the bank (remove highest index first)
+    const toRemove = [aIndex, bIndex, cIndex].sort((x, y) => y - x);
+    for (const i of toRemove) {
+      wordBank.splice(i, 1);
+    }
     return true;
   }
 
   /**
-   * Finds a letter that appears in the middle of all 3 words
+   * Finds three words in the bank that share at least one common letter.
+   * Returns their indices in the bank and the letter positions for alignment.
    */
-  private findSharedMiddleLetter(
-    word1: WordObject, 
-    word2: WordObject, 
-    word3: WordObject
-  ): {letter: string, idx1: number, idx2: number, idx3: number} | null {
-    const getMiddleIndices = (word: WordObject): number[] => {
-      const indices: number[] = [];
-      const len = word.chars.length;
-      if (len <= 2) return [];
-      
-      const mid = Math.floor(len / 2);
-      indices.push(mid);
-      
-      // Add indices working outward from middle
-      for (let offset = 1; offset < Math.max(mid, len - mid - 1); offset++) {
-        if (mid - offset > 0) indices.push(mid - offset);
-        if (mid + offset < len - 1) indices.push(mid + offset);
-      }
-      
-      return indices;
+  private findSharedLetterTriplet(wordBank: WordObject[]): {
+    aIndex: number; bIndex: number; cIndex: number;
+    letter: string; idx1: number; idx2: number; idx3: number;
+  } | null {
+    const limit = Math.min(wordBank.length, 10); // search top 10 to limit cost
+
+    const sortedIndicesByCenter = (w: WordObject): number[] => {
+      const len = w.chars.length;
+      if (len === 0) return [];
+      const mid = (len - 1) / 2;
+      return Array.from({ length: len }, (_, i) => i).sort((i, j) => Math.abs(i - mid) - Math.abs(j - mid));
     };
-    
-    const indices1 = getMiddleIndices(word1);
-    const indices2 = getMiddleIndices(word2);
-    const indices3 = getMiddleIndices(word3);
-    
-    // Check each position in word1
-    for (const i of indices1) {
-      const letter = word1.chars[i];
-      
-      // Check if this letter exists in middle of word2
-      let idx2 = -1;
-      for (const j of indices2) {
-        if (word2.chars[j] === letter) {
-          idx2 = j;
-          break;
+
+    for (let i = 0; i < limit; i++) {
+      const w1 = wordBank[i];
+      const idxs1 = sortedIndicesByCenter(w1);
+      for (let j = i + 1; j < limit; j++) {
+        const w2 = wordBank[j];
+        const idxs2 = sortedIndicesByCenter(w2);
+        // Precompute letter positions for w2
+        const map2 = new Map<string, number[]>();
+        for (const jIdx of idxs2) {
+          const ch = w2.chars[jIdx];
+          if (!map2.has(ch)) map2.set(ch, []);
+          map2.get(ch)!.push(jIdx);
+        }
+        for (let k = j + 1; k < limit; k++) {
+          const w3 = wordBank[k];
+          const idxs3 = sortedIndicesByCenter(w3);
+          const map3 = new Map<string, number[]>();
+          for (const kIdx of idxs3) {
+            const ch = w3.chars[kIdx];
+            if (!map3.has(ch)) map3.set(ch, []);
+            map3.get(ch)!.push(kIdx);
+          }
+
+          // Try letters in w1 in center-first order
+          for (const iIdx of idxs1) {
+            const ch = w1.chars[iIdx];
+            const cands2 = map2.get(ch);
+            const cands3 = map3.get(ch);
+            if (!cands2 || !cands3) continue;
+            // pick first indices (center-preferred ordering already applied)
+            return {
+              aIndex: i,
+              bIndex: j,
+              cIndex: k,
+              letter: ch,
+              idx1: iIdx,
+              idx2: cands2[0],
+              idx3: cands3[0]
+            };
+          }
         }
       }
-      if (idx2 === -1) continue;
-      
-      // Check if this letter exists in middle of word3
-      let idx3 = -1;
-      for (const k of indices3) {
-        if (word3.chars[k] === letter) {
-          idx3 = k;
-          break;
-        }
-      }
-      if (idx3 === -1) continue;
-      
-      // Found a shared middle letter!
-      return { letter, idx1: i, idx2, idx3 };
     }
-    
     return null;
   }
 
