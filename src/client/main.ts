@@ -21,6 +21,117 @@ interface HexCell {
   wordIds: number[];
 }
 
+// Class for the 8-cell input hexagon grid
+class InputHexGrid {
+  private ctx: CanvasRenderingContext2D;
+  private cells: Array<{q: number, r: number, letter?: string}> = [];
+  private hexSize: number = 25;
+  
+  constructor(ctx: CanvasRenderingContext2D) {
+    this.ctx = ctx;
+    this.initializeCells();
+  }
+  
+  private initializeCells(): void {
+    // Use honeycomb-grid's rectangle traverser for proper rectangular layout
+    const MyHex = defineHex({
+      dimensions: 30,
+      orientation: 'pointy'
+    });
+    
+    // Create a 4x2 rectangle grid
+    const grid = new Grid(MyHex, rectangle({ width: 4, height: 2 }));
+    
+    // Convert grid hexes to our cell format and center them
+    this.cells = [];
+    let totalQ = 0;
+    let totalR = 0;
+    const tempCells: Array<{q: number, r: number}> = [];
+    
+    // First pass: collect cells and calculate center
+    grid.forEach(hex => {
+      tempCells.push({q: hex.q, r: hex.r});
+      totalQ += hex.q;
+      totalR += hex.r;
+    });
+    
+    // Calculate offset to center the grid
+    const avgQ = totalQ / tempCells.length;
+    const avgR = totalR / tempCells.length;
+    
+    // Second pass: apply centering offset
+    tempCells.forEach(cell => {
+      this.cells.push({
+        q: cell.q - avgQ,
+        r: cell.r - avgR
+      });
+    });
+  }
+  
+  public render(centerX: number, centerY: number, dynamicSize?: number): number {
+    const size = dynamicSize || this.hexSize;
+    const Hex = defineHex({
+      dimensions: size,
+      orientation: 'pointy'
+    });
+    
+    let maxY = -Infinity;
+    
+    // Draw each cell
+    this.cells.forEach((cell, index) => {
+      const hex = new Hex([cell.q, cell.r]);
+      const x = hex.x + centerX;
+      const y = hex.y + centerY;
+      
+      // Track maximum Y for spacing calculation
+      const corners = hex.corners;
+      corners.forEach(corner => {
+        maxY = Math.max(maxY, corner.y + centerY);
+      });
+      
+      // Draw hex
+      this.ctx.beginPath();
+      this.ctx.moveTo(corners[0].x + centerX, corners[0].y + centerY);
+      for (let i = 1; i < corners.length; i++) {
+        this.ctx.lineTo(corners[i].x + centerX, corners[i].y + centerY);
+      }
+      this.ctx.closePath();
+      
+      // Fill with light gray
+      this.ctx.fillStyle = '#f0f0f0';
+      this.ctx.fill();
+      
+      // Stroke
+      this.ctx.strokeStyle = '#999';
+      this.ctx.lineWidth = 1;
+      this.ctx.stroke();
+      
+      // Add letter if exists
+      if (cell.letter) {
+        this.ctx.fillStyle = '#333';
+        this.ctx.font = `bold ${Math.floor(size * 0.5)}px Arial`;
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillText(cell.letter, x, y);
+      }
+    });
+    
+    return maxY; // Return the bottom position of the grid
+  }
+  
+  public setLetter(index: number, letter: string): void {
+    if (index >= 0 && index < this.cells.length) {
+      this.cells[index].letter = letter;
+    }
+  }
+  
+  public clearLetters(): void {
+    this.cells.forEach(cell => {
+      cell.letter = undefined;
+    });
+  }
+}
+
 class HexaWordCrossword {
   private container: HTMLElement;
   private canvas: HTMLCanvasElement;
@@ -30,6 +141,7 @@ class HexaWordCrossword {
   private board: Map<string, HexCell> = new Map();
   private wordsActive: WordObj[] = [];
   private bounds = { minQ: 0, maxQ: 0, minR: 0, maxR: 0 };
+  private inputGrid: InputHexGrid;
   
   // Fixed grid radius
   private readonly GRID_RADIUS = 10;
@@ -82,6 +194,9 @@ class HexaWordCrossword {
       return;
     }
     this.ctx = ctx;
+    
+    // Initialize input grid
+    this.inputGrid = new InputHexGrid(this.ctx);
     
     console.log('Canvas created, generating crossword...');
     this.generateCrossword();
@@ -1641,9 +1756,8 @@ class HexaWordCrossword {
     this.canvas.height = rect.height * dpr;
     this.ctx.scale(dpr, dpr);
     
-    // Clear canvas with background
-    this.ctx.fillStyle = '#ffffff';
-    this.ctx.fillRect(0, 0, rect.width, rect.height);
+    // Clear canvas (transparent background)
+    this.ctx.clearRect(0, 0, rect.width, rect.height);
     
     if (this.board.size === 0) {
       // No crossword generated yet
@@ -1672,12 +1786,14 @@ class HexaWordCrossword {
     const wordGridWidth = actualMaxQ - actualMinQ + 1;
     const wordGridHeight = actualMaxR - actualMinR + 1;
     
-    // Add padding percentage
-    const paddingPercent = 0.15; // 15% padding around the content
-    const padding = Math.min(rect.width, rect.height) * paddingPercent;
+    // Fixed padding: 10px left and right, 10px top
+    const paddingLeft = 10;
+    const paddingRight = 10;
+    const paddingTop = 10;
+    const paddingBottom = 180; // Reserve more space for larger input grid at bottom
     
-    const availableWidth = rect.width - (padding * 2);
-    const availableHeight = rect.height - (padding * 2);
+    const availableWidth = rect.width - paddingLeft - paddingRight;
+    const availableHeight = rect.height - paddingTop - paddingBottom;
     
     // Calculate hex size to fit the actual word placement
     // Hexagon width = 2 * size, height = sqrt(3) * size
@@ -1686,7 +1802,7 @@ class HexaWordCrossword {
     const maxHexByHeight = availableHeight / (wordGridHeight * 1.732);
     
     // Dynamic sizing - can grow or shrink based on content
-    const hexSize = Math.min(maxHexByWidth, maxHexByHeight, 50); // Cap at 50px max for readability
+    const hexSize = Math.min(maxHexByWidth, maxHexByHeight, 35); // Reduced cap for better fit
     
     // Create hex with dynamic size
     const Hex = defineHex({
@@ -1710,11 +1826,11 @@ class HexaWordCrossword {
       }
     });
     
-    // Center the actual word content in the container
+    // Align to top with padding, center horizontally
     const contentWidth = maxX - minX;
     const contentHeight = maxY - minY;
     const centerX = rect.width / 2 - (minX + maxX) / 2;
-    const centerY = rect.height / 2 - (minY + maxY) / 2;
+    const centerY = paddingTop - minY;
     
     // Only render cells with letters (no grid boundary)
     this.board.forEach(cell => {
@@ -1760,6 +1876,29 @@ class HexaWordCrossword {
     // Debug info
     console.log(`Rendered ${this.board.size} cells with hex size: ${hexSize.toFixed(1)}px`);
     console.log(`Content bounds: ${wordGridWidth}x${wordGridHeight} hexes`);
+    
+    // Calculate bottom of word grid
+    let wordGridBottom = -Infinity;
+    this.board.forEach(cell => {
+      if (cell.letter) {
+        const hex = new Hex([cell.q, cell.r]);
+        const corners = hex.corners;
+        corners.forEach(corner => {
+          wordGridBottom = Math.max(wordGridBottom, corner.y + centerY);
+        });
+      }
+    });
+    
+    // Render input grid at the bottom of the screen
+    const inputGridSize = Math.min(hexSize * 1.6, 50); // 2x larger than before
+    const inputGridBottomPadding = 20;
+    
+    // Calculate Y position to align to bottom
+    // Input grid height for 2 rows of hexagons
+    const inputGridHeight = inputGridSize * 2.5 * Math.sqrt(3); // Height for 2 rows
+    const inputGridY = rect.height - inputGridHeight - inputGridBottomPadding;
+    
+    this.inputGrid.render(rect.width / 2, inputGridY, inputGridSize);
   }
 }
 
