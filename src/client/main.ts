@@ -28,24 +28,35 @@ class App {
   private async startGame(): Promise<void> {
     console.log('Starting HexaWord game...');
     
-    // Default words - will be replaced by server data
+    // Default configuration
     const defaultWords = [
       'FOE', 'REF', 'GIG', 'RIG', 'FIG', 
       'FIRE', 'FROG', 'RIFE', 'FORE', 'OGRE', 
       'GORE', 'FORGE', 'GORGE', 'GRIEF', 'FOGGIER'
     ];
+    const defaultSeed = `client_${Date.now()}`;
     
-    // Check if we should fetch words from server
-    const useServerWords = await this.shouldUseServerWords();
-    const words = useServerWords ? await this.fetchWordsFromServer() : defaultWords;
+    // Try to fetch from server
+    let words = defaultWords;
+    let seed = defaultSeed;
     
-    // Create game instance
+    const serverData = await this.fetchGameInitData();
+    if (serverData) {
+      words = serverData.words || defaultWords;
+      seed = serverData.seed || defaultSeed;
+      console.log(`Using server seed: ${seed}`);
+    } else {
+      console.log(`Using default seed: ${seed}`);
+    }
+    
+    // Create game instance with seed
     this.game = new HexaWordGame({
       containerId: 'hex-grid-container',
       words: words,
+      seed: seed,  // Pass seed for deterministic generation
       gridRadius: 10,
       onReady: () => {
-        console.log('Game ready!');
+        console.log('Game ready with seed:', seed);
         this.setupUI();
       },
       onError: (error) => {
@@ -56,29 +67,35 @@ class App {
   }
   
   /**
-   * Checks if we should use server words
+   * Fetches game initialization data from server
    */
-  private async shouldUseServerWords(): boolean {
-    // Check if we're in a Devvit environment
-    return typeof window !== 'undefined' && 
-           window.location.hostname.includes('reddit');
-  }
-  
-  /**
-   * Fetches words from the server
-   */
-  private async fetchWordsFromServer(): Promise<string[]> {
+  private async fetchGameInitData(): Promise<{words: string[], seed: string} | null> {
     try {
       const response = await fetch('/api/game/init');
       if (!response.ok) {
-        throw new Error('Failed to fetch words from server');
+        throw new Error('Failed to fetch game data from server');
       }
       
       const data = await response.json();
-      return data.words || [];
+      
+      // Validate response has expected fields
+      if (!data.seed || !Array.isArray(data.words)) {
+        console.warn('Invalid server response, missing seed or words');
+        return null;
+      }
+      
+      console.log('Fetched game data from server:', {
+        seed: data.seed,
+        wordCount: data.words.length
+      });
+      
+      return {
+        words: data.words,
+        seed: data.seed
+      };
     } catch (error) {
-      console.error('Failed to fetch words, using defaults:', error);
-      return [];
+      console.error('Failed to fetch game data, using defaults:', error);
+      return null;
     }
   }
   

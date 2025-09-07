@@ -6,6 +6,7 @@ import { HexCell, WordObject } from '../shared/types/hexaword';
 export interface GameConfig {
   containerId: string;
   words?: string[];
+  seed?: string;
   gridRadius?: number;
   onReady?: () => void;
   onError?: (error: Error) => void;
@@ -49,10 +50,11 @@ export class HexaWordGame {
       // Setup canvas
       this.setupCanvas();
       
-      // Initialize components
+      // Initialize components with seed
       this.generator = new CrosswordGenerator({
         gridRadius: this.config.gridRadius || 10,
-        words: this.config.words || this.defaultWords
+        words: this.config.words || this.defaultWords,
+        seed: this.config.seed || `game_${Date.now()}`
       });
       
       this.renderer = new HexRenderer(this.ctx);

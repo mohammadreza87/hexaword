@@ -1,9 +1,11 @@
 import { WordObject, HexCell, PuzzleConfig } from '../../shared/types/hexaword';
 import { WordPlacementService } from '../../shared/algorithms/WordPlacementService';
+import { createRNG, SeededRNG } from '../../shared/utils/rng';
 
 export class CrosswordGenerator {
   private placementService: WordPlacementService;
   private config: PuzzleConfig;
+  private rng: SeededRNG;
   
   constructor(config?: Partial<PuzzleConfig>) {
     this.config = {
@@ -13,7 +15,11 @@ export class CrosswordGenerator {
       ...config
     };
     
-    this.placementService = new WordPlacementService(this.config.gridRadius);
+    // Initialize RNG with seed
+    this.rng = createRNG(this.config.seed || 'default');
+    
+    // Pass RNG to placement service
+    this.placementService = new WordPlacementService(this.config.gridRadius, this.rng);
   }
 
   /**
@@ -72,11 +78,16 @@ export class CrosswordGenerator {
       }
     }
     
-    // Sort by match count and length for better placement
+    // DETERMINISTIC: Sort by match count, then length, then alphabetically for consistency
     wordObjs.sort((a, b) => {
       const scoreDiff = b.totalMatches - a.totalMatches;
       if (scoreDiff !== 0) return scoreDiff;
-      return b.word.length - a.word.length;
+      
+      const lengthDiff = b.word.length - a.word.length;
+      if (lengthDiff !== 0) return lengthDiff;
+      
+      // Alphabetical as final tiebreaker for determinism
+      return a.word.localeCompare(b.word);
     });
     
     console.log('Word match scores:', wordObjs.map(w => ({ 

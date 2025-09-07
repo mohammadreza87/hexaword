@@ -7,15 +7,18 @@ import {
   ALL_HEX_DIRECTIONS,
   HexCoordinate
 } from '../types/hexaword';
+import { SeededRNG } from '../utils/rng';
 
 export class WordPlacementService {
   private board: Map<string, HexCell> = new Map();
   private occupiedCells: Set<string> = new Set();
   private wordsActive: WordObject[] = [];
   private readonly gridRadius: number;
+  private rng: SeededRNG | null;
 
-  constructor(gridRadius: number = 10) {
+  constructor(gridRadius: number = 10, rng?: SeededRNG) {
     this.gridRadius = gridRadius;
+    this.rng = rng || null;
   }
 
   /**
@@ -220,6 +223,9 @@ export class WordPlacementService {
     const existingCell = this.board.get(`${point.q},${point.r}`);
     if (!existingCell) return null;
     
+    // Collect all valid placements
+    const validPlacements: PlacementResult[] = [];
+    
     // Check each letter of the word
     for (let i = 0; i < word.chars.length; i++) {
       if (word.chars[i] === existingCell.letter) {
@@ -230,13 +236,34 @@ export class WordPlacementService {
           const startPos = this.getWordStartPosition({q: point.q, r: point.r}, i, dir);
           
           if (this.canPlaceWord(word, startPos.q, startPos.r, dir)) {
-            return {q: startPos.q, r: startPos.r, dir};
+            validPlacements.push({q: startPos.q, r: startPos.r, dir});
           }
         }
       }
     }
     
-    return null;
+    // DETERMINISTIC: Choose placement based on consistent criteria
+    if (validPlacements.length === 0) return null;
+    
+    if (validPlacements.length === 1) return validPlacements[0];
+    
+    // Sort placements for deterministic selection
+    validPlacements.sort((a, b) => {
+      // First by q coordinate
+      if (a.q !== b.q) return a.q - b.q;
+      // Then by r coordinate
+      if (a.r !== b.r) return a.r - b.r;
+      // Finally by direction
+      return a.dir - b.dir;
+    });
+    
+    // If RNG provided, pick from sorted list, otherwise take first
+    if (this.rng) {
+      const index = this.rng.nextInt(0, validPlacements.length - 1);
+      return validPlacements[index];
+    }
+    
+    return validPlacements[0];
   }
 
   /**
