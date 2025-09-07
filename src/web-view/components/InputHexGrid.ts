@@ -19,6 +19,7 @@ export class InputHexGrid {
   private usedLetters: Set<string> = new Set(); // Track which letters have been used
   private colorPaletteService: ColorPaletteService;
   private currentColors: ColorScheme | null = null;
+  private activeCell: { q: number; r: number } | null = null; // last selected cell for glow
   
   constructor(ctx: CanvasRenderingContext2D) {
     this.ctx = ctx;
@@ -228,8 +229,13 @@ export class InputHexGrid {
     this.cells.forEach((cell, index) => {
       const hex = new Hex([cell.q, cell.r]);
       const hexKey = `input_${cell.q},${cell.r}`;
-      const x = hex.x + offsetX;
-      const y = hex.y + offsetY;
+      let x = hex.x + offsetX;
+      let y = hex.y + offsetY;
+      const posAnim = this.animationService.getInputPositionState(hexKey);
+      if (posAnim) {
+        x += posAnim.dx || 0;
+        y += posAnim.dy || 0;
+      }
       
       // Apply animation transforms if any
       const animState = this.animationService.getInputAnimationState(hexKey);
@@ -256,8 +262,12 @@ export class InputHexGrid {
         const scaledCornerY = hex.y + (corner.y - hex.y) * scaleFactor;
         
         // Position the scaled corners
-        const finalX = scaledCornerX + offsetX;
-        const finalY = scaledCornerY + offsetY;
+        let finalX = scaledCornerX + offsetX;
+        let finalY = scaledCornerY + offsetY;
+        if (posAnim) {
+          finalX += posAnim.dx || 0;
+          finalY += posAnim.dy || 0;
+        }
         
         if (i === 0) {
           this.ctx.moveTo(finalX, finalY);
@@ -295,6 +305,7 @@ export class InputHexGrid {
       } else if (!isCenterCell) {
         // Check if this letter has been used
         const isUsed = this.usedLetters.has(`${cell.q},${cell.r}`);
+        const isActive = !!this.activeCell && this.activeCell.q === cell.q && this.activeCell.r === cell.r;
         
         // Check for green input animation
         if (greenInputState && greenInputState.green > 0) {
@@ -337,7 +348,7 @@ export class InputHexGrid {
           }
           
           // Different color for used letters
-          if (isUsed) {
+          if (isUsed && !isActive) {
             this.ctx.fillStyle = this.currentColors?.primary || '#1a1f2e'; // Darker color for used letters
             this.ctx.fill();
             // Add subtle disabled effect
@@ -349,6 +360,17 @@ export class InputHexGrid {
           } else {
             this.ctx.fillStyle = this.currentColors?.inputCellFill || '#3a4558';
             this.ctx.fill();
+          }
+
+          // Highlight active cell with glow outline
+          if (isActive) {
+            this.ctx.save();
+            this.ctx.shadowColor = this.currentColors?.accent || '#00d9ff';
+            this.ctx.shadowBlur = 14;
+            this.ctx.strokeStyle = this.currentColors?.accent || '#00d9ff';
+            this.ctx.lineWidth = 2.5;
+            this.ctx.stroke();
+            this.ctx.restore();
           }
           
           // Reset shadow
@@ -375,9 +397,10 @@ export class InputHexGrid {
         // Draw letters only for non-center cells
         // Check if this letter has been used
         const isUsed = this.usedLetters.has(`${cell.q},${cell.r}`);
+        const isActive = !!this.activeCell && this.activeCell.q === cell.q && this.activeCell.r === cell.r;
         // Dimmed text for used letters
         const dimmedColor = this.colorPaletteService.adjustForContrast('#666666', this.currentColors?.background || '#141514', 3.0);
-        this.ctx.fillStyle = isUsed ? dimmedColor : (this.currentColors?.text || '#ffffff');
+        this.ctx.fillStyle = (isUsed && !isActive) ? dimmedColor : (this.currentColors?.text || '#ffffff');
         this.ctx.font = `${Math.floor(size * 0.8)}px 'Lilita One', Arial`;
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
@@ -516,15 +539,32 @@ export class InputHexGrid {
           this.usedLetters.clear(); // Clear all used letters
           return 'CLEAR';
         }
-        // Check if this letter has already been used
+        // Backspace behavior: if this is the last selected cell, toggle it off
         const cellKey = `${cell.q},${cell.r}`;
-        if (cell.letter && !this.usedLetters.has(cellKey)) {
+        const last = this.selectedPositions[this.selectedPositions.length - 1];
+        if (this.usedLetters.has(cellKey)) {
+          if (last && last.q === cell.q && last.r === cell.r) {
+            // Remove last typed character and unuse the cell
+            this.usedLetters.delete(cellKey);
+            this.selectedPositions.pop();
+            this.typedWord = this.typedWord.slice(0, -1);
+            // Update active cell to new last or clear
+            const newLast = this.selectedPositions[this.selectedPositions.length - 1] || null;
+            this.activeCell = newLast ? { q: newLast.q, r: newLast.r } : null;
+            return 'BACKSPACE';
+          }
+          // If not last selected, ignore
+          return null;
+        }
+
+        // Normal add behavior for unused letters
+        if (cell.letter) {
           this.typedWord += cell.letter;
           this.selectedPositions.push({ q: cell.q, r: cell.r });
           this.usedLetters.add(cellKey); // Mark this cell as used
+          this.activeCell = { q: cell.q, r: cell.r };
           return cell.letter;
         }
-        // Return null if letter is already used
         return null;
       }
     }
@@ -545,6 +585,7 @@ export class InputHexGrid {
     this.typedWord = '';
     this.selectedPositions = [];
     this.usedLetters.clear(); // Clear all used letters when word is cleared
+    this.activeCell = null;
   }
   
   /**
@@ -554,6 +595,188 @@ export class InputHexGrid {
     this.cells.forEach(cell => {
       cell.letter = undefined;
     });
+  }
+
+  /**
+   * Remove letters for cells matching a predicate, animate scale-to-zero, then reflow grid.
+   */
+  public removeLettersByPredicate(
+    predicate: (cell: InputCell) => boolean,
+    layout?: { centerX: number; centerY: number; size: number },
+    onDone?: () => void
+  ): void {
+    // Identify targets (exclude center)
+    const targets = this.cells.filter(c => !(c.q === 0 && c.r === 0) && c.letter && predicate(c));
+    if (targets.length === 0) {
+      onDone?.();
+      return;
+    }
+    const positions = targets.map(t => ({ q: t.q, r: t.r }));
+    
+    // Animate removal, then rebuild
+    this.animationService.animateInputHexRemove(positions, () => {
+      // Build remaining letters array and capture old positions of survivors
+      const remaining: string[] = [];
+      const survivors: Array<{ letter: string; q: number; r: number; x: number; y: number }> = [];
+
+      // Helper to compute current absolute center for a cell
+      const computeCenter = (cell: InputCell): { x: number; y: number } => {
+        const size = layout?.size ?? this.hexSize;
+        const Hex = defineHex({ dimensions: size, orientation: 'pointy' });
+        // compute bounds and offsets like render
+        let maxY = -Infinity, minY = Infinity, maxX = -Infinity, minX = Infinity;
+        this.cells.forEach(c => {
+          const hex = new Hex([c.q, c.r]);
+          hex.corners.forEach(corner => {
+            maxY = Math.max(maxY, corner.y);
+            minY = Math.min(minY, corner.y);
+            maxX = Math.max(maxX, corner.x);
+            minX = Math.min(minX, corner.x);
+          });
+        });
+        const offsetX = (layout?.centerX ?? 0) - (minX + maxX) / 2;
+        const offsetY = (layout?.centerY ?? 0) - maxY;
+        const hex = new Hex([cell.q, cell.r]);
+        return { x: hex.x + offsetX, y: hex.y + offsetY };
+      };
+
+      this.cells.forEach(c => {
+        if (c.q === 0 && c.r === 0) return; // skip center
+        if (!c.letter) return;
+        const shouldRemove = targets.some(t => t.q === c.q && t.r === c.r);
+        if (!shouldRemove) {
+          remaining.push(c.letter);
+          const { x, y } = computeCenter(c);
+          survivors.push({ letter: c.letter!, q: c.q, r: c.r, x, y });
+        }
+      });
+
+      // Reset selection state due to layout change
+      this.clearTypedWord();
+
+      // Rebuild cells to new size and set letters
+      this.initializeCells(remaining.length);
+      let i = 0;
+      const moves: Array<{ key: string; dx0: number; dy0: number; distance: number }> = [];
+      const centerX = layout?.centerX ?? 0;
+      const centerY = layout?.centerY ?? 0;
+
+      this.cells.forEach(c => {
+        if (c.q === 0 && c.r === 0) return;
+        const letter = remaining[i++] || undefined;
+        c.letter = letter;
+        if (!letter) return;
+        // Compute new absolute center
+        const size = layout?.size ?? this.hexSize;
+        const Hex = defineHex({ dimensions: size, orientation: 'pointy' });
+        // We recompute bounds for new layout
+        let maxY = -Infinity, minY = Infinity, maxX = -Infinity, minX = Infinity;
+        this.cells.forEach(cc => {
+          const hx = new Hex([cc.q, cc.r]);
+          hx.corners.forEach(corner => {
+            maxY = Math.max(maxY, corner.y);
+            minY = Math.min(minY, corner.y);
+            maxX = Math.max(maxX, corner.x);
+            minX = Math.min(minX, corner.x);
+          });
+        });
+        const offsetX = (layout?.centerX ?? 0) - (minX + maxX) / 2;
+        const offsetY = (layout?.centerY ?? 0) - maxY;
+        const hex = new Hex([c.q, c.r]);
+        const toX = hex.x + offsetX;
+        const toY = hex.y + offsetY;
+
+        // Match with survivor by order (stable packing)
+        const survivor = survivors[moves.length];
+        if (survivor) {
+          const dx0 = survivor.x - toX;
+          const dy0 = survivor.y - toY;
+          const distance = Math.hypot(toX - centerX, toY - centerY);
+          moves.push({ key: `input_${c.q},${c.r}`, dx0, dy0, distance });
+        }
+      });
+
+      // Animate movement towards new centered positions
+      this.animationService.animateInputGridRelayout(moves, () => {
+        // Final polish pulse
+        const keys = this.cells
+          .filter(c => !(c.q === 0 && c.r === 0) && c.letter)
+          .map(c => `input_${c.q},${c.r}`);
+        this.animationService.animateInputGridReflow(keys);
+        onDone?.();
+      });
+    });
+  }
+
+  /**
+   * Remove all occurrences of letters in the provided set (excluding center).
+   */
+  public removeLettersBySet(
+    letters: Set<string>,
+    layout?: { centerX: number; centerY: number; size: number },
+    onDone?: () => void
+  ): void {
+    this.removeLettersByPredicate(c => !!c.letter && letters.has(c.letter.toUpperCase()), layout, onDone);
+  }
+
+  /**
+   * Compute absolute bounds of the input grid given the current cells and layout.
+   */
+  public getBounds(
+    centerX: number,
+    centerY: number,
+    dynamicSize?: number
+  ): { leftX: number; rightX: number; topY: number; bottomY: number } {
+    const size = dynamicSize || this.hexSize;
+    const Hex = defineHex({ dimensions: size, orientation: 'pointy' });
+    let maxY = -Infinity, minY = Infinity, maxX = -Infinity, minX = Infinity;
+    this.cells.forEach(cell => {
+      const hex = new Hex([cell.q, cell.r]);
+      const corners = hex.corners;
+      corners.forEach(corner => {
+        maxY = Math.max(maxY, corner.y);
+        minY = Math.min(minY, corner.y);
+        maxX = Math.max(maxX, corner.x);
+        minX = Math.min(minX, corner.x);
+      });
+    });
+    const offsetX = centerX - (minX + maxX) / 2;  // same centering as render
+    const offsetY = centerY - maxY;               // bottom aligns with centerY
+    return {
+      leftX: minX + offsetX,
+      rightX: maxX + offsetX,
+      topY: minY + offsetY,
+      bottomY: maxY + offsetY,
+    };
+  }
+
+  /**
+   * Get absolute center of a given input hex (q,r) for the provided layout.
+   */
+  public getCellCenterAbs(
+    q: number,
+    r: number,
+    centerX: number,
+    centerY: number,
+    dynamicSize?: number
+  ): { x: number; y: number } {
+    const size = dynamicSize || this.hexSize;
+    const Hex = defineHex({ dimensions: size, orientation: 'pointy' });
+    // compute bounds for offsets
+    let maxY = -Infinity, minY = Infinity, maxX = -Infinity, minX = Infinity;
+    this.cells.forEach(cell => {
+      const hex = new Hex([cell.q, cell.r]);
+      hex.corners.forEach(corner => {
+        maxY = Math.max(maxY, corner.y);
+        minY = Math.min(minY, corner.y);
+        maxX = Math.max(maxX, corner.x);
+        minX = Math.min(minX, corner.x);
+      });
+    });
+    const offsetX = centerX - (minX + maxX) / 2;
+    const offsetY = centerY - maxY;
+    const hex = new Hex([q, r]);
+    return { x: hex.x + offsetX, y: hex.y + offsetY };
   }
   
   /**
@@ -652,6 +875,8 @@ export class InputHexGrid {
    */
   public setSelectedPositions(positions: Array<{q: number, r: number}>): void {
     this.selectedPositions = [...positions];
+    const last = this.selectedPositions[this.selectedPositions.length - 1] || null;
+    this.activeCell = last ? { q: last.q, r: last.r } : null;
   }
   
   /**
@@ -700,6 +925,7 @@ export class InputHexGrid {
       
       // Track position
       this.selectedPositions.push({q, r});
+      this.activeCell = { q, r };
       
       // Update last clicked
       this.lastClickedHex = {q, r};

@@ -580,6 +580,11 @@ export class HexaWordGame {
       if (clickedLetter === 'CLEAR') {
         this.animationService.animateClearButton();
         this.typedWord = '';
+      } else if (clickedLetter === 'BACKSPACE') {
+        // Mirror keyboard backspace behavior when last selected letter is clicked again
+        this.typedWord = this.inputGrid.getTypedWord();
+        // Optional: small typed word animation feedback
+        this.animationService.animateTypedWord(this.typedWord);
       } else {
         // Animate the clicked hex
         const clickedHex = this.inputGrid.getLastClickedHex();
@@ -644,13 +649,6 @@ export class HexaWordGame {
     const rect = this.canvas.getBoundingClientRect();
     const layout = this.calculateLayout(rect.width, rect.height);
     
-    // Animate letters jumping to PUZZLE GRID cells
-    const letters = this.typedWord.split('');
-    const sourcePos = { 
-      x: rect.width / 2, 
-      y: layout.inputCenterY - layout.inputHexSize * 4 // Position of typed text
-    };
-    
     // Get target positions from the actual word cells in the puzzle
     const targetPositions: Array<{x: number, y: number, q: number, r: number}> = [];
     if (word.cells && Array.isArray(word.cells)) {
@@ -673,6 +671,43 @@ export class HexaWordGame {
     // Get input hex positions for green blink animation - they're already in order
     const inputHexPositions = this.inputGrid.getSelectedPositions();
     console.log('Input hex positions in order:', inputHexPositions);
+
+    // Animate letters jumping to PUZZLE GRID cells
+    const lettersAll = this.typedWord.split('');
+    const lettersUpper = lettersAll.map(l => l.toUpperCase());
+    // Prefer exact glyph positions captured during renderTypedWord. Fallback to a single line above input grid.
+    let sourcePositionsAll: Array<{ x: number; y: number }> | undefined = (window as any).__typedGlyphPositions;
+    if (!sourcePositionsAll || sourcePositionsAll.length !== lettersUpper.length) {
+      const inputBounds = this.inputGrid.getBounds(layout.inputCenterX, layout.inputCenterY, layout.inputHexSize);
+      const startY = inputBounds.topY - Math.max(30, layout.inputHexSize * 1.2);
+      this.ctx.save();
+      this.ctx.font = "20px 'Lilita One', Arial";
+      const widths = lettersUpper.map(ch => this.ctx.measureText(ch).width);
+      const gap = 6; // add extra spacing between letters in fallback
+      const totalWidth = widths.reduce((a, w) => a + w, 0) + gap * Math.max(lettersUpper.length - 1, 0);
+      let cursorX = layout.inputCenterX - totalWidth / 2;
+      const fallback: Array<{ x: number; y: number }> = [];
+      for (let i = 0; i < lettersUpper.length; i++) {
+        const w = widths[i];
+        const cx = cursorX + w / 2;
+        fallback.push({ x: cx, y: startY });
+        cursorX += w + gap;
+      }
+      this.ctx.restore();
+      sourcePositionsAll = fallback;
+    }
+    // Expand horizontal spacing for the animation start without moving the visual typed word
+    // Scale x distances from the center so letters have more room when they go up
+    if (sourcePositionsAll && sourcePositionsAll.length) {
+      const centerXForSpread = sourcePositionsAll.reduce((acc, p) => acc + p.x, 0) / sourcePositionsAll.length;
+      const spreadFactor = 1.25; // 25% more spacing
+      sourcePositionsAll = sourcePositionsAll.map(p => ({ x: centerXForSpread + (p.x - centerXForSpread) * spreadFactor, y: p.y }));
+    }
+    // Match lengths among letters, targets, and input selection
+    const count = Math.min(lettersUpper.length, targetPositions.length, inputHexPositions.length, sourcePositionsAll.length);
+    const letters = lettersUpper.slice(0, count);
+    const sourcePositions = sourcePositionsAll.slice(0, count);
+    
     
     // Clear typed word and selected positions immediately for animation
     this.typedWord = '';
@@ -681,7 +716,7 @@ export class HexaWordGame {
     // Start the two-phase animation to puzzle grid
     this.animationService.animateCorrectWord(
       letters,
-      sourcePos,
+      sourcePositions,
       targetPositions,
       inputHexPositions,
       () => {
@@ -696,6 +731,30 @@ export class HexaWordGame {
           delete (window as any).__greenCells;
         }
         this.render();
+        // After animation completes, remove from input grid any letters no longer needed
+        try {
+          const remainingWords = this.placedWords
+            .filter(w => !this.foundWords.has(w.word))
+            .map(w => w.word);
+          const remainingLetters = new Set<string>();
+          remainingWords.forEach(w => w.split('').forEach(ch => remainingLetters.add(ch.toUpperCase())));
+          const retireSet = new Set<string>();
+          word.word.split('').forEach(ch => {
+            const up = ch.toUpperCase();
+            if (!remainingLetters.has(up)) retireSet.add(up);
+          });
+          if (retireSet.size > 0) {
+            this.inputGrid.removeLettersBySet(
+              retireSet,
+              { centerX: layout.inputCenterX, centerY: layout.inputCenterY, size: layout.inputHexSize },
+              () => {
+                (window as any).__requestRender?.();
+              }
+            );
+          }
+        } catch (e) {
+          console.warn('Failed to remove retired letters:', e);
+        }
         // Only check for level completion after the final animation finishes
         this.checkLevelCompletion();
       }
@@ -788,10 +847,33 @@ export class HexaWordGame {
     }
     
     this.ctx.fillStyle = '#00d9ff';
-    this.ctx.font = "30px 'Lilita One', Arial";
+    this.ctx.font = "20px 'Lilita One', Arial";
     this.ctx.textAlign = 'center';
     this.ctx.textBaseline = 'middle';
     this.ctx.fillText(this.typedWord.toUpperCase(), canvasWidth / 2, y);
+
+    // Capture exact per-letter screen positions for later animations
+    try {
+      const text = this.typedWord.toUpperCase();
+      const centerX = canvasWidth / 2;
+      const scale = (typedWordAnim?.scale ?? 1) as number;
+      // Build unscaled centered positions, then apply scale around (centerX, y)
+      const widths = Array.from(text).map(ch => this.ctx.measureText(ch).width);
+      const gap = 0; // no extra gap when rendering as a single string
+      const totalWidth = widths.reduce((a, w) => a + w, 0) + gap * Math.max(widths.length - 1, 0);
+      let cursorX = centerX - totalWidth / 2;
+      const positions: Array<{ x: number; y: number }> = [];
+      for (let i = 0; i < text.length; i++) {
+        const w = widths[i];
+        const px = cursorX + w / 2;
+        // Apply scale around pivot (centerX, y)
+        const sx = centerX + (px - centerX) * scale;
+        const sy = y; // vertical scale keeps the baseline when scaling around pivot
+        positions.push({ x: sx, y: sy });
+        cursorX += w + gap;
+      }
+      (window as any).__typedGlyphPositions = positions;
+    } catch {}
     
     if (typedWordAnim) {
       this.ctx.restore();

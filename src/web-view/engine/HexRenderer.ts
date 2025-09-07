@@ -144,7 +144,13 @@ export class HexRenderer {
     }
     
     // Draw hexagon with smooth green transition
-    this.drawHexagon(hex, offsetX, offsetY, cell.wordIds.length > 1, true, isSolved ? 1 : greenAmount, glowAmount);
+    const isIntersection = cell.wordIds.length > 1;
+    this.drawHexagon(hex, offsetX, offsetY, isIntersection, true, isSolved ? 1 : greenAmount, glowAmount);
+
+    // Ensure shared-letter cells have a clear, high-contrast outline, regardless of state
+    if (isIntersection) {
+      this.drawIntersectionOutline(hex, offsetX, offsetY);
+    }
     
     // Draw letter only if solved, green, or animating
     if (shouldBeGreen || animState) {
@@ -219,19 +225,46 @@ export class HexRenderer {
       this.ctx.restore();
     }
     
-    // Stroke - blend green based on greenAmount
+    // Stroke - base outline
     if (green > 0) {
       const normalStroke = isIntersection ? this.config.intersectionColor : this.config.strokeColor;
       this.ctx.strokeStyle = this.blendColors(normalStroke, '#00ff00', green);
       this.ctx.lineWidth = 1 + green; // Slightly thicker when green
     } else if (isIntersection) {
       this.ctx.strokeStyle = this.config.intersectionColor;
-      this.ctx.lineWidth = 1.5;
+      this.ctx.lineWidth = 2; // make more prominent
     } else {
       this.ctx.strokeStyle = this.config.strokeColor;
       this.ctx.lineWidth = 1;
     }
     this.ctx.stroke();
+  }
+
+  /**
+   * Draw an extra, inner outline for shared-letter cells to guarantee visibility.
+   */
+  private drawIntersectionOutline(hex: any, offsetX: number, offsetY: number): void {
+    const innerScale = 0.88; // slightly smaller inner ring
+    const corners = hex.corners;
+    const centerX = hex.x + offsetX;
+    const centerY = hex.y + offsetY;
+
+    this.ctx.save();
+    this.ctx.beginPath();
+    corners.forEach((corner: any, i: number) => {
+      const innerX = centerX + (corner.x - hex.x) * innerScale;
+      const innerY = centerY + (corner.y - hex.y) * innerScale;
+      if (i === 0) this.ctx.moveTo(innerX, innerY); else this.ctx.lineTo(innerX, innerY);
+    });
+    this.ctx.closePath();
+    // High-contrast stroke independent of green blending
+    this.ctx.strokeStyle = this.currentColors?.intersectionColor || '#00d9ff';
+    this.ctx.lineWidth = 1.5;
+    // Subtle glow to help visibility on dark backgrounds
+    this.ctx.shadowColor = this.ctx.strokeStyle as string;
+    this.ctx.shadowBlur = 4;
+    this.ctx.stroke();
+    this.ctx.restore();
   }
 
   /**

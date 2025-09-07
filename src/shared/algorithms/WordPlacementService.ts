@@ -58,7 +58,30 @@ export class WordPlacementService {
     const triplet = this.findSharedLetterTriplet(wordBank);
     if (!triplet) {
       console.log('No shared letter triplet found among candidate words');
-      return false;
+      // Fallback 1: try to place any best pair that shares a letter
+      const pair = this.findSharedLetterPair(wordBank);
+      if (pair) {
+        const { aIndex, bIndex, idx1, idx2, letter } = pair;
+        const w1 = wordBank[aIndex];
+        const w2 = wordBank[bIndex];
+        console.log(`Placing pair sharing '${letter}' at indices`, { idx1, idx2 });
+        // Place word 1 horizontally crossing origin
+        this.placeWordAt(w1, -idx1, 0, 0);
+        // Place word 2 vertically crossing origin
+        this.placeWordAt(w2, 0, -idx2, 1);
+        // Remove from bank (remove higher index first)
+        const toRemove = [aIndex, bIndex].sort((x, y) => y - x);
+        for (const i of toRemove) wordBank.splice(i, 1);
+        return true;
+      }
+      // Fallback 2: place a single anchor word at center (longest near top)
+      const anchorIndex = 0;
+      const anchor = wordBank[anchorIndex];
+      const midIdx = Math.floor(anchor.chars.length / 2);
+      this.placeWordAt(anchor, -midIdx, 0, 0);
+      wordBank.splice(anchorIndex, 1);
+      console.log(`Placed single anchor word '${anchor.word}' at center`);
+      return true;
     }
 
     const { aIndex, bIndex, cIndex, idx1, idx2, idx3, letter } = triplet;
@@ -139,6 +162,43 @@ export class WordPlacementService {
               idx2: cands2[0],
               idx3: cands3[0]
             };
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Finds two words that share at least one common letter, preferring center indices.
+   */
+  private findSharedLetterPair(wordBank: WordObject[]): {
+    aIndex: number; bIndex: number; letter: string; idx1: number; idx2: number;
+  } | null {
+    const limit = Math.min(wordBank.length, 12);
+    const centerOrder = (w: WordObject): number[] => {
+      const len = w.chars.length;
+      if (len === 0) return [];
+      const mid = (len - 1) / 2;
+      return Array.from({ length: len }, (_, i) => i).sort((i, j) => Math.abs(i - mid) - Math.abs(j - mid));
+    };
+    for (let i = 0; i < limit; i++) {
+      const w1 = wordBank[i];
+      const idxs1 = centerOrder(w1);
+      for (let j = i + 1; j < limit; j++) {
+        const w2 = wordBank[j];
+        const idxs2 = centerOrder(w2);
+        const map2 = new Map<string, number[]>();
+        for (const jIdx of idxs2) {
+          const ch = w2.chars[jIdx];
+          if (!map2.has(ch)) map2.set(ch, []);
+          map2.get(ch)!.push(jIdx);
+        }
+        for (const iIdx of idxs1) {
+          const ch = w1.chars[iIdx];
+          const cands2 = map2.get(ch);
+          if (cands2 && cands2.length > 0) {
+            return { aIndex: i, bIndex: j, letter: ch, idx1: iIdx, idx2: cands2[0] };
           }
         }
       }

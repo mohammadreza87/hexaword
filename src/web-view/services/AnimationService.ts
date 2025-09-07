@@ -134,7 +134,96 @@ export class AnimationService {
       }
     });
   }
-  
+
+  /**
+   * Animate removal of input hexes (scale to 0 with stagger), then callback.
+   */
+  animateInputHexRemove(
+    positions: Array<{ q: number; r: number }>,
+    onComplete?: () => void
+  ): void {
+    if (!positions || positions.length === 0) {
+      onComplete?.();
+      return;
+    }
+
+    (window as any).__inputAnimations = (window as any).__inputAnimations || {};
+    const states = positions.map((pos) => {
+      const key = `input_${pos.q},${pos.r}`;
+      const state = { scale: 1 };
+      (window as any).__inputAnimations[key] = state;
+      return state;
+    });
+
+    gsap.to(states, {
+      scale: 0,
+      duration: 0.25,
+      ease: 'power2.in',
+      onUpdate: () => (window as any).__requestRender?.(),
+      onComplete,
+    });
+  }
+
+  /**
+   * Animate a subtle reflow pulse on all input hexes after collapse.
+   */
+  animateInputGridReflow(keys: string[]): void {
+    if (!keys || keys.length === 0) return;
+    const tl = gsap.timeline();
+    keys.forEach((key, i) => {
+      const state = { scale: 0.9 };
+      (window as any).__inputAnimations = (window as any).__inputAnimations || {};
+      (window as any).__inputAnimations[key] = state;
+      tl.to(state, {
+        scale: 1,
+        duration: 0.2,
+        ease: 'power2.out',
+        onUpdate: () => (window as any).__requestRender?.()
+      }, i * 0.02);
+    });
+  }
+
+  /**
+   * Animate input grid relayout: move surviving hexes from old positions to new positions.
+   * Each move item should contain the input key and initial deltas.
+   */
+  animateInputGridRelayout(
+    moves: Array<{ key: string; dx0: number; dy0: number; distance?: number }>,
+    onComplete?: () => void
+  ): void {
+    if (!moves || moves.length === 0) {
+      onComplete?.();
+      return;
+    }
+
+    (window as any).__inputPosAnimations = (window as any).__inputPosAnimations || {};
+    const tl = gsap.timeline({ onComplete });
+
+    // Sort by distance descending so farther ones start first (gravity to center feeling)
+    const sorted = moves.slice().sort((a, b) => (b.distance || 0) - (a.distance || 0));
+    const maxDist = Math.max(1, ...sorted.map(m => m.distance || 0));
+
+    sorted.forEach((m, i) => {
+      const state = { dx: m.dx0, dy: m.dy0 };
+      (window as any).__inputPosAnimations[m.key] = state;
+      // Duration scaled by distance; farther travel slightly longer
+      const duration = 0.35 + 0.25 * ((m.distance || 0) / maxDist);
+      tl.to(state, {
+        dx: 0,
+        dy: 0,
+        duration,
+        ease: 'power3.inOut',
+        // slight overlap for natural flow
+        onUpdate: () => (window as any).__requestRender?.()
+      }, i * 0.02);
+    });
+  }
+
+  /** Get current input position animation state for a given key. */
+  getInputPositionState(hexKey: string): any {
+    return (window as any).__inputPosAnimations?.[hexKey];
+  }
+
   /**
    * Animate clear button press
    */
@@ -162,9 +251,9 @@ export class AnimationService {
    */
   animateCorrectWord(
     letters: string[],
-    sourcePos: { x: number, y: number },
-    targetPositions: Array<{ x: number, y: number, q: number, r: number }>,
-    inputHexPositions?: Array<{ q: number, r: number }>,
+    sourcePos: { x: number; y: number } | Array<{ x: number; y: number }>,
+    targetPositions: Array<{ x: number; y: number; q: number; r: number }>,
+    inputHexPositions?: Array<{ q: number; r: number }>,
     onComplete?: () => void
   ): void {
     console.log('Animating correct word:', letters.join(''));
@@ -221,10 +310,11 @@ export class AnimationService {
     
     // Create letter objects
     letters.forEach((letter, index) => {
+      const start = Array.isArray(sourcePos) ? sourcePos[index] : sourcePos;
       const jumpLetter = {
         letter: letter,
-        x: sourcePos.x,
-        y: sourcePos.y,
+        x: start.x,
+        y: start.y,
         scale: 1,
         opacity: 1,
         rotation: 0,
@@ -244,22 +334,21 @@ export class AnimationService {
       }
     });
     
-    // All letters jump and travel with minimal delay - creating a rapid wave
+    // All letters jump from their own text position, then travel to target
     letters.forEach((letter, index) => {
       const jumpLetter = jumpLetters[index];
       const targetPos = targetPositions[index];
       if (!targetPos) return;
-      
-      const upY = sourcePos.y - 60; // Jump height
-      const spreadX = sourcePos.x + (index * 30) - (letters.length * 15); // Spread horizontally
-      
-      // Each letter's complete journey starts with just 50ms delay from previous
+      const start = Array.isArray(sourcePos) ? sourcePos[index] : sourcePos as { x: number; y: number };
+      const upY = start.y - 16; // Smaller hop above baseline
+
+      // Each letter's journey starts with just 50ms delay from previous
       const startTime = index * 0.05; // 50ms delay between each letter starting
       
       // Jump UP
       tl.to(jumpLetter, {
-        x: spreadX,
-        y: upY,
+        x: jumpLetter.x,
+        y: upY - 0, // keep API parity; upY already encodes small hop
         scale: 1.3,
         duration: 0.3,
         ease: 'back.out(1.2)',
