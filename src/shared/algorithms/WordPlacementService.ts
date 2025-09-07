@@ -195,16 +195,20 @@ export class WordPlacementService {
         }
       }
       
-      // If no placements found, place separately
+      // If no placements found, place one word separately to spawn new connection points
       if (!placedAny && waitlist.length > 0) {
-        while (waitlist.length > 0) {
-          const word = waitlist.shift()!;
-          const placement = this.findClosestEmptyPlacement(word);
-          
-          if (placement) {
-            this.placeWordAt(word, placement.q, placement.r, placement.dir);
-          }
+        const word = waitlist.shift()!;
+        const placement = this.findClosestEmptyPlacement(word);
+        if (placement) {
+          this.placeWordAt(word, placement.q, placement.r, placement.dir);
+          // Seed new connection points from this standalone word
+          const newPoints = this.getWordEndpoints(word);
+          connectionPoints.push(...newPoints);
+          placedAny = true;
+          // Continue loop to try crossing other waitlisted words with this new anchor
+          continue;
         }
+        // If we couldn't place even in empty space, stop to prevent infinite loop
         break;
       }
       
@@ -389,12 +393,10 @@ export class WordPlacementService {
    */
   private getConnectionPoints(): ConnectionPoint[] {
     const points: ConnectionPoint[] = [];
-    
-    // Get endpoints of first 3 placed words
-    for (let i = 0; i < Math.min(3, this.wordsActive.length); i++) {
+    // Use endpoints of all placed words so later words can cross any cluster
+    for (let i = 0; i < this.wordsActive.length; i++) {
       const word = this.wordsActive[i];
-      const endpoints = this.getWordEndpoints(word);
-      points.push(...endpoints);
+      points.push(...this.getWordEndpoints(word));
     }
     
     return points;

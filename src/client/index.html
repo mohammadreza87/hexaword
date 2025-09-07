@@ -16,6 +16,7 @@
         width: 100%;
         height: 100%;
         overflow: hidden;
+        background-color: #141514;
       }
       
       body {
@@ -23,15 +24,15 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
+        background: #141514;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       }
       
       h1 {
-        color: #2c3e50;
+        color: #ffffff;
         text-align: center;
         font-size: clamp(1.5rem, 4vw, 2.5rem);
-        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
         margin-bottom: 1rem;
         position: absolute;
         top: 1rem;
@@ -42,19 +43,21 @@
       }
       
       #hex-grid-container {
-        background: white;
-        border-radius: 20px;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        background: #141514;
+        border: none;
+        box-shadow: none;
         display: flex;
         justify-content: center;
         align-items: center;
         position: relative;
-        width: 90vmin;
-        height: 90vmin;
-        max-width: 600px;
-        max-height: 600px;
-        min-width: 320px;
-        min-height: 320px;
+        /* Force a portrait game frame (9:16) */
+        aspect-ratio: 9 / 16;
+        height: 100vh;         /* drive size by height */
+        width: auto;           /* computed from aspect ratio */
+        max-width: 100vw;      /* never overflow viewport width */
+        margin: 0 auto;        /* center horizontally on wide screens */
+        min-width: 300px;
+        min-height: 480px;
       }
       
       /* Mobile adjustments */
@@ -64,35 +67,23 @@
           margin-bottom: 0.5rem;
         }
         
-        #hex-grid-container {
-          width: 95vmin;
-          height: 95vmin;
-          border-radius: 15px;
-        }
+        #hex-grid-container { height: 100vh; }
       }
       
-      /* Landscape adjustment */
-      @media (orientation: landscape) and (max-height: 600px) {
+      /* Landscape adjustment for mobile (16:9 ratio) */
+      @media (orientation: landscape) {
         h1 {
           position: static;
           transform: none;
           margin-bottom: 0.5rem;
         }
         
-        #hex-grid-container {
-          width: 80vmin;
-          height: 80vmin;
-        }
+        #hex-grid-container { height: 100vh; }
       }
       
-      /* Large screens */
+      /* Large screens and Full HD displays */
       @media (min-width: 1024px) {
-        #hex-grid-container {
-          width: 70vmin;
-          height: 70vmin;
-          max-width: 700px;
-          max-height: 700px;
-        }
+        #hex-grid-container { height: 100vh; }
       }
     </style>
   </head>

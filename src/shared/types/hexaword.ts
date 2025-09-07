@@ -65,6 +65,7 @@ export interface PuzzleConfig {
 
 export interface RenderConfig {
   hexSize: number;
+  backgroundColor: string;
   fillColor: string;
   strokeColor: string;
   intersectionColor: string;

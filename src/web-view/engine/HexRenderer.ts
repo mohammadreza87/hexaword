@@ -39,7 +39,9 @@ export class HexRenderer {
    * Clears the canvas
    */
   clear(width: number, height: number): void {
-    this.ctx.clearRect(0, 0, width, height);
+    // Fill with dark background color
+    this.ctx.fillStyle = '#141514';
+    this.ctx.fillRect(0, 0, width, height);
   }
 
   /**
@@ -69,8 +71,8 @@ export class HexRenderer {
     const x = hex.x + offsetX;
     const y = hex.y + offsetY;
     
-    // Draw hexagon
-    this.drawHexagon(hex, offsetX, offsetY, cell.wordIds.length > 1);
+    // Draw hexagon with spacing
+    this.drawHexagon(hex, offsetX, offsetY, cell.wordIds.length > 1, true);
     
     // Draw letter
     this.drawLetter(cell.letter!, x, y);
@@ -83,15 +85,31 @@ export class HexRenderer {
     hex: any, 
     offsetX: number, 
     offsetY: number, 
-    isIntersection: boolean
+    isIntersection: boolean,
+    addSpacing: boolean = false
   ): void {
     const corners = hex.corners;
+    const spacing = addSpacing ? 2 : 0; // 2 pixel spacing
+    
+    // Calculate center for scaling
+    const centerX = hex.x + offsetX;
+    const centerY = hex.y + offsetY;
     
     this.ctx.beginPath();
-    this.ctx.moveTo(corners[0].x + offsetX, corners[0].y + offsetY);
-    for (let i = 1; i < corners.length; i++) {
-      this.ctx.lineTo(corners[i].x + offsetX, corners[i].y + offsetY);
-    }
+    // Scale corners inward to create spacing
+    const scaleFactor = spacing > 0 ? (this.config.hexSize - spacing) / this.config.hexSize : 1;
+    
+    corners.forEach((corner, i) => {
+      // Scale corner position relative to hex center
+      const scaledX = centerX + (corner.x - hex.x) * scaleFactor;
+      const scaledY = centerY + (corner.y - hex.y) * scaleFactor;
+      
+      if (i === 0) {
+        this.ctx.moveTo(scaledX, scaledY);
+      } else {
+        this.ctx.lineTo(scaledX, scaledY);
+      }
+    });
     this.ctx.closePath();
     
     // Fill

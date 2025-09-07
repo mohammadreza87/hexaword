@@ -2,6 +2,7 @@ import { CrosswordGenerator } from './services/CrosswordGenerator';
 import { HexRenderer } from './engine/HexRenderer';
 import { InputHexGrid } from './components/InputHexGrid';
 import { HexCell, WordObject } from '../shared/types/hexaword';
+import { createRNG } from '../shared/utils/rng';
 
 export interface GameConfig {
   containerId: string;
@@ -91,9 +92,11 @@ export class HexaWordGame {
     this.canvas = document.createElement('canvas');
     this.canvas.style.width = '100%';
     this.canvas.style.height = '100%';
+    // Set canvas background explicitly and with priority
+    this.canvas.style.setProperty('background-color', '#141514', 'important');
     this.container.appendChild(this.canvas);
     
-    const ctx = this.canvas.getContext('2d');
+    const ctx = this.canvas.getContext('2d', { alpha: false });
     if (!ctx) {
       throw new Error('Failed to get 2D context');
     }
@@ -139,6 +142,46 @@ export class HexaWordGame {
     }
     
     console.log(`Generated crossword with ${this.placedWords.length}/${wordList.length} words`);
+    
+    // Populate input grid with letters from the puzzle
+    this.populateInputGrid();
+  }
+  
+  /**
+   * Populates the input grid with letters from the crossword
+   */
+  private populateInputGrid(): void {
+    // Build a set of unique letters present in the placed crossword
+    const uniqueLetters = new Set<string>();
+    
+    // Collect all unique letters from the puzzle
+    this.board.forEach(cell => {
+      if (cell.letter) {
+        uniqueLetters.add(cell.letter.toUpperCase());
+      }
+    });
+
+    // Convert to array and sort alphabetically for consistency
+    let letters = Array.from(uniqueLetters).sort();
+
+    // Optionally shuffle for gameplay (but keep all unique letters)
+    if (this.config.seed) {
+      const rng = createRNG(this.config.seed + '_input');
+      letters = rng.shuffle(letters);
+    } else {
+      // Random shuffle if no seed
+      for (let i = letters.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [letters[i], letters[j]] = [letters[j], letters[i]];
+      }
+    }
+
+    // Set the exact letters needed - no more, no less
+    const gridLetters = letters.join('');
+    this.inputGrid.setLetters(gridLetters);
+    
+    console.log(`Input grid populated with ${letters.length} unique letters: ${gridLetters}`);
+    console.log(`Letters needed for puzzle: ${Array.from(uniqueLetters).sort().join(', ')}`);
   }
   
   /**
@@ -155,6 +198,12 @@ export class HexaWordGame {
     this.canvas.width = rect.width * dpr;
     this.canvas.height = rect.height * dpr;
     this.ctx.scale(dpr, dpr);
+    // Reassert background each render (host may mutate styles)
+    this.canvas.style.setProperty('background-color', '#141514', 'important');
+    
+    // Fill background first
+    this.ctx.fillStyle = '#141514';
+    this.ctx.fillRect(0, 0, rect.width, rect.height);
     
     // Clear canvas
     this.renderer.clear(rect.width, rect.height);
@@ -213,31 +262,33 @@ export class HexaWordGame {
     inputCenterX: number;
     inputCenterY: number;
   } {
-    const paddingTop = 20;
-    const paddingBottom = 60;
+    const paddingTop = 60; // Space for title
+    const inputGridHeight = 100; // Reserve space for input grid at bottom
     const paddingSide = 20;
     
-    // Calculate space for main grid
+    // Calculate space for main grid (leave room for input grid at bottom)
     const gridWidth = canvasWidth - (paddingSide * 2);
-    const gridHeight = canvasHeight - paddingTop - paddingBottom;
+    const gridHeight = canvasHeight - paddingTop - inputGridHeight - 20;
     
     // Calculate dynamic hex size for main grid
     const hexSize = this.renderer.calculateDynamicHexSize(
       this.board,
       gridWidth,
-      gridHeight,
+      gridHeight * 0.7, // Use 70% of available height for main grid
       5,
       20
     );
     
-    // Input grid settings
-    const inputHexSize = 10;
-    const inputGridY = canvasHeight - paddingBottom + 10;
+    // Input grid settings - position at very bottom of canvas
+    const inputHexSize = 20; // Larger for better visibility
+    // The input grid render method now handles positioning relative to its bottom edge
+    // We pass the Y coordinate where we want the bottom of the grid to be
+    const inputGridY = canvasHeight - 10; // Bottom edge 10px from screen bottom
     
     return {
       hexSize,
       gridCenterX: canvasWidth / 2,
-      gridCenterY: paddingTop + (gridHeight / 2),
+      gridCenterY: paddingTop + (gridHeight * 0.4), // Position main grid higher
       inputHexSize,
       inputCenterX: canvasWidth / 2,
       inputCenterY: inputGridY

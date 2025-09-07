@@ -28,6 +28,17 @@ class App {
   
   private async startGame(): Promise<void> {
     console.log('Starting HexaWord game...');
+    // Force dark background at runtime to override host styles
+    try {
+      document.documentElement.style.setProperty('background-color', '#141514', 'important');
+      document.body.style.setProperty('background-color', '#141514', 'important');
+      document.body.style.setProperty('background', '#141514', 'important');
+      const container = document.getElementById('hex-grid-container');
+      if (container) {
+        (container as HTMLElement).style.setProperty('background-color', '#141514', 'important');
+        (container as HTMLElement).style.setProperty('background', '#141514', 'important');
+      }
+    } catch {}
     
     // Fetch game data with automatic fallback
     const gameData = await fetchGameDataWithFallback();
