@@ -1,4 +1,5 @@
 import { defineHex, Grid, rectangle, ring, Hex } from 'honeycomb-grid';
+import { AnimationService } from '../services/AnimationService';
 
 interface InputCell {
   q: number;
@@ -11,11 +12,14 @@ export class InputHexGrid {
   private cells: InputCell[] = [];
   private hexSize: number = 25;
   private typedWord: string = '';  // Track typed letters
+  private lastClickedHex: {q: number, r: number} | null = null;
+  private animationService: AnimationService;
   
   constructor(ctx: CanvasRenderingContext2D) {
     this.ctx = ctx;
     // Don't initialize cells yet - wait for setLetters to be called
     this.cells = [];
+    this.animationService = AnimationService.getInstance();
   }
   
   /**
@@ -193,8 +197,20 @@ export class InputHexGrid {
     // Draw each cell
     this.cells.forEach((cell, index) => {
       const hex = new Hex([cell.q, cell.r]);
+      const hexKey = `input_${cell.q},${cell.r}`;
       const x = hex.x + offsetX;
       const y = hex.y + offsetY;
+      
+      // Apply animation transforms if any
+      const animState = this.animationService.getInputAnimationState(hexKey);
+      if (animState) {
+        this.ctx.save();
+        
+        // Apply scale transform
+        this.ctx.translate(x, y);
+        this.ctx.scale(animState.scale || 1, animState.scale || 1);
+        this.ctx.translate(-x, -y);
+      }
       
       // Get corners for drawing (already relative to hex center)
       const corners = hex.corners;
@@ -224,15 +240,67 @@ export class InputHexGrid {
       // Check if this is the center cell (clear button)
       const isCenterCell = cell.q === 0 && cell.r === 0;
       
+      // Check for green cell animation (smooth color change, no rotation)
+      const greenCellState = (window as any).__greenCells?.[hexKey];
+      
       // Fill with appropriate color
       if (isCenterCell && this.typedWord.length > 0) {
+        // Apply clear button animation if active
+        const clearAnimState = (window as any).__clearButtonAnimation;
+        if (clearAnimState) {
+          this.ctx.save();
+          this.ctx.translate(x, y);
+          this.ctx.rotate((clearAnimState.rotation || 0) * Math.PI / 180);
+          this.ctx.scale(clearAnimState.scale || 1, clearAnimState.scale || 1);
+          this.ctx.translate(-x, -y);
+        }
+        
         // Only show clear button when there's typed text
         this.ctx.fillStyle = '#ff4444'; // Red for clear button
         this.ctx.fill();
+        
+        if (clearAnimState) {
+          this.ctx.restore();
+        }
       } else if (!isCenterCell) {
-        // Normal cells with letters
-        this.ctx.fillStyle = cell.letter ? '#3a4558' : '#2d3748';
-        this.ctx.fill();
+        // Check for smooth green transition (no rotation/scale)
+        if (greenCellState && greenCellState.opacity > 0) {
+          // Blend between normal color and green based on opacity
+          const normalColor = cell.letter ? '#3a4558' : '#2d3748';
+          
+          // Draw normal cell first
+          this.ctx.fillStyle = normalColor;
+          this.ctx.fill();
+          
+          // Then overlay green with opacity (no transformations)
+          this.ctx.save();
+          this.ctx.globalAlpha = greenCellState.opacity;
+          
+          // Add subtle glow
+          this.ctx.shadowColor = '#00ff00';
+          this.ctx.shadowBlur = 10 * greenCellState.opacity;
+          
+          // Fill with green
+          this.ctx.fillStyle = '#00ff00';
+          this.ctx.fill();
+          
+          this.ctx.restore();
+        } else {
+          // Normal cells with letters - add glow effect if animated
+          if (animState?.glow) {
+            this.ctx.shadowColor = '#00d9ff';
+            this.ctx.shadowBlur = 10 * animState.glow;
+          }
+          
+          this.ctx.fillStyle = cell.letter ? '#3a4558' : '#2d3748';
+          this.ctx.fill();
+          
+          // Reset shadow
+          if (animState?.glow) {
+            this.ctx.shadowColor = 'transparent';
+            this.ctx.shadowBlur = 0;
+          }
+        }
       }
       // Center cell is invisible when no typed text
       
@@ -254,6 +322,11 @@ export class InputHexGrid {
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
         this.ctx.fillText(cell.letter.toUpperCase(), x, y);
+      }
+      
+      // Restore context if animation was applied
+      if (animState) {
+        this.ctx.restore();
       }
     });
     
@@ -373,6 +446,9 @@ export class InputHexGrid {
       // Check if click is within this hex (simple distance check)
       const distance = Math.sqrt((x - hexX) ** 2 + (y - hexY) ** 2);
       if (distance <= size * 0.8) {  // Within hex radius
+        // Store the clicked hex position
+        this.lastClickedHex = {q: cell.q, r: cell.r};
+        
         // Check if center cell (clear)
         if (cell.q === 0 && cell.r === 0) {
           this.typedWord = '';
@@ -409,6 +485,71 @@ export class InputHexGrid {
     this.cells.forEach(cell => {
       cell.letter = undefined;
     });
+  }
+  
+  /**
+   * Gets the last clicked hex position
+   */
+  public getLastClickedHex(): {q: number, r: number} | null {
+    return this.lastClickedHex;
+  }
+  
+  /**
+   * Gets the positions of cells that contain the given letters
+   */
+  public getCellPositionsForLetters(
+    letters: string[], 
+    centerX: number, 
+    centerY: number, 
+    dynamicSize?: number
+  ): Array<{x: number, y: number, q: number, r: number}> {
+    const size = dynamicSize || this.hexSize;
+    const Hex = defineHex({
+      dimensions: size,
+      orientation: 'pointy'
+    });
+    
+    // Calculate grid offsets (same as render)
+    let maxY = -Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let minX = Infinity;
+    
+    this.cells.forEach(cell => {
+      const hex = new Hex([cell.q, cell.r]);
+      const corners = hex.corners;
+      corners.forEach(corner => {
+        maxY = Math.max(maxY, corner.y);
+        minY = Math.min(minY, corner.y);
+        maxX = Math.max(maxX, corner.x);
+        minX = Math.min(minX, corner.x);
+      });
+    });
+    
+    const offsetX = centerX - (minX + maxX) / 2;
+    const offsetY = centerY - maxY;
+    
+    const positions: Array<{x: number, y: number, q: number, r: number}> = [];
+    
+    // Find cells that match each letter
+    letters.forEach(letter => {
+      const matchingCell = this.cells.find(cell => 
+        cell.letter === letter.toUpperCase() && 
+        !(cell.q === 0 && cell.r === 0) // Skip center clear button
+      );
+      
+      if (matchingCell) {
+        const hex = new Hex([matchingCell.q, matchingCell.r]);
+        positions.push({
+          x: hex.x + offsetX,
+          y: hex.y + offsetY,
+          q: matchingCell.q,
+          r: matchingCell.r
+        });
+      }
+    });
+    
+    return positions;
   }
   
   /**

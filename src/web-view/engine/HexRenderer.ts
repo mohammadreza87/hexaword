@@ -1,10 +1,12 @@
 import { defineHex, Grid, Hex } from 'honeycomb-grid';
 import { HexCell, RenderConfig } from '../../shared/types/hexaword';
+import { AnimationService } from '../services/AnimationService';
 
 export class HexRenderer {
   private ctx: CanvasRenderingContext2D;
   private config: RenderConfig;
   private hexFactory: any;
+  private animationService: AnimationService;
   
   constructor(ctx: CanvasRenderingContext2D, config?: Partial<RenderConfig>) {
     this.ctx = ctx;
@@ -22,6 +24,8 @@ export class HexRenderer {
       dimensions: this.config.hexSize,
       orientation: 'pointy'
     });
+    
+    this.animationService = AnimationService.getInstance();
   }
 
   /**
@@ -50,7 +54,8 @@ export class HexRenderer {
   renderGrid(
     board: Map<string, HexCell>, 
     centerX: number, 
-    centerY: number
+    centerY: number,
+    solvedCells?: Set<string>
   ): void {
     // Calculate bounds for centering
     const bounds = this.calculateBounds(board);
@@ -59,23 +64,48 @@ export class HexRenderer {
     // Render each cell
     board.forEach(cell => {
       if (!cell.letter) return;
-      this.renderHexCell(cell, centerX + offset.x, centerY + offset.y);
+      const key = `${cell.q},${cell.r}`;
+      const isSolved = solvedCells?.has(key) || false;
+      this.renderHexCell(cell, centerX + offset.x, centerY + offset.y, isSolved);
     });
   }
 
   /**
    * Renders a single hexagonal cell
    */
-  private renderHexCell(cell: HexCell, offsetX: number, offsetY: number): void {
+  private renderHexCell(cell: HexCell, offsetX: number, offsetY: number, isSolved: boolean = false): void {
     const hex = new this.hexFactory([cell.q, cell.r]);
-    const x = hex.x + offsetX;
-    const y = hex.y + offsetY;
+    const cellKey = `${cell.q},${cell.r}`;
+    let x = hex.x + offsetX;
+    let y = hex.y + offsetY;
+    
+    // Apply animation transforms if any
+    const animState = this.animationService.getCellAnimationState(cellKey);
+    if (animState) {
+      this.ctx.save();
+      
+      // Apply scale and rotation transforms
+      this.ctx.translate(x, y);
+      this.ctx.scale(animState.scale || 1, animState.scale || 1);
+      this.ctx.rotate((animState.rotation || 0) * Math.PI / 180);
+      this.ctx.translate(-x, -y);
+      
+      // Apply opacity
+      this.ctx.globalAlpha = animState.opacity !== undefined ? animState.opacity : 1;
+    }
     
     // Draw hexagon with spacing
-    this.drawHexagon(hex, offsetX, offsetY, cell.wordIds.length > 1, true);
+    this.drawHexagon(hex, offsetX, offsetY, cell.wordIds.length > 1, true, isSolved || animState);
     
-    // Draw letter
-    this.drawLetter(cell.letter!, x, y);
+    // Draw letter only if solved or animating
+    if (isSolved || animState) {
+      this.drawLetter(cell.letter!, x, y, isSolved || animState);
+    }
+    
+    // Restore context if animation was applied
+    if (animState) {
+      this.ctx.restore();
+    }
   }
 
   /**
@@ -86,7 +116,8 @@ export class HexRenderer {
     offsetX: number, 
     offsetY: number, 
     isIntersection: boolean,
-    addSpacing: boolean = false
+    addSpacing: boolean = false,
+    isSolved: boolean = false
   ): void {
     const corners = hex.corners;
     const spacing = addSpacing ? 2 : 0; // 2 pixel spacing
@@ -112,17 +143,20 @@ export class HexRenderer {
     });
     this.ctx.closePath();
     
-    // Fill
-    this.ctx.fillStyle = this.config.fillColor;
+    // Fill - green if solved
+    this.ctx.fillStyle = isSolved ? '#2d5a2d' : this.config.fillColor;
     this.ctx.fill();
     
-    // Stroke
-    if (isIntersection) {
+    // Stroke - green if solved
+    if (isSolved) {
+      this.ctx.strokeStyle = '#00ff00';
+      this.ctx.lineWidth = 2;
+    } else if (isIntersection) {
       this.ctx.strokeStyle = this.config.intersectionColor;
-      this.ctx.lineWidth = 1.5; // Thinner line for intersections
+      this.ctx.lineWidth = 1.5;
     } else {
       this.ctx.strokeStyle = this.config.strokeColor;
-      this.ctx.lineWidth = 1; // Thinner line for regular cells
+      this.ctx.lineWidth = 1;
     }
     this.ctx.stroke();
   }
@@ -130,8 +164,8 @@ export class HexRenderer {
   /**
    * Draws a letter in the center of a hex
    */
-  private drawLetter(letter: string, x: number, y: number): void {
-    this.ctx.fillStyle = this.config.textColor;
+  private drawLetter(letter: string, x: number, y: number, isSolved: boolean = false): void {
+    this.ctx.fillStyle = isSolved ? '#00ff00' : this.config.textColor;
     this.ctx.font = `${Math.floor(this.config.hexSize * 0.5)}px 'Lilita One', ${this.config.fontFamily}`;
     this.ctx.textAlign = 'center';
     this.ctx.textBaseline = 'middle';
@@ -139,9 +173,17 @@ export class HexRenderer {
   }
 
   /**
+   * Gets the position of a hex cell
+   */
+  getHexPosition(q: number, r: number): { x: number, y: number } {
+    const hex = new this.hexFactory([q, r]);
+    return { x: hex.x, y: hex.y };
+  }
+
+  /**
    * Calculates the bounds of the board
    */
-  private calculateBounds(board: Map<string, HexCell>): {
+  calculateBounds(board: Map<string, HexCell>): {
     minQ: number;
     maxQ: number;
     minR: number;
@@ -180,7 +222,7 @@ export class HexRenderer {
   /**
    * Calculates the offset to center the grid
    */
-  private calculateCenterOffset(bounds: {
+  calculateCenterOffset(bounds: {
     minX: number;
     maxX: number;
     minY: number;

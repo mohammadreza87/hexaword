@@ -353,6 +353,9 @@ export class WordPlacementService {
     word.dir = dir;
     word.placed = true;
     
+    // Initialize cells array if not already present
+    word.cells = [];
+    
     const direction = HEX_DIRECTIONS[dir];
     
     for (let i = 0; i < word.chars.length; i++) {
@@ -368,6 +371,9 @@ export class WordPlacementService {
       }
       
       cell.wordIds.push(this.wordsActive.length);
+      
+      // Add cell to word's cells array
+      word.cells.push({ q, r, letter: word.chars[i], wordIds: cell.wordIds });
     }
     
     this.wordsActive.push(word);

@@ -3,6 +3,7 @@ import { HexRenderer } from './engine/HexRenderer';
 import { InputHexGrid } from './components/InputHexGrid';
 import { HexCell, WordObject } from '../shared/types/hexaword';
 import { createRNG } from '../shared/utils/rng';
+import { AnimationService } from './services/AnimationService';
 
 export interface GameConfig {
   containerId: string;
@@ -20,11 +21,14 @@ export class HexaWordGame {
   private generator: CrosswordGenerator;
   private renderer: HexRenderer;
   private inputGrid: InputHexGrid;
+  private animationService: AnimationService;
   
   private board: Map<string, HexCell> = new Map();
   private placedWords: WordObject[] = [];
   private isInitialized: boolean = false;
   private typedWord: string = '';  // Track typed word
+  private solvedCells: Set<string> = new Set();  // Track solved cells
+  private foundWords: Set<string> = new Set();  // Track found words
   
   // Default word list (will be replaced by server data)
   private defaultWords = [
@@ -61,6 +65,10 @@ export class HexaWordGame {
       
       this.renderer = new HexRenderer(this.ctx);
       this.inputGrid = new InputHexGrid(this.ctx);
+      this.animationService = AnimationService.getInstance();
+      
+      // Set up render callback for animations
+      (window as any).__requestRender = () => this.render();
       
       // Generate initial crossword
       await this.generateCrossword();
@@ -71,13 +79,14 @@ export class HexaWordGame {
       // Mark as initialized
       this.isInitialized = true;
       
-      // Initial render
+      // Initial render with animation
+      this.animationService.animateGameStart(() => {
+        // Notify ready after animation
+        if (this.config.onReady) {
+          this.config.onReady();
+        }
+      });
       this.render();
-      
-      // Notify ready
-      if (this.config.onReady) {
-        this.config.onReady();
-      }
     } catch (error) {
       console.error('Failed to initialize game:', error);
       if (this.config.onError) {
@@ -221,11 +230,12 @@ export class HexaWordGame {
     // Update renderer with dynamic hex size
     this.renderer.updateConfig({ hexSize: layout.hexSize });
     
-    // Render main grid
+    // Render main grid with solved cells
     this.renderer.renderGrid(
       this.board,
       layout.gridCenterX,
-      layout.gridCenterY
+      layout.gridCenterY,
+      this.solvedCells
     );
     
     // Render input grid and get its top position
@@ -240,6 +250,9 @@ export class HexaWordGame {
     if (this.typedWord) {
       this.renderTypedWord(rect.width, inputGridTop - 25);  // 25px above input grid
     }
+    
+    // Render jumping letters animation
+    this.renderJumpingLetters();
     
     // Render debug info (if enabled)
     if (this.isDebugMode()) {
@@ -313,6 +326,12 @@ export class HexaWordGame {
    * Handles canvas click events
    */
   private handleClick(event: MouseEvent): void {
+    // Don't handle clicks until game is initialized
+    if (!this.isInitialized) {
+      console.warn('Game not yet initialized');
+      return;
+    }
+    
     const rect = this.canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
@@ -331,9 +350,20 @@ export class HexaWordGame {
     
     if (clickedLetter) {
       if (clickedLetter === 'CLEAR') {
+        this.animationService.animateClearButton();
         this.typedWord = '';
       } else {
+        // Animate the clicked hex
+        const clickedHex = this.inputGrid.getLastClickedHex();
+        if (clickedHex) {
+          this.animationService.animateInputHexClick(clickedHex.q, clickedHex.r);
+        }
+        
         this.typedWord += clickedLetter;
+        this.animationService.animateTypedWord(this.typedWord);
+        
+        // Check if typed word matches any placed word
+        this.checkWord();
       }
       console.log('Typed word:', this.typedWord);
       this.render();  // Re-render to show typed word
@@ -355,14 +385,141 @@ export class HexaWordGame {
   }
   
   /**
+   * Checks if typed word matches any placed word
+   */
+  private checkWord(): void {
+    // Ensure we have placed words to check against
+    if (!this.placedWords || this.placedWords.length === 0) {
+      console.warn('No placed words to check against');
+      return;
+    }
+    
+    const typed = this.typedWord.toUpperCase();
+    
+    // Check each placed word
+    for (const word of this.placedWords) {
+      if (word.word === typed && !this.foundWords.has(word.word)) {
+        // Found a new word!
+        this.foundWords.add(word.word);
+        
+        // Get layout for animation positions
+        const rect = this.canvas.getBoundingClientRect();
+        const layout = this.calculateLayout(rect.width, rect.height);
+        
+        // Animate letters jumping to PUZZLE GRID cells
+        const letters = this.typedWord.split('');
+        const sourcePos = { 
+          x: rect.width / 2, 
+          y: layout.inputCenterY - layout.inputHexSize * 4 // Position of typed text
+        };
+        
+        // Get target positions from the actual word cells in the puzzle
+        const targetPositions: Array<{x: number, y: number, q: number, r: number}> = [];
+        if (word.cells && Array.isArray(word.cells)) {
+          // Calculate center offset for the puzzle grid
+          const bounds = this.renderer.calculateBounds(this.board);
+          const offset = this.renderer.calculateCenterOffset(bounds);
+          
+          word.cells.forEach(cell => {
+            // Use the renderer's hex factory to get exact positions
+            const hexPos = this.renderer.getHexPosition(cell.q, cell.r);
+            targetPositions.push({
+              x: hexPos.x + layout.gridCenterX + offset.x,
+              y: hexPos.y + layout.gridCenterY + offset.y,
+              q: cell.q,
+              r: cell.r
+            });
+          });
+        }
+        
+        // Clear typed word immediately for animation
+        this.typedWord = '';
+        
+        // Start the two-phase animation to puzzle grid
+        this.animationService.animateCorrectWord(
+          letters,
+          sourcePos,
+          targetPositions,
+          () => {
+            // Animation complete callback
+            this.render();
+          }
+        );
+        
+        // Mark puzzle cells as solved immediately so they turn green
+        if (word.cells && Array.isArray(word.cells) && word.cells.length > 0) {
+          word.cells.forEach(cell => {
+            const key = `${cell.q},${cell.r}`;
+            this.solvedCells.add(key);
+          });
+          this.render(); // Re-render to show green cells
+        }
+        
+        console.log(`Found word: ${word.word}`);
+        break;
+      }
+    }
+  }
+  
+  /**
    * Renders the typed word above the main grid
    */
   private renderTypedWord(canvasWidth: number, y: number): void {
+    // Apply typed word animation if active
+    const typedWordAnim = (window as any).__typedWordAnimation;
+    if (typedWordAnim) {
+      this.ctx.save();
+      this.ctx.globalAlpha = typedWordAnim.opacity || 1;
+      
+      // Apply scale
+      const centerX = canvasWidth / 2;
+      this.ctx.translate(centerX, y);
+      this.ctx.scale(typedWordAnim.scale || 1, typedWordAnim.scale || 1);
+      this.ctx.translate(-centerX, -y);
+    }
+    
     this.ctx.fillStyle = '#00d9ff';
     this.ctx.font = "30px 'Lilita One', Arial";
     this.ctx.textAlign = 'center';
     this.ctx.textBaseline = 'middle';
     this.ctx.fillText(this.typedWord.toUpperCase(), canvasWidth / 2, y);
+    
+    if (typedWordAnim) {
+      this.ctx.restore();
+    }
+  }
+  
+  /**
+   * Renders jumping letters animation
+   */
+  private renderJumpingLetters(): void {
+    const jumpingLetters = (window as any).__jumpingLetters;
+    if (!jumpingLetters || !Array.isArray(jumpingLetters)) return;
+    
+    jumpingLetters.forEach(letterObj => {
+      if (!letterObj || letterObj.opacity <= 0) return;
+      
+      this.ctx.save();
+      this.ctx.globalAlpha = letterObj.opacity || 1;
+      
+      // Apply transforms
+      this.ctx.translate(letterObj.x, letterObj.y);
+      this.ctx.rotate((letterObj.rotation || 0) * Math.PI / 180);
+      this.ctx.scale(letterObj.scale || 1, letterObj.scale || 1);
+      
+      // Add subtle glow effect for jumping letters
+      this.ctx.shadowColor = letterObj.color || '#00d9ff';
+      this.ctx.shadowBlur = 10 * (letterObj.scale || 1);
+      
+      // Draw the letter with normal font size
+      this.ctx.fillStyle = letterObj.color || '#00d9ff';
+      this.ctx.font = "25px 'Lilita One', Arial"; // Normal size
+      this.ctx.textAlign = 'center';
+      this.ctx.textBaseline = 'middle';
+      this.ctx.fillText(letterObj.letter.toUpperCase(), 0, 0);
+      
+      this.ctx.restore();
+    });
   }
   
   /**
