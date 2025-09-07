@@ -119,10 +119,10 @@ export class HexRenderer {
     // Stroke
     if (isIntersection) {
       this.ctx.strokeStyle = this.config.intersectionColor;
-      this.ctx.lineWidth = 3;
+      this.ctx.lineWidth = 1.5; // Thinner line for intersections
     } else {
       this.ctx.strokeStyle = this.config.strokeColor;
-      this.ctx.lineWidth = 2;
+      this.ctx.lineWidth = 1; // Thinner line for regular cells
     }
     this.ctx.stroke();
   }
@@ -132,10 +132,10 @@ export class HexRenderer {
    */
   private drawLetter(letter: string, x: number, y: number): void {
     this.ctx.fillStyle = this.config.textColor;
-    this.ctx.font = `bold ${Math.floor(this.config.hexSize * 0.5)}px ${this.config.fontFamily}`;
+    this.ctx.font = `${Math.floor(this.config.hexSize * 0.5)}px 'Lilita One', ${this.config.fontFamily}`;
     this.ctx.textAlign = 'center';
     this.ctx.textBaseline = 'middle';
-    this.ctx.fillText(letter, x, y);
+    this.ctx.fillText(letter.toUpperCase(), x, y);
   }
 
   /**

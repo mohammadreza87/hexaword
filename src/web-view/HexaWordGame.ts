@@ -24,6 +24,7 @@ export class HexaWordGame {
   private board: Map<string, HexCell> = new Map();
   private placedWords: WordObject[] = [];
   private isInitialized: boolean = false;
+  private typedWord: string = '';  // Track typed word
   
   // Default word list (will be replaced by server data)
   private defaultWords = [
@@ -227,12 +228,18 @@ export class HexaWordGame {
       layout.gridCenterY
     );
     
-    // Render input grid
-    this.inputGrid.render(
+    // Render input grid and get its top position
+    const inputGridTop = this.inputGrid.render(
       layout.inputCenterX,
       layout.inputCenterY,
-      layout.inputHexSize
+      layout.inputHexSize,
+      this.typedWord  // Pass typed word for clear button visibility
     );
+    
+    // Render typed word just above input grid
+    if (this.typedWord) {
+      this.renderTypedWord(rect.width, inputGridTop - 25);  // 25px above input grid
+    }
     
     // Render debug info (if enabled)
     if (this.isDebugMode()) {
@@ -290,7 +297,7 @@ export class HexaWordGame {
       gridCenterX: canvasWidth / 2,
       gridCenterY: paddingTop + (gridHeight * 0.4), // Position main grid higher
       inputHexSize,
-      inputCenterX: canvasWidth / 2,
+      inputCenterX: canvasWidth / 2, // Always center horizontally
       inputCenterY: inputGridY
     };
   }
@@ -310,8 +317,27 @@ export class HexaWordGame {
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
     
-    // TODO: Implement hex selection logic
-    console.log(`Click at (${x}, ${y})`);
+    // Get layout for input grid position
+    const layout = this.calculateLayout(rect.width, rect.height);
+    
+    // Check if click was on input grid
+    const clickedLetter = this.inputGrid.handleClick(
+      x, 
+      y, 
+      layout.inputCenterX, 
+      layout.inputCenterY, 
+      layout.inputHexSize
+    );
+    
+    if (clickedLetter) {
+      if (clickedLetter === 'CLEAR') {
+        this.typedWord = '';
+      } else {
+        this.typedWord += clickedLetter;
+      }
+      console.log('Typed word:', this.typedWord);
+      this.render();  // Re-render to show typed word
+    }
   }
   
   /**
@@ -326,6 +352,17 @@ export class HexaWordGame {
     
     // TODO: Implement touch handling
     console.log(`Touch at (${x}, ${y})`);
+  }
+  
+  /**
+   * Renders the typed word above the main grid
+   */
+  private renderTypedWord(canvasWidth: number, y: number): void {
+    this.ctx.fillStyle = '#00d9ff';
+    this.ctx.font = "30px 'Lilita One', Arial";
+    this.ctx.textAlign = 'center';
+    this.ctx.textBaseline = 'middle';
+    this.ctx.fillText(this.typedWord.toUpperCase(), canvasWidth / 2, y);
   }
   
   /**
