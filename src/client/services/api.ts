@@ -18,9 +18,8 @@ export async function fetchGameDataWithFallback(): Promise<{
   postId: string;
 }> {
   const defaultWords = [
-    'FOE', 'REF', 'GIG', 'RIG', 'FIG',
-    'FIRE', 'FROG', 'RIFE', 'FORE', 'OGRE',
-    'GORE', 'FORGE', 'GORGE', 'GRIEF', 'FOGGIER'
+    'GOLFER', 'ATHLETE', 'CAPTAIN', 'PAINTER', 'DESIGNER',
+    'DIRECTOR', 'MAGICIAN', 'MUSICIAN', 'BALLERINA', 'PLAYWRIGHT'
   ];
 
   try {

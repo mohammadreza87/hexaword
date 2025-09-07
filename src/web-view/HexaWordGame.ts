@@ -4,12 +4,16 @@ import { InputHexGrid } from './components/InputHexGrid';
 import { HexCell, WordObject } from '../shared/types/hexaword';
 import { createRNG } from '../shared/utils/rng';
 import { AnimationService } from './services/AnimationService';
+import { ColorPaletteService } from './services/ColorPaletteService';
 
 export interface GameConfig {
   containerId: string;
   words?: string[];
+  clue?: string;
   seed?: string;
   gridRadius?: number;
+  level?: number;
+  theme?: 'dark' | 'light';
   onReady?: () => void;
   onError?: (error: Error) => void;
 }
@@ -22,6 +26,8 @@ export class HexaWordGame {
   private renderer: HexRenderer;
   private inputGrid: InputHexGrid;
   private animationService: AnimationService;
+  private colorPaletteService: ColorPaletteService;
+  private currentLevel: number = 1;
   
   private board: Map<string, HexCell> = new Map();
   private placedWords: WordObject[] = [];
@@ -29,13 +35,14 @@ export class HexaWordGame {
   private typedWord: string = '';  // Track typed word
   private solvedCells: Set<string> = new Set();  // Track solved cells
   private foundWords: Set<string> = new Set();  // Track found words
+  private currentClue: string = '';  // Current level clue
   
-  // Default word list (will be replaced by server data)
+  // Default word list - Uncommon Occupations theme
   private defaultWords = [
-    'FOE', 'REF', 'GIG', 'RIG', 'FIG', 
-    'FIRE', 'FROG', 'RIFE', 'FORE', 'OGRE', 
-    'GORE', 'FORGE', 'GORGE', 'GRIEF', 'FOGGIER'
+    'GOLFER', 'ATHLETE', 'CAPTAIN', 'PAINTER', 'DESIGNER',
+    'DIRECTOR', 'MAGICIAN', 'MUSICIAN', 'BALLERINA', 'PLAYWRIGHT'
   ];
+  private defaultClue = 'UNCOMMON OCCUPATIONS';
   
   constructor(private config: GameConfig) {
     this.initialize();
@@ -66,6 +73,14 @@ export class HexaWordGame {
       this.renderer = new HexRenderer(this.ctx);
       this.inputGrid = new InputHexGrid(this.ctx);
       this.animationService = AnimationService.getInstance();
+      this.colorPaletteService = ColorPaletteService.getInstance();
+      
+      // Initialize color palette with level and theme
+      this.currentLevel = this.config.level || 1;
+      await this.initializeColorPalette();
+      
+      // Set the clue
+      this.currentClue = this.config.clue || this.defaultClue;
       
       // Set up render callback for animations
       (window as any).__requestRender = () => this.render();
@@ -93,6 +108,56 @@ export class HexaWordGame {
         this.config.onError(error as Error);
       }
     }
+  }
+  
+  /**
+   * Initializes color palette
+   */
+  private async initializeColorPalette(): Promise<void> {
+    // Set theme if provided
+    if (this.config.theme) {
+      await this.colorPaletteService.setThemeMode(this.config.theme);
+    }
+    
+    // Set level
+    await this.colorPaletteService.setLevel(this.currentLevel);
+    
+    // Update renderer and input grid with new colors
+    await this.renderer.setLevel(this.currentLevel);
+    await this.inputGrid.setLevel(this.currentLevel);
+    
+    // Update canvas background
+    const colors = await this.colorPaletteService.getCurrentScheme();
+    this.canvas.style.setProperty('background-color', colors.background, 'important');
+    document.body.style.backgroundColor = colors.background;
+  }
+  
+  /**
+   * Changes the game level
+   */
+  async setLevel(level: number): Promise<void> {
+    this.currentLevel = level;
+    await this.initializeColorPalette();
+    
+    // Generate new puzzle for new level
+    await this.generateCrossword();
+    this.render();
+  }
+  
+  /**
+   * Toggles between dark and light theme
+   */
+  async toggleTheme(): Promise<void> {
+    await this.colorPaletteService.toggleTheme();
+    await this.renderer.toggleTheme();
+    await this.inputGrid.toggleTheme();
+    
+    // Update canvas background
+    const colors = await this.colorPaletteService.getCurrentScheme();
+    this.canvas.style.setProperty('background-color', colors.background, 'important');
+    document.body.style.backgroundColor = colors.background;
+    
+    this.render();
   }
   
   /**
@@ -125,6 +190,147 @@ export class HexaWordGame {
     
     // Handle touch events for mobile
     this.canvas.addEventListener('touchstart', (e) => this.handleTouch(e));
+    
+    // Handle keyboard input (only on desktop/laptop)
+    if (!this.isMobileDevice()) {
+      this.setupKeyboardHandling();
+    }
+  }
+  
+  /**
+   * Check if device is mobile
+   */
+  private isMobileDevice(): boolean {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+           ('ontouchstart' in window) ||
+           (navigator.maxTouchPoints > 0);
+  }
+  
+  /**
+   * Setup keyboard handling for desktop
+   */
+  private setupKeyboardHandling(): void {
+    document.addEventListener('keydown', (e) => {
+      // Prevent keyboard shortcuts from interfering
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      
+      const key = e.key.toUpperCase();
+      
+      // Handle letter keys A-Z
+      if (key.length === 1 && key >= 'A' && key <= 'Z') {
+        e.preventDefault();
+        this.handleKeyboardLetter(key);
+      }
+      // Handle backspace/delete
+      else if (e.key === 'Backspace' || e.key === 'Delete') {
+        e.preventDefault();
+        this.handleKeyboardBackspace();
+      }
+      // Handle Enter to submit word
+      else if (e.key === 'Enter') {
+        e.preventDefault();
+        this.handleKeyboardEnter();
+      }
+      // Handle Escape to clear
+      else if (e.key === 'Escape') {
+        e.preventDefault();
+        this.handleKeyboardClear();
+      }
+    });
+  }
+  
+  /**
+   * Handle keyboard letter input
+   */
+  private handleKeyboardLetter(letter: string): void {
+    // Find the hex cell with this letter in the input grid
+    const letterCell = this.inputGrid.findCellByLetter(letter);
+    
+    if (letterCell && !this.inputGrid.isLetterUsed(letterCell.q, letterCell.r)) {
+      // Simulate clicking on that hex
+      this.inputGrid.handleHexClick(letterCell.q, letterCell.r);
+      
+      // Update the game's typed word to match
+      this.typedWord = this.inputGrid.getTypedWord();
+      
+      // Trigger animations
+      this.animationService.animateInputHexClick(letterCell.q, letterCell.r, true);
+      this.animationService.animateTypedWord(this.typedWord);
+      
+      // Check if word matches any placed word
+      this.checkWord();
+      
+      console.log('Typed word:', this.typedWord);
+      
+      // Re-render
+      this.render();
+    }
+  }
+  
+  /**
+   * Handle keyboard backspace
+   */
+  private handleKeyboardBackspace(): void {
+    if (this.typedWord.length > 0) {
+      // Get the last position before removing
+      const positions = this.inputGrid.getSelectedPositions();
+      const lastPosition = positions[positions.length - 1];
+      
+      if (lastPosition) {
+        // Mark letter as not used
+        this.inputGrid.markLetterUnused(lastPosition.q, lastPosition.r);
+      }
+      
+      // Update typed word
+      this.typedWord = this.typedWord.slice(0, -1);
+      this.inputGrid.setTypedWord(this.typedWord);
+      
+      // Update selected positions
+      positions.pop();
+      this.inputGrid.setSelectedPositions(positions);
+      
+      console.log('Typed word after backspace:', this.typedWord);
+      
+      // Re-render
+      this.render();
+    }
+  }
+  
+  /**
+   * Handle keyboard enter (submit word)
+   */
+  private handleKeyboardEnter(): void {
+    if (this.typedWord.length >= 3) {
+      // Check if word is valid
+      const foundWord = this.placedWords.find(w => w.word === this.typedWord);
+      
+      if (foundWord && !this.foundWords.has(foundWord.word)) {
+        // Word is correct!
+        this.handleCorrectWord(foundWord);
+      } else if (this.foundWords.has(this.typedWord)) {
+        // Already found
+        this.animationService.animateError();
+      } else {
+        // Wrong word
+        this.animationService.animateError();
+      }
+    }
+  }
+  
+  /**
+   * Handle keyboard clear (Escape)
+   */
+  private handleKeyboardClear(): void {
+    // Clear everything
+    this.typedWord = '';
+    this.inputGrid.clearTypedWord();
+    
+    // Trigger clear animation
+    this.animationService.animateClearButton();
+    
+    console.log('Cleared typed word');
+    
+    this.render();
   }
   
   /**
@@ -161,20 +367,35 @@ export class HexaWordGame {
    * Populates the input grid with letters from the crossword
    */
   private populateInputGrid(): void {
-    // Build a set of unique letters present in the placed crossword
-    const uniqueLetters = new Set<string>();
+    // Count the maximum frequency of each letter across all placed words
+    const letterFrequency = new Map<string, number>();
     
-    // Collect all unique letters from the puzzle
-    this.board.forEach(cell => {
-      if (cell.letter) {
-        uniqueLetters.add(cell.letter.toUpperCase());
+    // For each placed word, count letter occurrences
+    this.placedWords.forEach(wordObj => {
+      const word = wordObj.word;
+      const wordLetterCount = new Map<string, number>();
+      
+      // Count letters in this word
+      for (const letter of word) {
+        const upperLetter = letter.toUpperCase();
+        wordLetterCount.set(upperLetter, (wordLetterCount.get(upperLetter) || 0) + 1);
+      }
+      
+      // Update global max frequency for each letter
+      wordLetterCount.forEach((count, letter) => {
+        letterFrequency.set(letter, Math.max(letterFrequency.get(letter) || 0, count));
+      });
+    });
+    
+    // Build array with correct number of each letter
+    let letters: string[] = [];
+    letterFrequency.forEach((count, letter) => {
+      for (let i = 0; i < count; i++) {
+        letters.push(letter);
       }
     });
-
-    // Convert to array and sort alphabetically for consistency
-    let letters = Array.from(uniqueLetters).sort();
-
-    // Optionally shuffle for gameplay (but keep all unique letters)
+    
+    // Shuffle for gameplay
     if (this.config.seed) {
       const rng = createRNG(this.config.seed + '_input');
       letters = rng.shuffle(letters);
@@ -185,13 +406,13 @@ export class HexaWordGame {
         [letters[i], letters[j]] = [letters[j], letters[i]];
       }
     }
-
-    // Set the exact letters needed - no more, no less
+    
+    // Set the letters including duplicates
     const gridLetters = letters.join('');
     this.inputGrid.setLetters(gridLetters);
     
-    console.log(`Input grid populated with ${letters.length} unique letters: ${gridLetters}`);
-    console.log(`Letters needed for puzzle: ${Array.from(uniqueLetters).sort().join(', ')}`);
+    console.log(`Input grid populated with ${letters.length} letters (including duplicates): ${gridLetters}`);
+    console.log(`Letter frequencies:`, Array.from(letterFrequency.entries()).map(([l, c]) => `${l}:${c}`).join(', '));
   }
   
   /**
@@ -229,6 +450,9 @@ export class HexaWordGame {
     
     // Update renderer with dynamic hex size
     this.renderer.updateConfig({ hexSize: layout.hexSize });
+    
+    // Render clue above the puzzle grid
+    this.renderClue(layout.gridCenterX, layout.gridCenterY, layout);
     
     // Render main grid with solved cells
     this.renderer.renderGrid(
@@ -399,72 +623,127 @@ export class HexaWordGame {
     // Check each placed word
     for (const word of this.placedWords) {
       if (word.word === typed && !this.foundWords.has(word.word)) {
-        // Found a new word!
-        this.foundWords.add(word.word);
-        
-        // Get layout for animation positions
-        const rect = this.canvas.getBoundingClientRect();
-        const layout = this.calculateLayout(rect.width, rect.height);
-        
-        // Animate letters jumping to PUZZLE GRID cells
-        const letters = this.typedWord.split('');
-        const sourcePos = { 
-          x: rect.width / 2, 
-          y: layout.inputCenterY - layout.inputHexSize * 4 // Position of typed text
-        };
-        
-        // Get target positions from the actual word cells in the puzzle
-        const targetPositions: Array<{x: number, y: number, q: number, r: number}> = [];
-        if (word.cells && Array.isArray(word.cells)) {
-          // Calculate center offset for the puzzle grid
-          const bounds = this.renderer.calculateBounds(this.board);
-          const offset = this.renderer.calculateCenterOffset(bounds);
-          
-          word.cells.forEach(cell => {
-            // Use the renderer's hex factory to get exact positions
-            const hexPos = this.renderer.getHexPosition(cell.q, cell.r);
-            targetPositions.push({
-              x: hexPos.x + layout.gridCenterX + offset.x,
-              y: hexPos.y + layout.gridCenterY + offset.y,
-              q: cell.q,
-              r: cell.r
-            });
-          });
-        }
-        
-        // Get input hex positions for green blink animation - they're already in order
-        const inputHexPositions = this.inputGrid.getSelectedPositions();
-        console.log('Input hex positions in order:', inputHexPositions);
-        
-        // Clear typed word and selected positions immediately for animation
-        this.typedWord = '';
-        this.inputGrid.clearTypedWord(); // This also clears selected positions
-        
-        // Start the two-phase animation to puzzle grid
-        this.animationService.animateCorrectWord(
-          letters,
-          sourcePos,
-          targetPositions,
-          inputHexPositions,
-          () => {
-            // Animation complete callback
-            this.render();
-          }
-        );
-        
-        // Mark puzzle cells as solved immediately so they turn green
+        this.handleCorrectWord(word);
+        return;
+      }
+    }
+  }
+  
+  /**
+   * Handle when a correct word is found
+   */
+  private handleCorrectWord(word: WordObject): void {
+    // Found a new word!
+    this.foundWords.add(word.word);
+    
+    // Get layout for animation positions
+    const rect = this.canvas.getBoundingClientRect();
+    const layout = this.calculateLayout(rect.width, rect.height);
+    
+    // Animate letters jumping to PUZZLE GRID cells
+    const letters = this.typedWord.split('');
+    const sourcePos = { 
+      x: rect.width / 2, 
+      y: layout.inputCenterY - layout.inputHexSize * 4 // Position of typed text
+    };
+    
+    // Get target positions from the actual word cells in the puzzle
+    const targetPositions: Array<{x: number, y: number, q: number, r: number}> = [];
+    if (word.cells && Array.isArray(word.cells)) {
+      // Calculate center offset for the puzzle grid
+      const bounds = this.renderer.calculateBounds(this.board);
+      const offset = this.renderer.calculateCenterOffset(bounds);
+      
+      word.cells.forEach(cell => {
+        // Use the renderer's hex factory to get exact positions
+        const hexPos = this.renderer.getHexPosition(cell.q, cell.r);
+        targetPositions.push({
+          x: hexPos.x + layout.gridCenterX + offset.x,
+          y: hexPos.y + layout.gridCenterY + offset.y,
+          q: cell.q,
+          r: cell.r
+        });
+      });
+    }
+    
+    // Get input hex positions for green blink animation - they're already in order
+    const inputHexPositions = this.inputGrid.getSelectedPositions();
+    console.log('Input hex positions in order:', inputHexPositions);
+    
+    // Clear typed word and selected positions immediately for animation
+    this.typedWord = '';
+    this.inputGrid.clearTypedWord(); // This also clears selected positions
+    
+    // Start the two-phase animation to puzzle grid
+    this.animationService.animateCorrectWord(
+      letters,
+      sourcePos,
+      targetPositions,
+      inputHexPositions,
+      () => {
+        // Animation complete callback
+        // NOW mark puzzle cells as solved after animation completes
         if (word.cells && Array.isArray(word.cells) && word.cells.length > 0) {
           word.cells.forEach(cell => {
             const key = `${cell.q},${cell.r}`;
             this.solvedCells.add(key);
           });
-          this.render(); // Re-render to show green cells
+          // Clean up temporary green cells since they're now in solvedCells
+          delete (window as any).__greenCells;
         }
-        
-        console.log(`Found word: ${word.word}`);
-        break;
+        this.render();
       }
-    }
+    );
+    
+    console.log(`Found word: ${word.word}`);
+  }
+  
+  /**
+   * Renders the clue above the puzzle grid
+   */
+  private renderClue(centerX: number, centerY: number, layout: any): void {
+    if (!this.currentClue) return;
+    
+    // Calculate the top of the puzzle grid
+    const bounds = this.renderer.calculateBounds(this.board);
+    const offset = this.renderer.calculateCenterOffset(bounds);
+    
+    // Position clue above the topmost hex with proper spacing
+    const clueY = centerY + offset.y + bounds.minY - 40; // 40px above top of grid
+    
+    // Get the clue text without "Clue:" prefix
+    const clueText = this.currentClue.toUpperCase();
+    
+    // Calculate maximum width available (90% of canvas width to leave some margin)
+    const maxWidth = this.canvas.width / (window.devicePixelRatio || 1) * 0.9;
+    
+    // Start with a large font size and reduce until it fits
+    let fontSize = 32;
+    let textWidth = 0;
+    
+    this.ctx.save();
+    
+    // Find the right font size
+    do {
+      this.ctx.font = `${fontSize}px 'Lilita One', Arial`;
+      textWidth = this.ctx.measureText(clueText).width;
+      if (textWidth > maxWidth) {
+        fontSize -= 1;
+      }
+    } while (textWidth > maxWidth && fontSize > 12);
+    
+    // Add subtle animation or glow effect
+    this.ctx.shadowColor = '#00d9ff';
+    this.ctx.shadowBlur = 2;
+    
+    // Draw clue text with calculated font size
+    this.ctx.fillStyle = '#ffffff';
+    this.ctx.font = `${fontSize}px 'Lilita One', Arial`;
+    this.ctx.textAlign = 'center';
+    this.ctx.textBaseline = 'bottom';
+    this.ctx.fillText(clueText, centerX, clueY);
+    
+    this.ctx.restore();
   }
   
   /**

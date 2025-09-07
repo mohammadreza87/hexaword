@@ -43,14 +43,23 @@ class App {
     // Fetch game data with automatic fallback
     const gameData = await fetchGameDataWithFallback();
     
-    console.log(`Starting game with seed: ${gameData.seed}, words: ${gameData.words.length}`);
+    // Force uncommon occupations theme words
+    const occupationWords = [
+      'GOLFER', 'ATHLETE', 'CAPTAIN', 'PAINTER', 'DESIGNER',
+      'DIRECTOR', 'MAGICIAN', 'MUSICIAN', 'BALLERINA', 'PLAYWRIGHT'
+    ];
     
-    // Create game instance with fetched/fallback data
+    console.log(`Starting game with seed: ${gameData.seed}, words: ${occupationWords.length}`);
+    
+    // Create game instance with occupations theme
     this.game = new HexaWordGame({
       containerId: 'hex-grid-container',
-      words: gameData.words,
+      words: occupationWords,  // Use occupation words instead of API words
+      clue: 'UNCOMMON OCCUPATIONS',  // Clue for occupations theme
       seed: gameData.seed,
       gridRadius: 10,
+      level: 1,  // Start at level 1
+      theme: 'dark',  // Default to dark theme
       onReady: () => {
         console.log('Game ready with seed:', gameData.seed);
         this.setupUI();
@@ -143,6 +152,17 @@ class App {
       <div style="margin-bottom: 10px;">Debug Controls</div>
       <button id="btn-regenerate" style="margin-right: 5px;">Regenerate</button>
       <button id="btn-toggle-debug">Toggle Debug</button>
+      <div style="margin-top: 10px;">
+        <label>Level: </label>
+        <select id="level-select" style="margin-right: 10px;">
+          <option value="1">Level 1 - Blue</option>
+          <option value="2">Level 2 - Purple</option>
+          <option value="3">Level 3 - Teal</option>
+          <option value="4">Level 4 - Green</option>
+          <option value="5">Level 5 - Red</option>
+        </select>
+        <button id="btn-toggle-theme">Toggle Theme</button>
+      </div>
       <div id="debug-info" style="margin-top: 10px;"></div>
     `;
     
@@ -157,6 +177,17 @@ class App {
       const currentDebug = localStorage.getItem('hexaword_debug') === 'true';
       localStorage.setItem('hexaword_debug', (!currentDebug).toString());
       window.location.reload();
+    });
+    
+    // Level selection
+    document.getElementById('level-select')?.addEventListener('change', async (e) => {
+      const level = parseInt((e.target as HTMLSelectElement).value);
+      await this.game?.setLevel(level);
+    });
+    
+    // Theme toggle
+    document.getElementById('btn-toggle-theme')?.addEventListener('click', async () => {
+      await this.game?.toggleTheme();
     });
     
     // Update debug info

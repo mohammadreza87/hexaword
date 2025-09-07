@@ -238,10 +238,8 @@ export class AnimationService {
     const tl = gsap.timeline({
       onComplete: () => {
         delete (window as any).__jumpingLetters;
-        setTimeout(() => {
-          delete (window as any).__greenCells;
-          (window as any).__requestRender?.();
-        }, 2000);
+        // Don't delete green cells - they should stay green
+        // The game will add them to solvedCells for permanent green state
         onComplete?.();
       }
     });
@@ -280,11 +278,34 @@ export class AnimationService {
           (window as any).__requestRender?.();
         },
         onComplete: () => {
-          // Turn the destination cell green exactly when letter arrives
+          // Smoothly turn the destination cell green when letter arrives
           const cellKey = `${targetPos.q},${targetPos.r}`;
+          const greenCell = { green: 0, glow: 0 };
+          
           (window as any).__greenCells = (window as any).__greenCells || {};
-          (window as any).__greenCells[cellKey] = { green: 1 };
-          (window as any).__requestRender?.();
+          (window as any).__greenCells[cellKey] = greenCell;
+          
+          // Smoothly animate to green
+          gsap.to(greenCell, {
+            green: 1,
+            glow: 1,
+            duration: 0.5,
+            ease: 'power2.out',
+            onUpdate: () => {
+              (window as any).__requestRender?.();
+            },
+            onComplete: () => {
+              // Fade out glow but keep green
+              gsap.to(greenCell, {
+                glow: 0,
+                duration: 0.3,
+                ease: 'power2.out',
+                onUpdate: () => {
+                  (window as any).__requestRender?.();
+                }
+              });
+            }
+          });
         }
       }, `>+0.1`) // Small pause at top then go
       // Fade out at destination

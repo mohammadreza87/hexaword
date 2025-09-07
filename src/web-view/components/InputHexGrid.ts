@@ -1,5 +1,6 @@
 import { defineHex, Grid, rectangle, ring, Hex } from 'honeycomb-grid';
 import { AnimationService } from '../services/AnimationService';
+import { ColorPaletteService, ColorScheme } from '../services/ColorPaletteService';
 
 interface InputCell {
   q: number;
@@ -15,12 +16,40 @@ export class InputHexGrid {
   private lastClickedHex: {q: number, r: number} | null = null;
   private animationService: AnimationService;
   private selectedPositions: Array<{q: number, r: number}> = [];
+  private usedLetters: Set<string> = new Set(); // Track which letters have been used
+  private colorPaletteService: ColorPaletteService;
+  private currentColors: ColorScheme | null = null;
   
   constructor(ctx: CanvasRenderingContext2D) {
     this.ctx = ctx;
     // Don't initialize cells yet - wait for setLetters to be called
     this.cells = [];
     this.animationService = AnimationService.getInstance();
+    this.colorPaletteService = ColorPaletteService.getInstance();
+    
+    // Initialize colors
+    this.initializeColors();
+  }
+  
+  /**
+   * Initialize colors from palette service
+   */
+  private async initializeColors(): Promise<void> {
+    this.currentColors = await this.colorPaletteService.getCurrentScheme();
+  }
+  
+  /**
+   * Update level and refresh colors
+   */
+  async setLevel(level: number): Promise<void> {
+    this.currentColors = await this.colorPaletteService.setLevel(level);
+  }
+  
+  /**
+   * Toggle theme
+   */
+  async toggleTheme(): Promise<void> {
+    this.currentColors = await this.colorPaletteService.toggleTheme();
   }
   
   /**
@@ -257,13 +286,16 @@ export class InputHexGrid {
         }
         
         // Only show clear button when there's typed text
-        this.ctx.fillStyle = '#ff4444'; // Red for clear button
+        this.ctx.fillStyle = this.currentColors?.accent || '#ff4444'; // Clear button uses accent color
         this.ctx.fill();
         
         if (clearAnimState) {
           this.ctx.restore();
         }
       } else if (!isCenterCell) {
+        // Check if this letter has been used
+        const isUsed = this.usedLetters.has(`${cell.q},${cell.r}`);
+        
         // Check for green input animation
         if (greenInputState && greenInputState.green > 0) {
           // Apply scale transform for bounce effect
@@ -275,7 +307,7 @@ export class InputHexGrid {
           }
           
           // Blend between normal color and green
-          const normalColor = cell.letter ? '#3a4558' : '#2d3748';
+          const normalColor = this.currentColors?.inputCellFill || '#3a4558';
           const greenIntensity = greenInputState.green;
           
           // Draw with green blend
@@ -287,7 +319,7 @@ export class InputHexGrid {
             this.ctx.save();
             this.ctx.shadowColor = '#00ff00';
             this.ctx.shadowBlur = 20 * greenIntensity;
-            this.ctx.strokeStyle = '#00ff00';
+            this.ctx.strokeStyle = this.currentColors?.solvedColor || '#00ff00';
             this.ctx.globalAlpha = greenIntensity * 0.5;
             this.ctx.lineWidth = 2;
             this.ctx.stroke();
@@ -304,8 +336,20 @@ export class InputHexGrid {
             this.ctx.shadowBlur = 10 * animState.glow;
           }
           
-          this.ctx.fillStyle = cell.letter ? '#3a4558' : '#2d3748';
-          this.ctx.fill();
+          // Different color for used letters
+          if (isUsed) {
+            this.ctx.fillStyle = this.currentColors?.primary || '#1a1f2e'; // Darker color for used letters
+            this.ctx.fill();
+            // Add subtle disabled effect
+            this.ctx.save();
+            this.ctx.globalAlpha = 0.3;
+            this.ctx.fillStyle = this.currentColors?.background || '#000000';
+            this.ctx.fill();
+            this.ctx.restore();
+          } else {
+            this.ctx.fillStyle = this.currentColors?.inputCellFill || '#3a4558';
+            this.ctx.fill();
+          }
           
           // Reset shadow
           if (animState?.glow) {
@@ -322,15 +366,19 @@ export class InputHexGrid {
       // Add letter or X for center cell
       if (isCenterCell && this.typedWord.length > 0) {
         // Only show X when there's typed text
-        this.ctx.fillStyle = '#ffffff';
-        this.ctx.font = `${Math.floor(size * 0.7)}px 'Lilita One', Arial`;
+        this.ctx.fillStyle = this.currentColors?.text || '#ffffff';
+        this.ctx.font = `${Math.floor(size * 0.9)}px 'Lilita One', Arial`;
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
         this.ctx.fillText('×', x, y); // Using × symbol for clear
       } else if (cell.letter && !isCenterCell) {
         // Draw letters only for non-center cells
-        this.ctx.fillStyle = '#ffffff';
-        this.ctx.font = `${Math.floor(size * 0.6)}px 'Lilita One', Arial`;
+        // Check if this letter has been used
+        const isUsed = this.usedLetters.has(`${cell.q},${cell.r}`);
+        // Dimmed text for used letters
+        const dimmedColor = this.colorPaletteService.adjustForContrast('#666666', this.currentColors?.background || '#141514', 3.0);
+        this.ctx.fillStyle = isUsed ? dimmedColor : (this.currentColors?.text || '#ffffff');
+        this.ctx.font = `${Math.floor(size * 0.8)}px 'Lilita One', Arial`;
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
         this.ctx.fillText(cell.letter.toUpperCase(), x, y);
@@ -360,7 +408,7 @@ export class InputHexGrid {
     const radius = 10;
     
     // Draw rounded rectangle frame
-    this.ctx.strokeStyle = '#4a5568';
+    this.ctx.strokeStyle = this.currentColors?.inputCellStroke || '#4a5568';
     this.ctx.lineWidth = 2;
     this.ctx.beginPath();
     
@@ -465,14 +513,19 @@ export class InputHexGrid {
         if (cell.q === 0 && cell.r === 0) {
           this.typedWord = '';
           this.selectedPositions = [];
+          this.usedLetters.clear(); // Clear all used letters
           return 'CLEAR';
         }
-        // Return the letter if it exists
-        if (cell.letter) {
+        // Check if this letter has already been used
+        const cellKey = `${cell.q},${cell.r}`;
+        if (cell.letter && !this.usedLetters.has(cellKey)) {
           this.typedWord += cell.letter;
           this.selectedPositions.push({ q: cell.q, r: cell.r });
+          this.usedLetters.add(cellKey); // Mark this cell as used
           return cell.letter;
         }
+        // Return null if letter is already used
+        return null;
       }
     }
     return null;
@@ -491,6 +544,7 @@ export class InputHexGrid {
   public clearTypedWord(): void {
     this.typedWord = '';
     this.selectedPositions = [];
+    this.usedLetters.clear(); // Clear all used letters when word is cleared
   }
   
   /**
@@ -591,6 +645,79 @@ export class InputHexGrid {
    */
   public getSelectedPositions(): Array<{q: number, r: number}> {
     return [...this.selectedPositions];
+  }
+  
+  /**
+   * Sets the positions of selected hexes
+   */
+  public setSelectedPositions(positions: Array<{q: number, r: number}>): void {
+    this.selectedPositions = [...positions];
+  }
+  
+  /**
+   * Find a cell by its letter
+   */
+  public findCellByLetter(letter: string): InputCell | null {
+    // Find the first unused cell with this letter
+    for (const cell of this.cells) {
+      if (cell.letter === letter.toUpperCase()) {
+        const cellKey = `${cell.q},${cell.r}`;
+        if (!this.usedLetters.has(cellKey)) {
+          return cell;
+        }
+      }
+    }
+    return null;
+  }
+  
+  /**
+   * Check if a letter at position is used
+   */
+  public isLetterUsed(q: number, r: number): boolean {
+    return this.usedLetters.has(`${q},${r}`);
+  }
+  
+  /**
+   * Handle hex click programmatically (for keyboard)
+   */
+  public handleHexClick(q: number, r: number): void {
+    const cell = this.cells.find(c => c.q === q && c.r === r);
+    if (!cell) return;
+    
+    // Check if this is the center clear button
+    if (q === 0 && r === 0) {
+      this.clearTypedWord();
+      return;
+    }
+    
+    // Check if letter exists and is not already used
+    if (cell.letter && !this.usedLetters.has(`${q},${r}`)) {
+      // Add to typed word
+      this.typedWord += cell.letter;
+      
+      // Mark as used
+      this.usedLetters.add(`${q},${r}`);
+      
+      // Track position
+      this.selectedPositions.push({q, r});
+      
+      // Update last clicked
+      this.lastClickedHex = {q, r};
+    }
+  }
+  
+  /**
+   * Mark a letter as unused
+   */
+  public markLetterUnused(q: number, r: number): void {
+    this.usedLetters.delete(`${q},${r}`);
+  }
+  
+  /**
+   * Set the typed word directly
+   */
+  public setTypedWord(word: string): void {
+    this.typedWord = word;
   }
   
   /**
