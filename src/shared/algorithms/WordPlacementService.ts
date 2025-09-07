@@ -42,6 +42,9 @@ export class WordPlacementService {
     this.placeRemainingWords(wordBank);
     
     console.log(`Placed ${this.wordsActive.length} out of ${words.length} words.`);
+    if (this.wordsActive.length < words.length) {
+      console.log('Failed to place:', words.filter(w => !this.wordsActive.includes(w)).map(w => w.word));
+    }
     return this.wordsActive.length === words.length;
   }
 
@@ -477,7 +480,8 @@ export class WordPlacementService {
    * Finds the closest empty placement for a word
    */
   private findClosestEmptyPlacement(word: WordObject): PlacementResult | null {
-    for (let radius = 1; radius <= this.gridRadius - word.chars.length; radius++) {
+    // First try close placements
+    for (let radius = 1; radius <= Math.min(5, this.gridRadius - word.chars.length); radius++) {
       const positions = this.getPositionsAtRadius(radius);
       // Optional RNG-driven rotation for deterministic variety
       const startIndex = this.rng ? this.rng.nextInt(0, Math.max(positions.length - 1, 0)) : 0;
@@ -491,7 +495,51 @@ export class WordPlacementService {
       }
     }
     
+    // If nothing found close by, try anywhere on the grid with more relaxed constraints
+    for (let radius = 6; radius <= this.gridRadius; radius++) {
+      const positions = this.getPositionsAtRadius(radius);
+      const startIndex = this.rng ? this.rng.nextInt(0, Math.max(positions.length - 1, 0)) : 0;
+      for (let step = 0; step < positions.length; step++) {
+        const pos = positions[(startIndex + step) % positions.length];
+        for (let dir = 0; dir < 3; dir++) {
+          // Allow placement even if it goes slightly outside grid boundary
+          if (this.canPlaceWordRelaxed(word, pos.q, pos.r, dir)) {
+            return {q: pos.q, r: pos.r, dir};
+          }
+        }
+      }
+    }
+    
     return null;
+  }
+
+  /**
+   * Checks if a word can be placed with relaxed constraints
+   */
+  private canPlaceWordRelaxed(
+    word: WordObject, 
+    startQ: number, 
+    startR: number, 
+    dir: number
+  ): boolean {
+    const direction = HEX_DIRECTIONS[dir];
+    
+    for (let i = 0; i < word.chars.length; i++) {
+      const q = startQ + direction.q * i;
+      const r = startR + direction.r * i;
+      
+      // Allow slightly outside grid for better placement
+      if (Math.abs(q) > this.gridRadius + 2 || Math.abs(r) > this.gridRadius + 2) {
+        return false;
+      }
+      
+      const key = `${q},${r}`;
+      if (this.board.has(key)) {
+        return false; // Cell already occupied
+      }
+    }
+    
+    return true;
   }
 
   /**

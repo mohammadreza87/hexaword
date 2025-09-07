@@ -31,21 +31,6 @@
         font-family: 'Lilita One', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       }
       
-      h1 {
-        color: #ffffff;
-        text-align: center;
-        font-size: clamp(1.5rem, 4vw, 2.5rem);
-        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
-        margin-bottom: 1rem;
-        position: absolute;
-        top: 1rem;
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 10;
-        font-family: 'Lilita One', sans-serif;
-        font-weight: 400;
-        text-transform: uppercase;
-      }
       
       #hex-grid-container {
         background: #141514;
@@ -67,22 +52,11 @@
       
       /* Mobile adjustments */
       @media (max-width: 480px) {
-        h1 {
-          font-size: 1.2rem;
-          margin-bottom: 0.5rem;
-        }
-        
         #hex-grid-container { height: 100vh; }
       }
       
       /* Landscape adjustment for mobile (16:9 ratio) */
       @media (orientation: landscape) {
-        h1 {
-          position: static;
-          transform: none;
-          margin-bottom: 0.5rem;
-        }
-        
         #hex-grid-container { height: 100vh; }
       }
       
@@ -93,7 +67,6 @@
     </style>
   </head>
   <body>
-    <h1>HexaWord</h1>
     <div id="hex-grid-container">
       <!-- Canvas will be inserted here -->
     </div>
