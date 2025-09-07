@@ -158,12 +158,13 @@ export class AnimationService {
   }
   
   /**
-   * Animate letters for correct word - two phase animation
+   * Animate letters for correct word - two phase animation with green cells
    */
   animateCorrectWord(
     letters: string[],
     sourcePos: { x: number, y: number },
     targetPositions: Array<{ x: number, y: number, q: number, r: number }>,
+    inputHexPositions?: Array<{ q: number, r: number }>,
     onComplete?: () => void
   ): void {
     console.log('Animating correct word:', letters.join(''));
@@ -171,8 +172,52 @@ export class AnimationService {
     // Clear any existing animations
     (window as any).__jumpingLetters = [];
     (window as any).__greenCells = {};
+    (window as any).__greenInputHexes = {};
     
     const jumpLetters: any[] = [];
+    
+    // Animate input hexes to blink green in sequence
+    if (inputHexPositions && inputHexPositions.length > 0) {
+      console.log('Animating input hexes in order:', inputHexPositions.map((pos, i) => `${i}: (${pos.q},${pos.r})`));
+      
+      inputHexPositions.forEach((pos, index) => {
+        const hexKey = `${pos.q},${pos.r}`;
+        const hexElement = { green: 0, scale: 1 };
+        
+        (window as any).__greenInputHexes = (window as any).__greenInputHexes || {};
+        (window as any).__greenInputHexes[hexKey] = hexElement;
+        
+        // Blink green effect with delay matching letter animation - sequential order
+        gsap.to(hexElement, {
+          green: 1,
+          scale: 1.1,
+          duration: 0.3,
+          delay: index * 0.05, // Each hex blinks 50ms after the previous one
+          ease: 'power2.out',
+          onStart: () => {
+            console.log(`Starting green animation for hex ${index} at (${pos.q},${pos.r})`);
+          },
+          onUpdate: () => {
+            (window as any).__requestRender?.();
+          }
+        });
+        
+        // Fade back to normal
+        gsap.to(hexElement, {
+          green: 0,
+          scale: 1,
+          duration: 0.5,
+          delay: index * 0.05 + 0.5, // Fade out after green animation
+          ease: 'power2.inOut',
+          onUpdate: () => {
+            (window as any).__requestRender?.();
+          },
+          onComplete: () => {
+            delete (window as any).__greenInputHexes[hexKey];
+          }
+        });
+      });
+    }
     
     // Create letter objects
     letters.forEach((letter, index) => {
@@ -232,6 +277,13 @@ export class AnimationService {
         duration: 0.5,
         ease: 'power2.inOut',
         onUpdate: () => {
+          (window as any).__requestRender?.();
+        },
+        onComplete: () => {
+          // Turn the destination cell green exactly when letter arrives
+          const cellKey = `${targetPos.q},${targetPos.r}`;
+          (window as any).__greenCells = (window as any).__greenCells || {};
+          (window as any).__greenCells[cellKey] = { green: 1 };
           (window as any).__requestRender?.();
         }
       }, `>+0.1`) // Small pause at top then go

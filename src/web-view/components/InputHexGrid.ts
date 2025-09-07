@@ -14,6 +14,7 @@ export class InputHexGrid {
   private typedWord: string = '';  // Track typed letters
   private lastClickedHex: {q: number, r: number} | null = null;
   private animationService: AnimationService;
+  private selectedPositions: Array<{q: number, r: number}> = [];
   
   constructor(ctx: CanvasRenderingContext2D) {
     this.ctx = ctx;
@@ -240,8 +241,8 @@ export class InputHexGrid {
       // Check if this is the center cell (clear button)
       const isCenterCell = cell.q === 0 && cell.r === 0;
       
-      // Check for green cell animation (smooth color change, no rotation)
-      const greenCellState = (window as any).__greenCells?.[hexKey];
+      // Check for green input hex animation
+      const greenInputState = (window as any).__greenInputHexes?.[`${cell.q},${cell.r}`];
       
       // Fill with appropriate color
       if (isCenterCell && this.typedWord.length > 0) {
@@ -263,28 +264,39 @@ export class InputHexGrid {
           this.ctx.restore();
         }
       } else if (!isCenterCell) {
-        // Check for smooth green transition (no rotation/scale)
-        if (greenCellState && greenCellState.opacity > 0) {
-          // Blend between normal color and green based on opacity
+        // Check for green input animation
+        if (greenInputState && greenInputState.green > 0) {
+          // Apply scale transform for bounce effect
+          if (greenInputState.scale && greenInputState.scale !== 1) {
+            this.ctx.save();
+            this.ctx.translate(x, y);
+            this.ctx.scale(greenInputState.scale, greenInputState.scale);
+            this.ctx.translate(-x, -y);
+          }
+          
+          // Blend between normal color and green
           const normalColor = cell.letter ? '#3a4558' : '#2d3748';
+          const greenIntensity = greenInputState.green;
           
-          // Draw normal cell first
-          this.ctx.fillStyle = normalColor;
+          // Draw with green blend
+          this.ctx.fillStyle = this.blendColors(normalColor, '#00ff00', greenIntensity);
           this.ctx.fill();
           
-          // Then overlay green with opacity (no transformations)
-          this.ctx.save();
-          this.ctx.globalAlpha = greenCellState.opacity;
+          // Add green glow effect
+          if (greenIntensity > 0) {
+            this.ctx.save();
+            this.ctx.shadowColor = '#00ff00';
+            this.ctx.shadowBlur = 20 * greenIntensity;
+            this.ctx.strokeStyle = '#00ff00';
+            this.ctx.globalAlpha = greenIntensity * 0.5;
+            this.ctx.lineWidth = 2;
+            this.ctx.stroke();
+            this.ctx.restore();
+          }
           
-          // Add subtle glow
-          this.ctx.shadowColor = '#00ff00';
-          this.ctx.shadowBlur = 10 * greenCellState.opacity;
-          
-          // Fill with green
-          this.ctx.fillStyle = '#00ff00';
-          this.ctx.fill();
-          
-          this.ctx.restore();
+          if (greenInputState.scale && greenInputState.scale !== 1) {
+            this.ctx.restore();
+          }
         } else {
           // Normal cells with letters - add glow effect if animated
           if (animState?.glow) {
@@ -452,11 +464,13 @@ export class InputHexGrid {
         // Check if center cell (clear)
         if (cell.q === 0 && cell.r === 0) {
           this.typedWord = '';
+          this.selectedPositions = [];
           return 'CLEAR';
         }
         // Return the letter if it exists
         if (cell.letter) {
           this.typedWord += cell.letter;
+          this.selectedPositions.push({ q: cell.q, r: cell.r });
           return cell.letter;
         }
       }
@@ -476,6 +490,7 @@ export class InputHexGrid {
    */
   public clearTypedWord(): void {
     this.typedWord = '';
+    this.selectedPositions = [];
   }
   
   /**
@@ -569,5 +584,36 @@ export class InputHexGrid {
         charIndex++;
       }
     });
+  }
+  
+  /**
+   * Gets the positions of selected hexes
+   */
+  public getSelectedPositions(): Array<{q: number, r: number}> {
+    return [...this.selectedPositions];
+  }
+  
+  /**
+   * Helper to blend two colors
+   */
+  private blendColors(color1: string, color2: string, amount: number): string {
+    // Simple blend between two colors
+    if (amount <= 0) return color1;
+    if (amount >= 1) return color2;
+    
+    // For simplicity, just interpolate between the two
+    const r1 = parseInt(color1.slice(1, 3), 16) || 0;
+    const g1 = parseInt(color1.slice(3, 5), 16) || 0;
+    const b1 = parseInt(color1.slice(5, 7), 16) || 0;
+    
+    const r2 = 0; // green is 00ff00
+    const g2 = 255;
+    const b2 = 0;
+    
+    const r = Math.round(r1 + (r2 - r1) * amount);
+    const g = Math.round(g1 + (g2 - g1) * amount);
+    const b = Math.round(b1 + (b2 - b1) * amount);
+    
+    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
   }
 }

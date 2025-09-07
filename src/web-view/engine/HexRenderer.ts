@@ -79,6 +79,10 @@ export class HexRenderer {
     let x = hex.x + offsetX;
     let y = hex.y + offsetY;
     
+    // Check if this cell should be green from animation
+    const greenCellState = (window as any).__greenCells?.[cellKey];
+    const shouldBeGreen = isSolved || (greenCellState && greenCellState.green > 0);
+    
     // Apply animation transforms if any
     const animState = this.animationService.getCellAnimationState(cellKey);
     if (animState) {
@@ -94,12 +98,12 @@ export class HexRenderer {
       this.ctx.globalAlpha = animState.opacity !== undefined ? animState.opacity : 1;
     }
     
-    // Draw hexagon with spacing
-    this.drawHexagon(hex, offsetX, offsetY, cell.wordIds.length > 1, true, isSolved || animState);
+    // Draw hexagon with spacing - green if marked
+    this.drawHexagon(hex, offsetX, offsetY, cell.wordIds.length > 1, true, shouldBeGreen);
     
-    // Draw letter only if solved or animating
-    if (isSolved || animState) {
-      this.drawLetter(cell.letter!, x, y, isSolved || animState);
+    // Draw letter only if solved, green, or animating
+    if (shouldBeGreen || animState) {
+      this.drawLetter(cell.letter!, x, y, shouldBeGreen);
     }
     
     // Restore context if animation was applied

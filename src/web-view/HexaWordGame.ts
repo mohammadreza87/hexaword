@@ -432,14 +432,20 @@ export class HexaWordGame {
           });
         }
         
-        // Clear typed word immediately for animation
+        // Get input hex positions for green blink animation - they're already in order
+        const inputHexPositions = this.inputGrid.getSelectedPositions();
+        console.log('Input hex positions in order:', inputHexPositions);
+        
+        // Clear typed word and selected positions immediately for animation
         this.typedWord = '';
+        this.inputGrid.clearTypedWord(); // This also clears selected positions
         
         // Start the two-phase animation to puzzle grid
         this.animationService.animateCorrectWord(
           letters,
           sourcePos,
           targetPositions,
+          inputHexPositions,
           () => {
             // Animation complete callback
             this.render();
