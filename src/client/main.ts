@@ -97,12 +97,12 @@ class InputHexGrid {
       }
       this.ctx.closePath();
       
-      // Fill with light gray
-      this.ctx.fillStyle = '#f0f0f0';
+      // Fill with dark theme matching word grid
+      this.ctx.fillStyle = '#2d3748'; // Slightly lighter than word grid for input
       this.ctx.fill();
       
       // Stroke
-      this.ctx.strokeStyle = '#999';
+      this.ctx.strokeStyle = '#4a5568'; // Subtle border
       this.ctx.lineWidth = 1;
       this.ctx.stroke();
       
@@ -362,6 +362,10 @@ class HexaWordCrossword {
     }
     
     // If there are still unplaced words, place them at closest empty position to center
+    if (unplacedWords.length > 0) {
+      console.log(`${unplacedWords.length} words could not be connected. Placing them separately...`);
+    }
+    
     for (const word of unplacedWords) {
       let placed = false;
       
@@ -413,35 +417,8 @@ class HexaWordCrossword {
                 break;
               }
               
-              // Check that we have at least 1 space gap from other words
-              let tooClose = false;
-              for (const dirCheck of this.allDirections) {
-                const neighborKey = `${cellPos.q + dirCheck.q},${cellPos.r + dirCheck.r}`;
-                if (this.board.has(neighborKey)) {
-                  // Check if this neighbor is part of our own word
-                  let isOwnWord = false;
-                  for (let j = 0; j < word.chars.length; j++) {
-                    const ownPos = {
-                      q: cell.q + j * this.directions[dir].q,
-                      r: cell.r + j * this.directions[dir].r
-                    };
-                    if (`${ownPos.q},${ownPos.r}` === neighborKey) {
-                      isOwnWord = true;
-                      break;
-                    }
-                  }
-                  
-                  if (!isOwnWord) {
-                    tooClose = true;
-                    break;
-                  }
-                }
-              }
-              
-              if (tooClose) {
-                canPlace = false;
-                break;
-              }
+              // For separate placement, allow closer positioning but still check for overlaps
+              // We're relaxing the spacing requirement since these words don't connect
             }
             
             if (canPlace) {
@@ -456,9 +433,15 @@ class HexaWordCrossword {
       }
       
       if (!placed) {
-        console.log(`Could not place "${word.word}" - no valid position found with proper spacing`);
+        console.log(`WARNING: Could not place "${word.word}" - no valid position found`);
       }
     }
+    
+    // Log summary
+    console.log(`=== Placement Summary ===`);
+    console.log(`Total words to place: ${remainingWords.length + 3}`);
+    console.log(`Words placed: ${this.wordsActive.length}`);
+    console.log(`Words not placed: ${remainingWords.length + 3 - this.wordsActive.length}`);
   }
   
   private findSharedMiddleLetter(word1: WordObj, word2: WordObj, word3: WordObj): {letter: string, idx1: number, idx2: number, idx3: number} | null {
@@ -1786,23 +1769,22 @@ class HexaWordCrossword {
     const wordGridWidth = actualMaxQ - actualMinQ + 1;
     const wordGridHeight = actualMaxR - actualMinR + 1;
     
-    // Fixed padding: 10px left and right, 10px top
-    const paddingLeft = 10;
-    const paddingRight = 10;
-    const paddingTop = 10;
-    const paddingBottom = 180; // Reserve more space for larger input grid at bottom
+    // Fixed frame for word grid
+    const paddingTop = 20;
+    const paddingBottom = 60; // Space for 10px input grid at bottom
+    const paddingSide = 20;
     
-    const availableWidth = rect.width - paddingLeft - paddingRight;
-    const availableHeight = rect.height - paddingTop - paddingBottom;
+    // Fixed frame dimensions for word grid
+    const fixedFrameWidth = Math.max(100, rect.width - (paddingSide * 2));
+    const fixedFrameHeight = Math.max(100, rect.height - paddingTop - paddingBottom);
     
-    // Calculate hex size to fit the actual word placement
-    // Hexagon width = 2 * size, height = sqrt(3) * size
+    // Calculate hex size to fit within fixed frame
     // For pointy orientation: width between centers = 1.5 * size, height = sqrt(3) * size
-    const maxHexByWidth = availableWidth / (wordGridWidth * 1.5);
-    const maxHexByHeight = availableHeight / (wordGridHeight * 1.732);
+    const maxHexByWidth = fixedFrameWidth / (wordGridWidth * 1.5);
+    const maxHexByHeight = fixedFrameHeight / (wordGridHeight * 1.732);
     
-    // Dynamic sizing - can grow or shrink based on content
-    const hexSize = Math.min(maxHexByWidth, maxHexByHeight, 35); // Reduced cap for better fit
+    // Dynamic sizing within fixed frame - ensure it's always positive
+    const hexSize = Math.max(5, Math.min(maxHexByWidth, maxHexByHeight, 20)); // Minimum 5px, max 20px
     
     // Create hex with dynamic size
     const Hex = defineHex({
@@ -1826,11 +1808,11 @@ class HexaWordCrossword {
       }
     });
     
-    // Align to top with padding, center horizontally
+    // Center the word grid within the fixed frame
     const contentWidth = maxX - minX;
     const contentHeight = maxY - minY;
     const centerX = rect.width / 2 - (minX + maxX) / 2;
-    const centerY = paddingTop - minY;
+    const centerY = paddingTop + (fixedFrameHeight / 2) - (minY + maxY) / 2;
     
     // Only render cells with letters (no grid boundary)
     this.board.forEach(cell => {
@@ -1849,24 +1831,24 @@ class HexaWordCrossword {
       }
       this.ctx.closePath();
       
-      // Fill - use different colors for intersection cells
-      if (cell.wordIds.length > 1) {
-        // Intersection cell - use special color
-        this.ctx.fillStyle = '#FF9800'; // Orange for intersections
-      } else {
-        // Regular cell - use color based on word ID
-        const colors = ['#4CAF50', '#2196F3', '#9C27B0', '#F44336', '#00BCD4', '#FFC107', '#795548', '#607D8B'];
-        this.ctx.fillStyle = colors[cell.wordIds[0] % colors.length];
-      }
+      // Fill - use same dark color for all cells
+      this.ctx.fillStyle = '#1a1f2e'; // Dark blue-gray
       this.ctx.fill();
       
-      // Stroke
-      this.ctx.strokeStyle = '#2c3e50';
-      this.ctx.lineWidth = 2;
+      // Stroke - different color for intersection cells
+      if (cell.wordIds.length > 1) {
+        // Intersection cell - highlight with accent color
+        this.ctx.strokeStyle = '#00d9ff'; // Bright cyan for shared cells
+        this.ctx.lineWidth = 3;
+      } else {
+        // Regular cell - subtle border
+        this.ctx.strokeStyle = '#2d3748'; // Slightly lighter than fill
+        this.ctx.lineWidth = 2;
+      }
       this.ctx.stroke();
       
       // Add letter
-      this.ctx.fillStyle = 'white';
+      this.ctx.fillStyle = '#e2e8f0'; // Light gray-white for text
       this.ctx.font = `bold ${Math.floor(hexSize * 0.5)}px Arial`;
       this.ctx.textAlign = 'center';
       this.ctx.textBaseline = 'middle';
@@ -1889,14 +1871,12 @@ class HexaWordCrossword {
       }
     });
     
-    // Render input grid at the bottom of the screen
-    const inputGridSize = Math.min(hexSize * 1.6, 50); // 2x larger than before
-    const inputGridBottomPadding = 20;
+    // Render input grid at bottom of screen with fixed size
+    const inputGridBottomPadding = 30;
+    const inputGridSize = 10; // Fixed 10 pixels for each cell
     
-    // Calculate Y position to align to bottom
-    // Input grid height for 2 rows of hexagons
-    const inputGridHeight = inputGridSize * 2.5 * Math.sqrt(3); // Height for 2 rows
-    const inputGridY = rect.height - inputGridHeight - inputGridBottomPadding;
+    // Position input grid at bottom
+    const inputGridY = rect.height - inputGridBottomPadding - (inputGridSize * 1.732 * 2); // Account for 2 rows
     
     this.inputGrid.render(rect.width / 2, inputGridY, inputGridSize);
   }
