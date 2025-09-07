@@ -1,4 +1,5 @@
 import { HexaWordGame } from '../web-view/HexaWordGame';
+import { fetchGameDataWithFallback } from './services/api';
 
 console.log('HexaWord Crossword Generator v4.0 - Modular Architecture');
 
@@ -28,36 +29,25 @@ class App {
   private async startGame(): Promise<void> {
     console.log('Starting HexaWord game...');
     
-    // Default configuration
-    const defaultWords = [
-      'FOE', 'REF', 'GIG', 'RIG', 'FIG', 
-      'FIRE', 'FROG', 'RIFE', 'FORE', 'OGRE', 
-      'GORE', 'FORGE', 'GORGE', 'GRIEF', 'FOGGIER'
-    ];
-    const defaultSeed = `client_${Date.now()}`;
+    // Fetch game data with automatic fallback
+    const gameData = await fetchGameDataWithFallback();
     
-    // Try to fetch from server
-    let words = defaultWords;
-    let seed = defaultSeed;
+    console.log(`Starting game with seed: ${gameData.seed}, words: ${gameData.words.length}`);
     
-    const serverData = await this.fetchGameInitData();
-    if (serverData) {
-      words = serverData.words || defaultWords;
-      seed = serverData.seed || defaultSeed;
-      console.log(`Using server seed: ${seed}`);
-    } else {
-      console.log(`Using default seed: ${seed}`);
-    }
-    
-    // Create game instance with seed
+    // Create game instance with fetched/fallback data
     this.game = new HexaWordGame({
       containerId: 'hex-grid-container',
-      words: words,
-      seed: seed,  // Pass seed for deterministic generation
+      words: gameData.words,
+      seed: gameData.seed,
       gridRadius: 10,
       onReady: () => {
-        console.log('Game ready with seed:', seed);
+        console.log('Game ready with seed:', gameData.seed);
         this.setupUI();
+        
+        // Show non-blocking toast if using fallback
+        if (gameData.postId === 'local') {
+          this.showToast('Playing in offline mode', 'info');
+        }
       },
       onError: (error) => {
         console.error('Game error:', error);
@@ -67,36 +57,43 @@ class App {
   }
   
   /**
-   * Fetches game initialization data from server
+   * Shows a non-blocking toast notification
    */
-  private async fetchGameInitData(): Promise<{words: string[], seed: string} | null> {
-    try {
-      const response = await fetch('/api/game/init');
-      if (!response.ok) {
-        throw new Error('Failed to fetch game data from server');
+  private showToast(message: string, type: 'info' | 'warning' | 'error' = 'info'): void {
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: ${type === 'error' ? '#ff4444' : type === 'warning' ? '#ff8800' : '#4444ff'};
+      color: white;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-family: Arial, sans-serif;
+      font-size: 14px;
+      z-index: 9999;
+      animation: slideUp 0.3s ease-out;
+    `;
+    toast.textContent = message;
+    
+    // Add animation
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes slideUp {
+        from { transform: translateX(-50%) translateY(100%); opacity: 0; }
+        to { transform: translateX(-50%) translateY(0); opacity: 1; }
       }
-      
-      const data = await response.json();
-      
-      // Validate response has expected fields
-      if (!data.seed || !Array.isArray(data.words)) {
-        console.warn('Invalid server response, missing seed or words');
-        return null;
-      }
-      
-      console.log('Fetched game data from server:', {
-        seed: data.seed,
-        wordCount: data.words.length
-      });
-      
-      return {
-        words: data.words,
-        seed: data.seed
-      };
-    } catch (error) {
-      console.error('Failed to fetch game data, using defaults:', error);
-      return null;
-    }
+    `;
+    document.head.appendChild(style);
+    
+    document.body.appendChild(toast);
+    
+    // Auto-remove after 3 seconds
+    setTimeout(() => {
+      toast.style.animation = 'slideUp 0.3s ease-out reverse';
+      setTimeout(() => toast.remove(), 300);
+    }, 3000);
   }
   
   /**

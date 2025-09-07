@@ -1,5 +1,6 @@
 import { defineHex, Grid, rectangle, Hex as HoneycombHex } from 'honeycomb-grid';
 import { Tile } from '../../domain/entities/Tile';
+import { SeededRNG } from '../../../utils/rng';
 
 export interface GridConfig {
   width: number;
@@ -10,9 +11,11 @@ export interface GridConfig {
 export class GridService {
   private grid: Grid<HoneycombHex>;
   private config: GridConfig;
+  private rng?: SeededRNG;
 
-  constructor(config: GridConfig) {
+  constructor(config: GridConfig, rng?: SeededRNG) {
     this.config = config;
+    this.rng = rng;
     this.initializeGrid();
   }
 
@@ -49,7 +52,17 @@ export class GridService {
 
   private generateRandomLetter(): string {
     const letterFrequencies = 'AAAAAAAAABBBCCCDDDDEEEEEEEEEEEFFGGGHHHHHIIIIIIIIIJKLLLLLMMMNNNNNNNOOOOOOOOPPQRRRRRRSSSSSSTTTTTTTTUUUUVWWXYYZ';
-    return letterFrequencies[Math.floor(Math.random() * letterFrequencies.length)];
+    
+    // Use seeded RNG if provided, otherwise don't generate random letters
+    // (This method should typically only be called for non-puzzle contexts)
+    if (this.rng) {
+      const index = this.rng.nextInt(0, letterFrequencies.length - 1);
+      return letterFrequencies[index];
+    }
+    
+    // Fallback: return a deterministic default if no RNG
+    // This ensures puzzle generation doesn't get random letters
+    return 'A';
   }
 
   getHexCenter(tile: Tile): { x: number; y: number } {

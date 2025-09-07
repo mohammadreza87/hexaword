@@ -471,8 +471,10 @@ export class WordPlacementService {
   private findClosestEmptyPlacement(word: WordObject): PlacementResult | null {
     for (let radius = 1; radius <= this.gridRadius - word.chars.length; radius++) {
       const positions = this.getPositionsAtRadius(radius);
-      
-      for (const pos of positions) {
+      // Optional RNG-driven rotation for deterministic variety
+      const startIndex = this.rng ? this.rng.nextInt(0, Math.max(positions.length - 1, 0)) : 0;
+      for (let step = 0; step < positions.length; step++) {
+        const pos = positions[(startIndex + step) % positions.length];
         for (let dir = 0; dir < 3; dir++) {
           if (this.canPlaceWordEmpty(word, pos.q, pos.r, dir)) {
             return {q: pos.q, r: pos.r, dir};

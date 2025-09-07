@@ -1,6 +1,6 @@
 import { WordObject, HexCell, PuzzleConfig } from '../../shared/types/hexaword';
 import { WordPlacementService } from '../../shared/algorithms/WordPlacementService';
-import { createRNG, SeededRNG } from '../../shared/utils/rng';
+import { createRNG, SeededRNG, seededTiebreak } from '../../shared/utils/rng';
 
 export class CrosswordGenerator {
   private placementService: WordPlacementService;
@@ -78,16 +78,16 @@ export class CrosswordGenerator {
       }
     }
     
-    // DETERMINISTIC: Sort by match count, then length, then alphabetically for consistency
+    // Deterministic with seed influence: match count, then length, then seeded tiebreak
     wordObjs.sort((a, b) => {
       const scoreDiff = b.totalMatches - a.totalMatches;
       if (scoreDiff !== 0) return scoreDiff;
-      
+
       const lengthDiff = b.word.length - a.word.length;
       if (lengthDiff !== 0) return lengthDiff;
-      
-      // Alphabetical as final tiebreaker for determinism
-      return a.word.localeCompare(b.word);
+
+      return seededTiebreak(this.config.seed || 'default', a.word)
+        - seededTiebreak(this.config.seed || 'default', b.word);
     });
     
     console.log('Word match scores:', wordObjs.map(w => ({ 
@@ -103,8 +103,12 @@ export class CrosswordGenerator {
    */
   updateConfig(config: Partial<PuzzleConfig>): void {
     this.config = { ...this.config, ...config };
-    if (config.gridRadius !== undefined) {
-      this.placementService = new WordPlacementService(config.gridRadius);
+
+    if (config.seed !== undefined) {
+      this.rng = createRNG(this.config.seed || 'default');
+    }
+    if (config.gridRadius !== undefined || config.seed !== undefined) {
+      this.placementService = new WordPlacementService(this.config.gridRadius, this.rng);
     }
   }
 
