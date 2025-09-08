@@ -29,154 +29,8 @@ export class ColorPaletteService {
   private isDarkMode: boolean = true;
   private cachedPalettes: Map<number, LevelPalette> = new Map();
   
-  // Predefined base palettes for levels (fallback if API fails)
-  private readonly basePalettes: LevelPalette[] = [
-    // Level 1 - Deep Blue & Cyan
-    {
-      dark: {
-        background: '#0a0e1a',
-        primary: '#1a1f2e',
-        secondary: '#2d3748',
-        accent: '#00d9ff',
-        text: '#e2e8f0',
-        cellFill: '#1a1f2e',
-        cellStroke: '#2d3748',
-        intersectionColor: '#00d9ff',
-        solvedColor: '#00ff88',
-        inputCellFill: '#3a4558',
-        inputCellStroke: '#4a5568'
-      },
-      light: {
-        background: '#f7fafc',
-        primary: '#e2e8f0',
-        secondary: '#cbd5e0',
-        accent: '#0099cc',
-        text: '#1a202c',
-        cellFill: '#ffffff',
-        cellStroke: '#cbd5e0',
-        intersectionColor: '#0099cc',
-        solvedColor: '#00cc66',
-        inputCellFill: '#e2e8f0',
-        inputCellStroke: '#a0aec0'
-      }
-    },
-    // Level 2 - Purple & Pink
-    {
-      dark: {
-        background: '#1a0f1f',
-        primary: '#2d1b3d',
-        secondary: '#4a2c5e',
-        accent: '#e91e63',
-        text: '#f3e5f5',
-        cellFill: '#2d1b3d',
-        cellStroke: '#4a2c5e',
-        intersectionColor: '#e91e63',
-        solvedColor: '#00ff88',
-        inputCellFill: '#5e3c7a',
-        inputCellStroke: '#7b4d9a'
-      },
-      light: {
-        background: '#fce4ec',
-        primary: '#f8bbd0',
-        secondary: '#f48fb1',
-        accent: '#c2185b',
-        text: '#1a0f1f',
-        cellFill: '#ffffff',
-        cellStroke: '#f48fb1',
-        intersectionColor: '#c2185b',
-        solvedColor: '#00cc66',
-        inputCellFill: '#f8bbd0',
-        inputCellStroke: '#f06292'
-      }
-    },
-    // Level 3 - Teal & Orange
-    {
-      dark: {
-        background: '#0f1a1a',
-        primary: '#1b2d2d',
-        secondary: '#2c4a4a',
-        accent: '#ff6b35',
-        text: '#e0f2f1',
-        cellFill: '#1b2d2d',
-        cellStroke: '#2c4a4a',
-        intersectionColor: '#ff6b35',
-        solvedColor: '#00ff88',
-        inputCellFill: '#3c5e5e',
-        inputCellStroke: '#4d7a7a'
-      },
-      light: {
-        background: '#e0f2f1',
-        primary: '#b2dfdb',
-        secondary: '#80cbc4',
-        accent: '#ff5722',
-        text: '#0f1a1a',
-        cellFill: '#ffffff',
-        cellStroke: '#80cbc4',
-        intersectionColor: '#ff5722',
-        solvedColor: '#00cc66',
-        inputCellFill: '#b2dfdb',
-        inputCellStroke: '#4db6ac'
-      }
-    },
-    // Level 4 - Green & Gold
-    {
-      dark: {
-        background: '#0a1a0a',
-        primary: '#1b2d1b',
-        secondary: '#2d4a2d',
-        accent: '#ffd700',
-        text: '#e8f5e9',
-        cellFill: '#1b2d1b',
-        cellStroke: '#2d4a2d',
-        intersectionColor: '#ffd700',
-        solvedColor: '#00ff88',
-        inputCellFill: '#3e5e3e',
-        inputCellStroke: '#4f7a4f'
-      },
-      light: {
-        background: '#e8f5e9',
-        primary: '#c8e6c9',
-        secondary: '#a5d6a7',
-        accent: '#ffc107',
-        text: '#0a1a0a',
-        cellFill: '#ffffff',
-        cellStroke: '#a5d6a7',
-        intersectionColor: '#ffc107',
-        solvedColor: '#00cc66',
-        inputCellFill: '#c8e6c9',
-        inputCellStroke: '#81c784'
-      }
-    },
-    // Level 5 - Red & Indigo
-    {
-      dark: {
-        background: '#1a0a0a',
-        primary: '#2d1b1b',
-        secondary: '#4a2d2d',
-        accent: '#3f51b5',
-        text: '#ffebee',
-        cellFill: '#2d1b1b',
-        cellStroke: '#4a2d2d',
-        intersectionColor: '#3f51b5',
-        solvedColor: '#00ff88',
-        inputCellFill: '#5e3c3c',
-        inputCellStroke: '#7a4d4d'
-      },
-      light: {
-        background: '#ffebee',
-        primary: '#ffcdd2',
-        secondary: '#ef9a9a',
-        accent: '#3f51b5',
-        text: '#1a0a0a',
-        cellFill: '#ffffff',
-        cellStroke: '#ef9a9a',
-        intersectionColor: '#3f51b5',
-        solvedColor: '#00cc66',
-        inputCellFill: '#ffcdd2',
-        inputCellStroke: '#e57373'
-      }
-    }
-  ];
+  // Accent colors looped per level (keeps backgrounds/strokes neutral)
+  private readonly accents: string[] = ['#1FB6FF', '#E9458D', '#FF7A45', '#B7F36B', '#6C8CFF'];
   
   private constructor() {}
   
@@ -260,65 +114,47 @@ export class ColorPaletteService {
    * Generate palette for a specific level
    */
   async generateLevelPalette(level: number): Promise<LevelPalette> {
-    // Check cache first
-    if (this.cachedPalettes.has(level)) {
-      return this.cachedPalettes.get(level)!;
-    }
-    
-    // Use predefined palette if available
-    const paletteIndex = (level - 1) % this.basePalettes.length;
-    const basePalette = this.basePalettes[paletteIndex];
-    
-    // Try to enhance with Colormind API
-    const apiColors = await this.generatePaletteFromAPI([
-      basePalette.dark.background,
-      basePalette.dark.primary,
-      basePalette.dark.accent
-    ]);
-    
-    let palette: LevelPalette;
-    
-    if (apiColors) {
-      // Create enhanced palette from API colors
-      palette = {
-        dark: {
-          background: apiColors[0],
-          primary: apiColors[1],
-          secondary: apiColors[2],
-          accent: apiColors[3],
-          text: this.adjustForContrast('#ffffff', apiColors[0]),
-          cellFill: apiColors[1],
-          cellStroke: apiColors[2],
-          intersectionColor: apiColors[3],
-          solvedColor: '#00ff88',
-          inputCellFill: apiColors[2],
-          inputCellStroke: apiColors[3]
-        },
-        light: {
-          background: this.lightenColor(apiColors[0], 0.9),
-          primary: this.lightenColor(apiColors[1], 0.7),
-          secondary: this.lightenColor(apiColors[2], 0.5),
-          accent: apiColors[3],
-          text: this.adjustForContrast('#000000', this.lightenColor(apiColors[0], 0.9)),
-          cellFill: '#ffffff',
-          cellStroke: this.lightenColor(apiColors[2], 0.5),
-          intersectionColor: apiColors[3],
-          solvedColor: '#00cc66',
-          inputCellFill: this.lightenColor(apiColors[1], 0.7),
-          inputCellStroke: this.lightenColor(apiColors[2], 0.5)
-        }
+    if (this.cachedPalettes.has(level)) return this.cachedPalettes.get(level)!;
+
+    const accent = this.accents[(level - 1) % this.accents.length];
+
+    const make = (theme: 'dark' | 'light'): ColorScheme => {
+      if (theme === 'dark') {
+        const scheme: ColorScheme = {
+          background: '#0F1115',
+          primary: '#151922',
+          secondary: '#1A2030',
+          text: '#E6ECF2',
+          accent,
+          cellFill: '#1A1F2B',
+          cellStroke: '#2E3A4E',
+          intersectionColor: accent,
+          solvedColor: '#1DD67C',
+          inputCellFill: '#2A3446',
+          inputCellStroke: '#3B4760',
+        };
+        scheme.text = this.adjustForContrast(scheme.text, scheme.background);
+        return scheme;
+      }
+      const scheme: ColorScheme = {
+        background: '#F5F7FB',
+        primary: '#FFFFFF',
+        secondary: '#F3F6FB',
+        text: '#1F2430',
+        accent,
+        cellFill: '#FFFFFF',
+        cellStroke: '#CBD5E1',
+        intersectionColor: accent,
+        solvedColor: '#17B66A',
+        inputCellFill: '#EDF2F7',
+        inputCellStroke: '#CBD5E1',
       };
-    } else {
-      palette = basePalette;
+      scheme.text = this.adjustForContrast(scheme.text, scheme.background);
+      return scheme;
     }
-    
-    // Ensure all colors have proper contrast
-    palette.dark.text = this.adjustForContrast(palette.dark.text, palette.dark.background);
-    palette.light.text = this.adjustForContrast(palette.light.text, palette.light.background);
-    
-    // Cache the palette
+
+    const palette: LevelPalette = { dark: make('dark'), light: make('light') };
     this.cachedPalettes.set(level, palette);
-    
     return palette;
   }
   

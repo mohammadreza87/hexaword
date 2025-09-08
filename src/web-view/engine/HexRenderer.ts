@@ -152,8 +152,10 @@ export class HexRenderer {
       this.drawIntersectionOutline(hex, offsetX, offsetY);
     }
     
-    // Draw letter only if solved, green, or animating
-    if (shouldBeGreen || animState) {
+    // Draw letter only if solved/green
+    // Important: do NOT reveal letters just because a cell is animating (e.g., level intro wave)
+    // We only reveal letters when the cell is solved (green) to prevent spoilers at level start.
+    if (shouldBeGreen) {
       this.drawLetter(cell.letter!, x, y, shouldBeGreen);
     }
     

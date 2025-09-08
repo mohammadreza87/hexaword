@@ -5,6 +5,7 @@ import { gsap } from 'gsap';
  */
 export class AnimationService {
   private static instance: AnimationService;
+  private timeScale = 1;
   
   private constructor() {
     // Configure GSAP defaults
@@ -12,6 +13,10 @@ export class AnimationService {
       ease: 'power2.out',
       duration: 0.3
     });
+
+    // Respect persisted Reduce Motion preference
+    const reduced = localStorage.getItem('hexaword_reduce_motion') === 'true';
+    this.setReducedMotion(reduced);
   }
   
   /**
@@ -22,6 +27,18 @@ export class AnimationService {
       AnimationService.instance = new AnimationService();
     }
     return AnimationService.instance;
+  }
+
+  /**
+   * Enable/disable reduced motion by adjusting global timescale.
+   */
+  setReducedMotion(enabled: boolean): void {
+    this.timeScale = enabled ? 0.6 : 1.0;
+    gsap.globalTimeline.timeScale(this.timeScale);
+    localStorage.setItem('hexaword_reduce_motion', String(enabled));
+  }
+  getReducedMotion(): boolean {
+    return this.timeScale < 1;
   }
   
   /**
@@ -135,6 +152,176 @@ export class AnimationService {
     });
   }
 
+  /**
+   * Level intro: wave-pop all cells (scale/opacity) in a staggered order.
+   * Expects caller to render per-frame using getCellAnimationState.
+   */
+  animateLevelWave(
+    cellKeys: string[],
+    opts?: { delayStep?: number; duration?: number },
+    onComplete?: () => void
+  ): void {
+    const delayStep = opts?.delayStep ?? 0.05;
+    const dur = opts?.duration ?? 0.3;
+
+    (window as any).__cellAnimations = (window as any).__cellAnimations || {};
+    if (delayStep === 0) {
+      // Pop all together smoothly
+      const states = cellKeys.map((key) => {
+        const s = { scale: 0, opacity: 0, rotation: 0 };
+        (window as any).__cellAnimations[key] = s;
+        return s;
+      });
+      gsap.to(states, {
+        scale: 1,
+        opacity: 1,
+        duration: dur,
+        ease: 'back.out(1.5)',
+        onUpdate: () => (window as any).__requestRender?.(),
+        onComplete,
+      });
+    } else {
+      const tl = gsap.timeline({ onComplete });
+      cellKeys.forEach((key, i) => {
+        const state = { scale: 0, opacity: 0, rotation: 0 };
+        (window as any).__cellAnimations[key] = state;
+        tl.to(state, {
+          scale: 1,
+          opacity: 1,
+          duration: dur,
+          ease: 'back.out(1.5)',
+          onUpdate: () => (window as any).__requestRender?.(),
+        }, i * delayStep);
+      });
+    }
+  }
+
+  /**
+   * Wave-pop for input grid cells (keys must be like `input_q,r`).
+   */
+  animateInputGridWave(
+    inputKeys: string[],
+    opts?: { delayStep?: number; duration?: number },
+    onComplete?: () => void
+  ): void {
+    const delayStep = opts?.delayStep ?? 0.04;
+    const dur = opts?.duration ?? 0.22;
+
+    (window as any).__inputAnimations = (window as any).__inputAnimations || {};
+    if (delayStep === 0) {
+      const states = inputKeys.map((key) => {
+        const s = { scale: 0 };
+        (window as any).__inputAnimations[key] = s;
+        return s;
+      });
+      gsap.to(states, {
+        scale: 1,
+        duration: dur,
+        ease: 'back.out(1.4)',
+        onUpdate: () => (window as any).__requestRender?.(),
+        onComplete,
+      });
+    } else {
+      const tl = gsap.timeline({ onComplete });
+      inputKeys.forEach((key, i) => {
+        const state = { scale: 0 };
+        (window as any).__inputAnimations[key] = state;
+        tl.to(state, {
+          scale: 1,
+          duration: dur,
+          ease: 'back.out(1.4)',
+          onUpdate: () => (window as any).__requestRender?.(),
+        }, i * delayStep);
+      });
+    }
+  }
+
+  /**
+   * Level intro: show blur overlay and center clue, then move clue to its target and fade blur.
+   * target should be in viewport/screen coordinates (absolute pixels).
+   */
+  animateClueOverlay(
+    clueText: string,
+    targetScreen: { x: number; y: number },
+    options?: { fontSizePx?: number; overlayWidthPx?: number; holdMs?: number },
+    onComplete?: () => void
+  ): void {
+    // Create overlay elements
+    const existing = document.getElementById('level-intro-overlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'level-intro-overlay';
+    overlay.style.cssText = `
+      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      backdrop-filter: blur(0px); background: rgba(0,0,0,0);
+      pointer-events: none; z-index: 9999; opacity: 0;
+    `;
+    const clue = document.createElement('div');
+    clue.textContent = clueText || '';
+    clue.style.cssText = `
+      position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      color: #ffffff; font-family: 'Lilita One', Arial, sans-serif;
+      text-align: center; line-height: 1.1;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.5); opacity: 0;
+    `;
+    overlay.appendChild(clue);
+    document.body.appendChild(overlay);
+
+    const tl = gsap.timeline({ onComplete: () => {
+      overlay.remove();
+      onComplete?.();
+    }});
+
+    // Apply exact font size and width to match gameplay view
+    const fontSize = options?.fontSizePx ?? 32;
+    const widthPx = options?.overlayWidthPx ?? Math.min(window.innerWidth * 0.9, 1000);
+    const holdMs = options?.holdMs ?? 1000;
+    clue.style.fontSize = `${fontSize}px`;
+    clue.style.width = `${Math.floor(widthPx)}px`;
+
+    // Fade/blur in
+    tl.to(overlay, {
+      opacity: 1,
+      duration: 0.2,
+      ease: 'power2.out',
+      onUpdate: () => (window as any).__requestRender?.(),
+    })
+    .to(overlay, {
+      backdropFilter: 'blur(6px)',
+      background: 'rgba(0,0,0,0.35)',
+      duration: 0.25,
+      ease: 'power2.out'
+    }, '<')
+    // Pop clue in
+    .fromTo(clue, {
+      opacity: 0,
+      scale: 0.85,
+    }, {
+      opacity: 1,
+      scale: 1,
+      duration: 0.3,
+      ease: 'back.out(1.6)'
+    })
+    // Hold the centered clue visible for a beat
+    .to(clue, { duration: holdMs / 1000 })
+    // Move clue to its target position while fading blur out
+    .to(clue, {
+      x: targetScreen.x - window.innerWidth / 2,
+      y: targetScreen.y - window.innerHeight / 2,
+      scale: 1,
+      duration: 0.45,
+      ease: 'power3.inOut'
+    })
+    .to(overlay, {
+      opacity: 0,
+      backdropFilter: 'blur(0px)',
+      background: 'rgba(0,0,0,0)',
+      duration: 0.35,
+      ease: 'power2.in'
+    }, '<+0.05');
+  }
   /**
    * Animate removal of input hexes (scale to 0 with stagger), then callback.
    */

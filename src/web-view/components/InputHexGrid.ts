@@ -869,6 +869,18 @@ export class InputHexGrid {
   public getSelectedPositions(): Array<{q: number, r: number}> {
     return [...this.selectedPositions];
   }
+
+  /**
+   * Public: return all input cell keys in drawing order (excluding center).
+   */
+  public getAllInputKeys(): string[] {
+    // Sort by row then q for a simple wave
+    const list = this.cells
+      .filter(c => !(c.q === 0 && c.r === 0) && c.letter)
+      .map(c => ({ key: `input_${c.q},${c.r}`, q: c.q, r: c.r }));
+    list.sort((a, b) => (a.r !== b.r ? a.r - b.r : a.q - b.q));
+    return list.map(i => i.key);
+  }
   
   /**
    * Sets the positions of selected hexes

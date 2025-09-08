@@ -38,6 +38,7 @@ export class HexaWordGame {
   private foundWords: Set<string> = new Set();  // Track found words
   private levelCompleted: boolean = false;  // Ensure completion fires once per level
   private currentClue: string = '';  // Current level clue
+  private introActive: boolean = false; // Hide gameplay clue while intro anim runs
   
   // Default word list - Uncommon Occupations theme
   private defaultWords = [
@@ -97,14 +98,11 @@ export class HexaWordGame {
       this.isInitialized = true;
       this.levelCompleted = false;
       
-      // Initial render with animation
-      this.animationService.animateGameStart(() => {
-        // Notify ready after animation
-        if (this.config.onReady) {
-          this.config.onReady();
-        }
-      });
+      // Initial render
       this.render();
+      // Play level intro
+      await this.playLevelIntro();
+      this.config.onReady?.();
     } catch (error) {
       console.error('Failed to initialize game:', error);
       if (this.config.onError) {
@@ -146,6 +144,7 @@ export class HexaWordGame {
     await this.generateCrossword();
     this.levelCompleted = false;
     this.render();
+    await this.playLevelIntro();
   }
   
   /**
@@ -171,8 +170,6 @@ export class HexaWordGame {
     this.canvas = document.createElement('canvas');
     this.canvas.style.width = '100%';
     this.canvas.style.height = '100%';
-    // Set canvas background explicitly and with priority
-    this.canvas.style.setProperty('background-color', '#141514', 'important');
     this.container.appendChild(this.canvas);
     
     const ctx = this.canvas.getContext('2d', { alpha: false });
@@ -433,12 +430,6 @@ export class HexaWordGame {
     this.canvas.width = rect.width * dpr;
     this.canvas.height = rect.height * dpr;
     this.ctx.scale(dpr, dpr);
-    // Reassert background each render (host may mutate styles)
-    this.canvas.style.setProperty('background-color', '#141514', 'important');
-    
-    // Fill background first
-    this.ctx.fillStyle = '#141514';
-    this.ctx.fillRect(0, 0, rect.width, rect.height);
     
     // Clear canvas
     this.renderer.clear(rect.width, rect.height);
@@ -474,9 +465,10 @@ export class HexaWordGame {
       this.typedWord  // Pass typed word for clear button visibility
     );
     
-    // Render typed word just above input grid
+    // Render typed word centered within the reserved band above the input grid
     if (this.typedWord) {
-      this.renderTypedWord(rect.width, inputGridTop - 25);  // 25px above input grid
+      const typedBaseline = inputGridTop - Math.round(layout.inputTypedBand * 0.5);
+      this.renderTypedWord(rect.width, typedBaseline);
     }
     
     // Render jumping letters animation
@@ -509,37 +501,45 @@ export class HexaWordGame {
     inputHexSize: number;
     inputCenterX: number;
     inputCenterY: number;
+    inputTypedBand: number;
   } {
-    const paddingTop = 60; // Space for title
-    const inputGridHeight = 100; // Reserve space for input grid at bottom
-    const paddingSide = 20;
-    
+    // Spacing guided by 8pt grid (inspired by Apple HIG)
+    const unit = 8;
+    const paddingTop = unit * 8;    // 64px top spacing for title/clue band
+    const paddingSide = unit * 2;   // 16px safe side margins
+    const bottomSafe = unit * 2;    // 16px bottom safe area
+    // Reserve input area proportionally with sensible bounds
+    const inputGridHeight = Math.max(112, Math.min(168, Math.floor(canvasHeight * 0.2)));
+    // Additional reserved band above input grid for typed text and breathing room
+    const inputTypedBand = Math.max(48, Math.floor(canvasHeight * 0.06));
+
     // Calculate space for main grid (leave room for input grid at bottom)
     const gridWidth = canvasWidth - (paddingSide * 2);
-    const gridHeight = canvasHeight - paddingTop - inputGridHeight - 20;
+    const gridAvailHeight = canvasHeight - paddingTop - inputGridHeight - inputTypedBand - bottomSafe;
     
     // Calculate dynamic hex size for main grid
     const hexSize = this.renderer.calculateDynamicHexSize(
       this.board,
       gridWidth,
-      gridHeight * 0.7, // Use 70% of available height for main grid
+      gridAvailHeight * 0.9, // Use 90% of available height for main grid
       5,
       20
     );
     
     // Input grid settings - position at very bottom of canvas
-    const inputHexSize = 20; // Larger for better visibility
+    const inputHexSize = 20; // Input tiles size; independent from main grid spacing
     // The input grid render method now handles positioning relative to its bottom edge
     // We pass the Y coordinate where we want the bottom of the grid to be
-    const inputGridY = canvasHeight - 10; // Bottom edge 10px from screen bottom
+    const inputGridY = canvasHeight - bottomSafe; // Bottom edge aligned to safe area
     
     return {
       hexSize,
       gridCenterX: canvasWidth / 2,
-      gridCenterY: paddingTop + (gridHeight * 0.4), // Position main grid higher
+      gridCenterY: paddingTop + (gridAvailHeight * 0.5), // Balanced center within available band
       inputHexSize,
       inputCenterX: canvasWidth / 2, // Always center horizontally
-      inputCenterY: inputGridY
+      inputCenterY: inputGridY,
+      inputTypedBand
     };
   }
   
@@ -785,14 +785,15 @@ export class HexaWordGame {
    * Renders the clue above the puzzle grid
    */
   private renderClue(centerX: number, centerY: number, layout: any): void {
-    if (!this.currentClue) return;
+    if (!this.currentClue || this.introActive) return;
     
     // Calculate the top of the puzzle grid
     const bounds = this.renderer.calculateBounds(this.board);
     const offset = this.renderer.calculateCenterOffset(bounds);
     
-    // Position clue above the topmost hex with proper spacing
-    const clueY = centerY + offset.y + bounds.minY - 40; // 40px above top of grid
+    // Position clue above the topmost hex with 24px spacing (8pt grid * 3)
+    const unit = 8;
+    const clueY = centerY + offset.y + bounds.minY - unit * 3;
     
     // Get the clue text without "Clue:" prefix
     const clueText = this.currentClue.toUpperCase();
@@ -814,12 +815,25 @@ export class HexaWordGame {
         fontSize -= 1;
       }
     } while (textWidth > maxWidth && fontSize > 12);
+
+    // Reduce final font size by 5px for main gameplay view (as requested)
+    fontSize = Math.max(12, fontSize - 5);
     
     // Add subtle animation or glow effect
     this.ctx.shadowColor = '#00d9ff';
     this.ctx.shadowBlur = 2;
     
-    // Draw clue text with calculated font size
+    // Draw level number above clue
+    const levelLabel = `LEVEL ${this.currentLevel}`;
+    const levelFont = Math.max(10, Math.round(fontSize - 10));
+    this.ctx.fillStyle = '#ffffff';
+    this.ctx.font = `${levelFont}px 'Lilita One', Arial`;
+    this.ctx.textAlign = 'center';
+    this.ctx.textBaseline = 'bottom';
+    const levelY = clueY - (fontSize + 6);
+    this.ctx.fillText(levelLabel, centerX, levelY);
+
+    // Draw clue text with calculated font size (under the level label)
     this.ctx.fillStyle = '#ffffff';
     this.ctx.font = `${fontSize}px 'Lilita One', Arial`;
     this.ctx.textAlign = 'center';
@@ -932,9 +946,24 @@ export class HexaWordGame {
    * Public API: Resets the game
    */
   public async reset(): Promise<void> {
+    // Clear state
+    this.foundWords.clear();
+    this.solvedCells.clear();
+    this.typedWord = '';
+    this.levelCompleted = false;
+
+    // Reset input selections (but don't wipe letters — they will be repopulated)
+    this.inputGrid.clearTypedWord();
+
+    // Kill any lingering animations
+    try { this.animationService.cleanup(); } catch {}
+
+    // Regenerate puzzle with current config/seed/words
     await this.generateCrossword();
-    this.inputGrid.clearLetters();
     this.render();
+
+    // Replay the level intro so all elements are restored consistently
+    await this.playLevelIntro();
   }
   
   /**
@@ -966,6 +995,13 @@ export class HexaWordGame {
   }
 
   /**
+   * Public API: get current clue text
+   */
+  public getClue(): string {
+    return this.currentClue;
+  }
+
+  /**
    * Public API: load a new level with fresh words/seed/clue
    */
   public async loadLevel(data: { words: string[]; seed: string; clue?: string; level?: number }): Promise<void> {
@@ -988,5 +1024,67 @@ export class HexaWordGame {
     this.generator.updateConfig({ seed: this.config.seed, words: data.words });
     await this.generateCrossword(data.words);
     this.render();
+    await this.playLevelIntro();
+  }
+
+  /**
+   * Plays the level-intro sequence: wave-pop cells, blur with centered clue, then settle.
+   */
+  private async playLevelIntro(): Promise<void> {
+    try {
+      this.introActive = true;
+      // 1) Wave-pop puzzle grid
+      const cellKeys: string[] = [];
+      this.board.forEach((cell) => {
+        if (cell.letter) cellKeys.push(`${cell.q},${cell.r}`);
+      });
+      cellKeys.sort((a, b) => {
+        const [aq, ar] = a.split(',').map(Number);
+        const [bq, br] = b.split(',').map(Number);
+        return ar !== br ? ar - br : aq - bq;
+      });
+      await new Promise<void>(res => this.animationService.animateLevelWave(cellKeys, { delayStep: 0, duration: 0.25 }, res));
+
+      // 2) Wave-pop input grid
+      const rect = this.canvas.getBoundingClientRect();
+      const layout = this.calculateLayout(rect.width, rect.height);
+      const inputKeys = this.inputGrid.getAllInputKeys();
+      await new Promise<void>(res => this.animationService.animateInputGridWave(inputKeys, { delayStep: 0, duration: 0.22 }, res));
+
+      // 3) Blur overlay + centered clue → settle to top of puzzle
+      const bounds = this.renderer.calculateBounds(this.board);
+      const offset = this.renderer.calculateCenterOffset(bounds);
+      const unit = 8;
+      const clueY = layout.gridCenterY + offset.y + bounds.minY - unit * 3;
+      const targetScreen = { x: rect.left + layout.gridCenterX, y: rect.top + clueY };
+      // Compute gameplay clue font size to match overlay
+      const maxWidth = rect.width * 0.9;
+      let size = 32;
+      let width = 0;
+      this.ctx.save();
+      do {
+        this.ctx.font = `${size}px 'Lilita One', Arial`;
+        width = this.ctx.measureText(this.currentClue.toUpperCase()).width;
+        if (width > maxWidth) size -= 1;
+      } while (width > maxWidth && size > 12);
+      // Apply -5px adjustment like gameplay view
+      size = Math.max(12, size - 5);
+      this.ctx.restore();
+
+      // Blur overlay + center clue → move to final position
+      this.animationService.animateClueOverlay(
+        this.currentClue,
+        targetScreen,
+        { fontSizePx: size, overlayWidthPx: maxWidth, holdMs: 1000 },
+        () => {
+          // After overlay completes, reveal gameplay clue and redraw
+          this.introActive = false;
+          (window as any).__requestRender?.();
+        }
+      );
+    } catch (e) {
+      console.warn('Level intro animation failed:', e);
+      this.introActive = false;
+    }
   }
 }
