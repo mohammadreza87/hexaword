@@ -957,15 +957,16 @@ export class HexaWordGame {
       }
     } while (textWidth > maxWidth && fontSize > 12);
 
-    // Reduce final font size by 5px for main gameplay view (as requested)
+    // Reduce final font size by 5px for main gameplay view
     fontSize = Math.max(12, fontSize - 5);
     
-    // Add subtle animation or glow effect
-    this.ctx.shadowColor = '#00d9ff';
-    this.ctx.shadowBlur = 2;
+    // Add strong shadow for better readability
+    this.ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    this.ctx.shadowBlur = 3;
+    this.ctx.shadowOffsetY = 1;
 
-    // Draw clue text with calculated font size
-    this.ctx.fillStyle = '#ffffff';
+    // Draw clue text in pure white
+    this.ctx.fillStyle = '#FFFFFF';
     this.ctx.font = `${fontSize}px 'Lilita One', Arial`;
     this.ctx.textAlign = 'center';
     this.ctx.textBaseline = 'bottom';
@@ -991,11 +992,19 @@ export class HexaWordGame {
       this.ctx.translate(-centerX, -y);
     }
     
-    this.ctx.fillStyle = '#00d9ff';
+    // Use pure white with strong shadow
+    this.ctx.save();
+    this.ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    this.ctx.shadowBlur = 3;
+    this.ctx.shadowOffsetY = 1;
+    
+    // Pure white for typed word
+    this.ctx.fillStyle = '#FFFFFF';
     this.ctx.font = "20px 'Lilita One', Arial";
     this.ctx.textAlign = 'center';
     this.ctx.textBaseline = 'middle';
     this.ctx.fillText(this.typedWord.toUpperCase(), canvasWidth / 2, y);
+    this.ctx.restore();
 
     // Capture exact per-letter screen positions for later animations
     try {

@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HexaWord Color Palette Demo</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #0A0B0F;
+            color: #E6ECF2;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #E6ECF2;
+            margin-bottom: 30px;
+        }
+        
+        .controls {
+            text-align: center;
+            margin-bottom: 30px;
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .controls button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background: #F054A5;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .controls button:hover {
+            opacity: 0.8;
+        }
+        
+        .level-display {
+            font-size: 24px;
+            font-weight: bold;
+        }
+        
+        .palette-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        
+        .palette-card {
+            background: #1A1F2B;
+            border-radius: 10px;
+            padding: 20px;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .palette-card.active {
+            transform: scale(1.05);
+            box-shadow: 0 0 30px rgba(240, 84, 165, 0.5);
+            border: 2px solid;
+        }
+        
+        .palette-name {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .level-range {
+            font-size: 14px;
+            color: #888;
+            margin-bottom: 15px;
+        }
+        
+        .color-row {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 10px;
+            height: 40px;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        
+        .color-swatch {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 11px;
+            font-weight: bold;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+        }
+        
+        .preview {
+            margin-top: 20px;
+            padding: 20px;
+            background: #0A0B0F;
+            border-radius: 10px;
+        }
+        
+        .preview-title {
+            font-size: 16px;
+            margin-bottom: 15px;
+            opacity: 0.8;
+        }
+        
+        .hex-preview {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        .hex-cell {
+            width: 60px;
+            height: 60px;
+            clip-path: polygon(30% 0%, 70% 0%, 100% 50%, 70% 100%, 30% 100%, 0% 50%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 20px;
+            transition: all 0.3s;
+        }
+        
+        .hex-cell:hover {
+            transform: scale(1.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎨 HexaWord Color Palette System</h1>
+        <p style="text-align: center; opacity: 0.8; margin-bottom: 30px;">
+            The game changes color palettes every 5 levels to keep the visual experience fresh!
+        </p>
+        
+        <div class="controls">
+            <button onclick="changeLevel(-5)">← Previous Palette</button>
+            <div class="level-display">Level <span id="currentLevel">1</span></div>
+            <button onclick="changeLevel(5)">Next Palette →</button>
+            <button onclick="toggleTheme()">Toggle Theme</button>
+        </div>
+        
+        <div class="palette-grid" id="paletteGrid"></div>
+    </div>
+    
+    <script type="module">
+        // Import the color palette configuration
+        const COLOR_PALETTES = [
+            { name: "Vibrant Neon", colors: ["#F054A5", "#FABF37", "#7b88fa", "#f3ff48", "#000a5c"], levels: "1-5" },
+            { name: "Mint Fresh", colors: ["#7AFDD6", "#77FF94", "#ED6A5A", "#613F75", "#FFE1C6"], levels: "6-10" },
+            { name: "Purple Cascade", colors: ["#A682FF", "#715AFF", "#5887FF", "#55C1FF", "#102E4A"], levels: "11-15" },
+            { name: "Sunset Bloom", colors: ["#FEE440", "#FCA17D", "#DA627D", "#9A348E", "#AFE3C0"], levels: "16-20" },
+            { name: "Royal Garden", colors: ["#540D6E", "#DC2E3F", "#FFD23F", "#F6E8EA", "#97EAD2"], levels: "21-25" },
+            { name: "Rose Gradient", colors: ["#F7B2B7", "#F7717D", "#DE639A", "#7F2982", "#16001E"], levels: "26-30" },
+            { name: "Ocean Depths", colors: ["#08415C", "#388697", "#B5FFE1", "#DAD4EF", "#FC6471"], levels: "31-35" },
+            { name: "Mystic Forest", colors: ["#5603AD", "#DCD6F7", "#EEE3AB", "#E86252", "#21897E"], levels: "36-40" },
+            { name: "Electric Dreams", colors: ["#4C1A57", "#FF3CC7", "#F0F600", "#00E5E8", "#007C77"], levels: "41-45" },
+            { name: "Coffee Shop", colors: ["#F3E9DC", "#C08552", "#5E3023", "#895737", "#DAB49D"], levels: "46-50" },
+            { name: "Urban Rose", colors: ["#F7C1BB", "#885A5A", "#353A47", "#84B082", "#DC136C"], levels: "51-55" },
+            { name: "Aqua Symphony", colors: ["#048A81", "#06D6A0", "#54C6EB", "#8A89C0", "#CDA2AB"], levels: "56-60" },
+            { name: "Dusty Rose", colors: ["#916953", "#CF8E80", "#FCB5B5", "#FCDDF2", "#FAF6F6"], levels: "61-65" },
+            { name: "Violet Sky", colors: ["#5603AD", "#DCD6F7", "#EEE3AB", "#E86252", "#4381C1"], levels: "66-70" },
+            { name: "Galaxy Gradient", colors: ["#360568", "#5B2A86", "#7785AC", "#9AC6C5", "#A5E6BA"], levels: "71-75" },
+            { name: "Desert Sunset", colors: ["#E88D67", "#E9CE2C", "#C0E6DE", "#7B8CDE", "#02182B"], levels: "76-80" },
+            { name: "Candy Floss", colors: ["#FFC6D9", "#FFE1C6", "#FFF7AE", "#48284A", "#916C80"], levels: "81-85" },
+            { name: "Midnight Fire", colors: ["#002642", "#840032", "#E59500", "#E5DADA", "#02040F"], levels: "86-90" },
+            { name: "Neon Jungle", colors: ["#52E0D0", "#ED1D7A", "#282A3E", "#FF7033", "#ADFFAD"], levels: "91-95" },
+            { name: "Lavender Dreams", colors: ["#9B97B2", "#D8A7CA", "#36F1CD", "#C7B8EA", "#F6F930"], levels: "96-100" },
+            { name: "Cyber Punk", colors: ["#21FFA5", "#FF85F5", "#7A21FF", "#0000F6", "#B6B6B6"], levels: "101-105" },
+            { name: "Miami Vice", colors: ["#2A1E5C", "#FF47A4", "#ff4343", "#2FEEC8", "#F4E4BA"], levels: "106-110" },
+            { name: "Autumn Blaze", colors: ["#582707", "#CD3600", "#FF4B3E", "#FFB20F", "#FDFF31"], levels: "111-115" },
+            { name: "Coral Reef", colors: ["#FF5B3D", "#FF9679", "#FFC3D4", "#B2FC52", "#3DFF81"], levels: "116-120" },
+            { name: "Royal Purple", colors: ["#7404CE", "#F7567C", "#FFE6B7", "#140092", "#FFDB2B"], levels: "121-125" },
+            { name: "Violet Storm", colors: ["#FF3D3D", "#7D3DFF", "#D7C3FF", "#FFABAB", "#D8FF63"], levels: "126-130" },
+            { name: "Electric Lime", colors: ["#D7FF1F", "#AC8FFF", "#27D7FF", "#FFCAD4", "#FF8251"], levels: "131-135" },
+            { name: "Deep Space", colors: ["#27187E", "#758BFD", "#9EC7FF", "#F1F2F6", "#FFAE00"], levels: "136-140" },
+            { name: "Miami Nights", colors: ["#00D1E8", "#FF5A5F", "#A38CFF", "#4343FF", "#4343FF"], levels: "141-145" },
+            { name: "Forest Fire", colors: ["#A40027", "#FF9332", "#F8F4A6", "#ABFFA2", "#3545FF"], levels: "146-150" }
+        ];
+        
+        let currentLevel = 1;
+        let isDarkTheme = true;
+        
+        function getPaletteIndex(level) {
+            return Math.floor((level - 1) / 5) % COLOR_PALETTES.length;
+        }
+        
+        function renderPalettes() {
+            const grid = document.getElementById('paletteGrid');
+            const activePaletteIndex = getPaletteIndex(currentLevel);
+            
+            grid.innerHTML = COLOR_PALETTES.map((palette, index) => {
+                const isActive = index === activePaletteIndex;
+                const borderColor = isActive ? palette.colors[0] : 'transparent';
+                
+                return `
+                    <div class="palette-card ${isActive ? 'active' : ''}" style="border-color: ${borderColor}">
+                        <div class="palette-name" style="color: ${palette.colors[0]}">${palette.name}</div>
+                        <div class="level-range">Levels ${palette.levels}</div>
+                        <div class="color-row">
+                            ${palette.colors.map(color => 
+                                `<div class="color-swatch" style="background: ${color}">${color}</div>`
+                            ).join('')}
+                        </div>
+                        <div class="preview">
+                            <div class="preview-title">Game Elements Preview:</div>
+                            <div class="hex-preview">
+                                <div class="hex-cell" style="background: ${palette.colors[4] || '#1A1F2B'}; border: 2px solid ${palette.colors[3]}; color: white">A</div>
+                                <div class="hex-cell" style="background: ${palette.colors[1]}; color: ${isDarkTheme ? 'white' : '#1A1F2B'}">B</div>
+                                <div class="hex-cell" style="background: ${palette.colors[2]}; color: white">✓</div>
+                                <div class="hex-cell" style="background: ${palette.colors[0]}; color: white">×</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            document.getElementById('currentLevel').textContent = currentLevel;
+        }
+        
+        window.changeLevel = function(delta) {
+            currentLevel = Math.max(1, Math.min(150, currentLevel + delta));
+            renderPalettes();
+        }
+        
+        window.toggleTheme = function() {
+            isDarkTheme = !isDarkTheme;
+            document.body.style.background = isDarkTheme ? '#0A0B0F' : '#F8F9FB';
+            document.body.style.color = isDarkTheme ? '#E6ECF2' : '#1F2430';
+            renderPalettes();
+        }
+        
+        // Initial render
+        renderPalettes();
+    </script>
+</body>
+</html>

@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HexaWord - Colormind Dynamic Palettes</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #000a5c;
+            color: #FFFFFF;
+            padding: 20px;
+            transition: background 0.5s ease;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+        
+        .subtitle {
+            text-align: center;
+            opacity: 0.8;
+            margin-bottom: 30px;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 40px;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            backdrop-filter: blur(10px);
+        }
+        
+        button:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+        
+        .status {
+            text-align: center;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .palette-display {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .colors-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            height: 100px;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .color-block {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            transition: transform 0.3s;
+        }
+        
+        .color-block:hover {
+            transform: scale(1.05);
+            z-index: 1;
+        }
+        
+        .hex-grid {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 30px;
+        }
+        
+        .hex-cell {
+            width: 80px;
+            height: 80px;
+            clip-path: polygon(30% 0%, 70% 0%, 100% 50%, 70% 100%, 30% 100%, 0% 50%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        
+        .hex-cell.regular {
+            background: rgba(255, 255, 255, 0.08);
+            border: 2px solid rgba(255, 255, 255, 0.15);
+        }
+        
+        .hex-cell.intersection {
+            background: rgba(255, 255, 255, 0.08);
+            border: 3px solid var(--intersection-color);
+            box-shadow: 0 0 20px var(--intersection-color);
+        }
+        
+        .hex-cell.solved {
+            background: var(--solved-color);
+            border: 2px solid var(--solved-stroke);
+        }
+        
+        .hex-cell:hover {
+            transform: scale(1.1) rotate(5deg);
+        }
+        
+        .info-box {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        
+        .loading {
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎨 Colormind Dynamic Palettes</h1>
+        <p class="subtitle">Generating unique, harmonious color palettes for each level using AI</p>
+        
+        <div class="controls">
+            <button onclick="generatePalette()">🎲 Generate New Palette</button>
+            <button onclick="toggleSource()">🔄 Toggle: <span id="sourceText">Colormind API</span></button>
+            <button onclick="changeLevel(-5)">⬅ Previous Level Set</button>
+            <button onclick="changeLevel(5)">➡ Next Level Set</button>
+        </div>
+        
+        <div class="status" id="status">
+            Level: <strong id="levelDisplay">1</strong> | 
+            Source: <strong id="sourceDisplay">Colormind API</strong> | 
+            <span id="loadingStatus">Ready</span>
+        </div>
+        
+        <div class="palette-display">
+            <h3>Current Palette</h3>
+            <div class="colors-row" id="colorsRow">
+                <div class="color-block">Loading...</div>
+            </div>
+            
+            <h3>Game Preview</h3>
+            <div class="hex-grid">
+                <div class="hex-cell regular">A</div>
+                <div class="hex-cell intersection">B</div>
+                <div class="hex-cell regular">C</div>
+                <div class="hex-cell solved">✓</div>
+                <div class="hex-cell regular">D</div>
+                <div class="hex-cell intersection">E</div>
+                <div class="hex-cell regular">F</div>
+            </div>
+            
+            <div class="info-box">
+                <p><strong>How it works:</strong></p>
+                <ul style="margin-left: 20px; margin-top: 10px;">
+                    <li>Colormind AI generates harmonious 5-color palettes</li>
+                    <li>Darkest color becomes the background</li>
+                    <li>Cells use glassmorphism (semi-transparent white)</li>
+                    <li>Intersection cells get colored outlines</li>
+                    <li>Palettes change every 5 levels automatically</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    
+    <script type="module">
+        let currentLevel = 1;
+        let useColormind = true;
+        let currentPalette = null;
+        
+        // Fallback palettes
+        const FALLBACK_PALETTES = [
+            ["#F054A5", "#FABF37", "#7b88fa", "#f3ff48", "#000a5c"],
+            ["#7AFDD6", "#77FF94", "#ED6A5A", "#613F75", "#FFE1C6"],
+            ["#A682FF", "#715AFF", "#5887FF", "#55C1FF", "#102E4A"],
+        ];
+        
+        function findDarkestColor(colors) {
+            let darkest = colors[0];
+            let lowestBrightness = 255 * 3;
+            
+            for (const color of colors) {
+                const hex = color.replace(/^#/, '');
+                const r = parseInt(hex.substr(0, 2), 16);
+                const g = parseInt(hex.substr(2, 2), 16);
+                const b = parseInt(hex.substr(4, 2), 16);
+                const brightness = r + g + b;
+                
+                if (brightness < lowestBrightness) {
+                    lowestBrightness = brightness;
+                    darkest = color;
+                }
+            }
+            
+            return darkest;
+        }
+        
+        async function generatePalette() {
+            const statusEl = document.getElementById('loadingStatus');
+            statusEl.textContent = 'Generating...';
+            statusEl.classList.add('loading');
+            
+            try {
+                if (useColormind) {
+                    // Try Colormind API (would need proxy in production)
+                    const seedPatterns = [
+                        ['N', 'N', 'N', 'N', 'N'],
+                        [[255, 107, 107], 'N', 'N', 'N', 'N'],
+                        ['N', [78, 205, 196], 'N', 'N', 'N'],
+                        ['N', 'N', [149, 231, 126], 'N', 'N'],
+                    ];
+                    
+                    const paletteIndex = Math.floor((currentLevel - 1) / 5);
+                    const seedIndex = paletteIndex % seedPatterns.length;
+                    const input = seedPatterns[seedIndex];
+                    
+                    // Simulate API call (in real app, this would call the proxy)
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    
+                    // For demo, generate random colors
+                    const colors = [];
+                    for (let i = 0; i < 5; i++) {
+                        const r = Math.floor(Math.random() * 256);
+                        const g = Math.floor(Math.random() * 256);
+                        const b = Math.floor(Math.random() * 256);
+                        colors.push(`#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`);
+                    }
+                    currentPalette = colors;
+                } else {
+                    // Use fallback palette
+                    const paletteIndex = Math.floor((currentLevel - 1) / 5) % FALLBACK_PALETTES.length;
+                    currentPalette = FALLBACK_PALETTES[paletteIndex];
+                }
+                
+                displayPalette(currentPalette);
+                statusEl.textContent = 'Ready';
+                statusEl.classList.remove('loading');
+                
+            } catch (error) {
+                console.error('Error generating palette:', error);
+                statusEl.textContent = 'Error - Using Fallback';
+                statusEl.classList.remove('loading');
+                
+                // Use fallback
+                const paletteIndex = Math.floor((currentLevel - 1) / 5) % FALLBACK_PALETTES.length;
+                currentPalette = FALLBACK_PALETTES[paletteIndex];
+                displayPalette(currentPalette);
+            }
+        }
+        
+        function displayPalette(colors) {
+            // Update background with darkest color
+            const darkest = findDarkestColor(colors);
+            document.body.style.background = darkest;
+            
+            // Display color blocks
+            const colorsRow = document.getElementById('colorsRow');
+            colorsRow.innerHTML = colors.map(color => 
+                `<div class="color-block" style="background: ${color}">${color}</div>`
+            ).join('');
+            
+            // Update CSS variables for game preview
+            document.documentElement.style.setProperty('--intersection-color', colors[1]);
+            document.documentElement.style.setProperty('--solved-color', colors[2]);
+            document.documentElement.style.setProperty('--solved-stroke', colors[2]);
+        }
+        
+        function toggleSource() {
+            useColormind = !useColormind;
+            document.getElementById('sourceText').textContent = useColormind ? 'Colormind API' : 'Static Palettes';
+            document.getElementById('sourceDisplay').textContent = useColormind ? 'Colormind API' : 'Static Palettes';
+            generatePalette();
+        }
+        
+        function changeLevel(delta) {
+            currentLevel = Math.max(1, currentLevel + delta);
+            document.getElementById('levelDisplay').textContent = currentLevel;
+            generatePalette();
+        }
+        
+        // Initialize
+        generatePalette();
+    </script>
+</body>
+</html>

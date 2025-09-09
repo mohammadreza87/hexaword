@@ -28,6 +28,17 @@ export class AnimationService {
     }
     return AnimationService.instance;
   }
+  
+  /**
+   * Get current palette colors from window
+   */
+  private getCurrentColors(): any {
+    return (window as any).__currentColors || {
+      accent: '#00d9ff',
+      solved: '#00ff00',
+      text: '#FFFFFF'
+    };
+  }
 
   /**
    * Enable/disable reduced motion by adjusting global timescale.
@@ -456,9 +467,16 @@ export class AnimationService {
     if (inputHexPositions && inputHexPositions.length > 0) {
       console.log('Animating input hexes in order:', inputHexPositions.map((pos, i) => `${i}: (${pos.q},${pos.r})`));
       
+      // Get current colors from palette
+      const currentColors = this.getCurrentColors();
+      
       inputHexPositions.forEach((pos, index) => {
         const hexKey = `${pos.q},${pos.r}`;
-        const hexElement = { green: 0, scale: 1 };
+        const hexElement = { 
+          green: 0, 
+          scale: 1,
+          color: currentColors.solved // Store solved color for blinking
+        };
         
         (window as any).__greenInputHexes = (window as any).__greenInputHexes || {};
         (window as any).__greenInputHexes[hexKey] = hexElement;
@@ -498,6 +516,8 @@ export class AnimationService {
     // Create letter objects
     letters.forEach((letter, index) => {
       const start = Array.isArray(sourcePos) ? sourcePos[index] : sourcePos;
+      // Get accent color from current palette
+      const currentColors = this.getCurrentColors();
       const jumpLetter = {
         letter: letter,
         x: start.x,
@@ -505,7 +525,7 @@ export class AnimationService {
         scale: 1,
         opacity: 1,
         rotation: 0,
-        color: '#00d9ff'
+        color: currentColors.accent // Use accent color from palette
       };
       jumpLetters.push(jumpLetter);
       (window as any).__jumpingLetters = (window as any).__jumpingLetters || [];

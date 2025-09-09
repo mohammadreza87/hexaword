@@ -52,7 +52,15 @@ export class HexRenderer {
     this.config.fillColor = this.currentColors.cellFill;
     this.config.strokeColor = this.currentColors.cellStroke;
     this.config.intersectionColor = this.currentColors.intersectionColor;
-    this.config.textColor = this.currentColors.text;
+    this.config.intersectionStroke = this.currentColors.intersectionStroke;
+    this.config.solvedColor = this.currentColors.solvedColor;
+    this.config.solvedStroke = this.currentColors.solvedStroke;
+    this.config.textColor = this.currentColors.letterColor;
+    this.config.backgroundColor = this.currentColors.background;
+    
+    // Store all colors globally for animations
+    (window as any).__currentColors = this.currentColors;
+    (window as any).__currentTextColor = this.currentColors.text;
   }
   
   /**
@@ -87,7 +95,7 @@ export class HexRenderer {
    */
   clear(width: number, height: number): void {
     // Fill with background color from current palette
-    this.ctx.fillStyle = this.currentColors?.background || '#141514';
+    this.ctx.fillStyle = this.currentColors?.background || '#0A0B0F';
     this.ctx.fillRect(0, 0, width, height);
   }
 
@@ -166,7 +174,7 @@ export class HexRenderer {
   }
 
   /**
-   * Draws the hexagon shape with smooth color transitions
+   * Draws the hexagon shape with glassmorphism effect
    */
   private drawHexagon(
     hex: any, 
@@ -207,18 +215,19 @@ export class HexRenderer {
     // Apply glow effect if present
     if (glowAmount > 0) {
       this.ctx.save();
-      this.ctx.shadowColor = '#00ff00';
+      this.ctx.shadowColor = this.currentColors?.accent || '#00ff00';
       this.ctx.shadowBlur = 20 * glowAmount;
     }
     
-    // Fill - blend between normal and green based on greenAmount
+    // Fill - darker cells for better text contrast
     if (green > 0) {
-      // Interpolate colors
-      const normalColor = this.config.fillColor;
-      const greenColor = '#2d5a2d';
-      this.ctx.fillStyle = this.blendColors(normalColor, greenColor, green);
+      // Blend to solved color (darker version for contrast)
+      const normalColor = this.currentColors?.cellFill || 'rgba(0, 0, 0, 0.3)';
+      const solvedColor = this.currentColors?.solvedColor || '#2d5a2d';
+      this.ctx.fillStyle = this.blendColors(normalColor, solvedColor, green);
     } else {
-      this.ctx.fillStyle = this.config.fillColor;
+      // Dark cells for better text contrast
+      this.ctx.fillStyle = this.currentColors?.cellFill || 'rgba(0, 0, 0, 0.3)';
     }
     this.ctx.fill();
     
@@ -227,17 +236,20 @@ export class HexRenderer {
       this.ctx.restore();
     }
     
-    // Stroke - base outline
+    // Stroke - colored outline only for intersections, subtle white for others
     if (green > 0) {
-      const normalStroke = isIntersection ? this.config.intersectionColor : this.config.strokeColor;
-      this.ctx.strokeStyle = this.blendColors(normalStroke, '#00ff00', green);
-      this.ctx.lineWidth = 1 + green; // Slightly thicker when green
+      // Solved state
+      const solvedStroke = this.currentColors?.solvedStroke || '#00ff00';
+      this.ctx.strokeStyle = solvedStroke;
+      this.ctx.lineWidth = 1.5 + (green * 0.5);
     } else if (isIntersection) {
-      this.ctx.strokeStyle = this.config.intersectionColor;
-      this.ctx.lineWidth = 2; // make more prominent
+      // Only intersection cells get colored outline
+      this.ctx.strokeStyle = this.currentColors?.intersectionStroke || this.config.intersectionColor;
+      this.ctx.lineWidth = 2;
     } else {
-      this.ctx.strokeStyle = this.config.strokeColor;
-      this.ctx.lineWidth = 1;
+      // Regular cells get subtle border
+      this.ctx.strokeStyle = this.currentColors?.cellStroke || 'rgba(255, 255, 255, 0.08)';
+      this.ctx.lineWidth = 0.5;
     }
     this.ctx.stroke();
   }
@@ -246,38 +258,43 @@ export class HexRenderer {
    * Draw an extra, inner outline for shared-letter cells to guarantee visibility.
    */
   private drawIntersectionOutline(hex: any, offsetX: number, offsetY: number): void {
-    const innerScale = 0.88; // slightly smaller inner ring
-    const corners = hex.corners;
-    const centerX = hex.x + offsetX;
-    const centerY = hex.y + offsetY;
-
-    this.ctx.save();
-    this.ctx.beginPath();
-    corners.forEach((corner: any, i: number) => {
-      const innerX = centerX + (corner.x - hex.x) * innerScale;
-      const innerY = centerY + (corner.y - hex.y) * innerScale;
-      if (i === 0) this.ctx.moveTo(innerX, innerY); else this.ctx.lineTo(innerX, innerY);
-    });
-    this.ctx.closePath();
-    // High-contrast stroke independent of green blending
-    this.ctx.strokeStyle = this.currentColors?.intersectionColor || '#00d9ff';
-    this.ctx.lineWidth = 1.5;
-    // Subtle glow to help visibility on dark backgrounds
-    this.ctx.shadowColor = this.ctx.strokeStyle as string;
-    this.ctx.shadowBlur = 4;
-    this.ctx.stroke();
-    this.ctx.restore();
+    // Skip the inner outline - we're handling it in drawHexagon now
+    // Intersection cells already have their colored outline from the main stroke
+    return;
   }
 
   /**
    * Draws a letter in the center of a hex
    */
   private drawLetter(letter: string, x: number, y: number, isSolved: boolean = false): void {
-    this.ctx.fillStyle = isSolved ? (this.currentColors?.solvedColor || '#00ff00') : this.config.textColor;
+    // Always use pure white for maximum contrast on dark cells
+    this.ctx.fillStyle = '#FFFFFF';
     this.ctx.font = `${Math.floor(this.config.hexSize * 0.8)}px 'Lilita One', ${this.config.fontFamily}`;
     this.ctx.textAlign = 'center';
     this.ctx.textBaseline = 'middle';
+    
+    // Add strong shadow for better readability
+    this.ctx.save();
+    this.ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    this.ctx.shadowBlur = 3;
+    this.ctx.shadowOffsetX = 0;
+    this.ctx.shadowOffsetY = 1;
+    
     this.ctx.fillText(letter.toUpperCase(), x, y);
+    
+    this.ctx.restore();
+  }
+  
+  /**
+   * Check if a color is light
+   */
+  private isLightColor(color: string): boolean {
+    const hex = color.replace('#', '');
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance > 0.5;
   }
 
   /**

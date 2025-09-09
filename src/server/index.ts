@@ -13,6 +13,7 @@ import {
 } from "@devvit/web/server";
 import { createPost } from "./core/post";
 import { gameRouter } from "./routes/game";
+import colormindRouter from "./routes/colormind";
 import { requestLogger, errorHandler, Logger, asyncHandler } from "./middleware/errorHandler";
 
 const app = express();
@@ -138,6 +139,7 @@ router.post("/internal/menu/post-create", async (_req, res): Promise<void> => {
 
 app.use(router);
 app.use(gameRouter);
+app.use(colormindRouter);
 
 // Error handler middleware (must be last)
 app.use(errorHandler);

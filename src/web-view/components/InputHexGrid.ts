@@ -295,9 +295,13 @@ export class InputHexGrid {
           this.ctx.translate(-x, -y);
         }
         
-        // Only show clear button when there's typed text
-        this.ctx.fillStyle = this.currentColors?.accent || '#ff4444'; // Clear button uses accent color
-        this.ctx.fill();
+        // Clear button - no fill, just show the X symbol
+        // Don't fill the background unless it's being hovered/animated
+        if (clearAnimState && clearAnimState.scale > 1) {
+          // Only fill when animating (being clicked)
+          this.ctx.fillStyle = `rgba(255, 255, 255, ${0.1 * (clearAnimState.scale - 1)})`;
+          this.ctx.fill();
+        }
         
         if (clearAnimState) {
           this.ctx.restore();
@@ -317,20 +321,21 @@ export class InputHexGrid {
             this.ctx.translate(-x, -y);
           }
           
-          // Blend between normal color and green
-          const normalColor = this.currentColors?.inputCellFill || '#3a4558';
+          // Blend between normal color and solved color from palette
+          const normalColor = this.currentColors?.inputCellFill || 'rgba(0, 0, 0, 0.2)';
+          const solvedColor = greenInputState.color || this.currentColors?.solved || '#00ff00';
           const greenIntensity = greenInputState.green;
           
-          // Draw with green blend
-          this.ctx.fillStyle = this.blendColors(normalColor, '#00ff00', greenIntensity);
+          // Draw with solved color blend
+          this.ctx.fillStyle = this.blendColors(normalColor, solvedColor, greenIntensity);
           this.ctx.fill();
           
-          // Add green glow effect
+          // Add solved glow effect using palette colors
           if (greenIntensity > 0) {
             this.ctx.save();
-            this.ctx.shadowColor = '#00ff00';
+            this.ctx.shadowColor = solvedColor;
             this.ctx.shadowBlur = 20 * greenIntensity;
-            this.ctx.strokeStyle = this.currentColors?.solvedColor || '#00ff00';
+            this.ctx.strokeStyle = solvedColor;
             this.ctx.globalAlpha = greenIntensity * 0.5;
             this.ctx.lineWidth = 2;
             this.ctx.stroke();
@@ -341,34 +346,56 @@ export class InputHexGrid {
             this.ctx.restore();
           }
         } else {
-          // Normal cells with letters - add glow effect if animated
-          if (animState?.glow) {
-            this.ctx.shadowColor = '#00d9ff';
-            this.ctx.shadowBlur = 10 * animState.glow;
+          // Fill cell based on state
+          if (isActive) {
+            // Active cell gets accent color fill with transparency
+            const accentColor = this.currentColors?.accent || '#00d9ff';
+            // Parse hex to RGB and add transparency
+            const hex = accentColor.replace('#', '');
+            const r = parseInt(hex.substr(0, 2), 16);
+            const g = parseInt(hex.substr(2, 2), 16);
+            const b = parseInt(hex.substr(4, 2), 16);
+            this.ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.15)`;
+            this.ctx.fill();
+            
+            // Add glow effect
+            this.ctx.save();
+            this.ctx.shadowColor = accentColor;
+            this.ctx.shadowBlur = 15;
+            this.ctx.strokeStyle = accentColor;
+            this.ctx.lineWidth = 2;
+            this.ctx.stroke();
+            this.ctx.restore();
+            
+          } else if (isUsed) {
+            // Used letters have very subtle dark fill
+            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+            this.ctx.fill();
+            
+            // Subtle stroke
+            this.ctx.strokeStyle = this.currentColors?.inputCellStroke || 'rgba(255, 255, 255, 0.04)';
+            this.ctx.lineWidth = 1;
+            this.ctx.stroke();
+            
+          } else {
+            // Normal input cells - darker fill
+            this.ctx.fillStyle = this.currentColors?.inputCellFill || 'rgba(0, 0, 0, 0.2)';
+            this.ctx.fill();
+            
+            // Subtle stroke
+            this.ctx.strokeStyle = this.currentColors?.inputCellStroke || 'rgba(255, 255, 255, 0.06)';
+            this.ctx.lineWidth = 1;
+            this.ctx.stroke();
           }
           
-          // Different color for used letters
-          if (isUsed && !isActive) {
-            this.ctx.fillStyle = this.currentColors?.primary || '#1a1f2e'; // Darker color for used letters
-            this.ctx.fill();
-            // Add subtle disabled effect
-            this.ctx.save();
-            this.ctx.globalAlpha = 0.3;
-            this.ctx.fillStyle = this.currentColors?.background || '#000000';
-            this.ctx.fill();
-            this.ctx.restore();
-          } else {
-            this.ctx.fillStyle = this.currentColors?.inputCellFill || '#3a4558';
-            this.ctx.fill();
-          }
-
-          // Highlight active cell with glow outline
-          if (isActive) {
+          // Animation glow if present
+          if (animState?.glow) {
             this.ctx.save();
             this.ctx.shadowColor = this.currentColors?.accent || '#00d9ff';
-            this.ctx.shadowBlur = 14;
+            this.ctx.shadowBlur = 15 * animState.glow;
+            this.ctx.globalAlpha = animState.glow * 0.5;
             this.ctx.strokeStyle = this.currentColors?.accent || '#00d9ff';
-            this.ctx.lineWidth = 2.5;
+            this.ctx.lineWidth = 1.5;
             this.ctx.stroke();
             this.ctx.restore();
           }
@@ -388,7 +415,7 @@ export class InputHexGrid {
       // Add letter or X for center cell
       if (isCenterCell && this.typedWord.length > 0) {
         // Only show X when there's typed text
-        this.ctx.fillStyle = this.currentColors?.text || '#ffffff';
+        this.ctx.fillStyle = '#FFFFFF'; // Pure white for clear button
         this.ctx.font = `${Math.floor(size * 0.9)}px 'Lilita One', Arial`;
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
@@ -398,13 +425,27 @@ export class InputHexGrid {
         // Check if this letter has been used
         const isUsed = this.usedLetters.has(`${cell.q},${cell.r}`);
         const isActive = !!this.activeCell && this.activeCell.q === cell.q && this.activeCell.r === cell.r;
-        // Dimmed text for used letters
-        const dimmedColor = this.colorPaletteService.adjustForContrast('#666666', this.currentColors?.background || '#141514', 3.0);
-        this.ctx.fillStyle = (isUsed && !isActive) ? dimmedColor : (this.currentColors?.text || '#ffffff');
+        
+        // Add shadow for better readability
+        this.ctx.save();
+        this.ctx.shadowColor = 'rgba(0,0,0,0.4)';
+        this.ctx.shadowBlur = 2;
+        this.ctx.shadowOffsetY = 1;
+        
+        // Always use pure white for maximum contrast
+        this.ctx.fillStyle = '#FFFFFF';
+        if (isUsed && !isActive) {
+          this.ctx.globalAlpha = 0.3; // Dimmed for used letters
+        } else if (isActive) {
+          this.ctx.globalAlpha = 1; // Full opacity for active
+        }
+        
         this.ctx.font = `${Math.floor(size * 0.8)}px 'Lilita One', Arial`;
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
         this.ctx.fillText(cell.letter.toUpperCase(), x, y);
+        
+        this.ctx.restore();
       }
       
       // Restore context if animation was applied
