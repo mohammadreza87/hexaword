@@ -5,7 +5,9 @@ gsap.registerPlugin(Physics2DPlugin);
 import { fetchGameDataWithFallback } from './services/api';
 import './styles/tokens.css';
 import './styles/tailwind.css';
-import { blurGameContainer } from './utils/ui';
+import { blurGameContainer, animateGameBlur } from './utils/ui';
+import { blurTransition } from './services/BlurTransitionService';
+import { loadLocalProgress, saveLocalProgress, fetchRemoteProgress, saveRemoteProgress, mergeProgress, Progress as HWProgress } from './services/progress';
 
 console.log('HexaWord Crossword Generator v4.0 - Modular Architecture');
 
@@ -20,6 +22,17 @@ class App {
   
   constructor() {
     this.initialize();
+  }
+
+  // Update the single menu button label to reflect current level
+  private updateMenuProgress(p: HWProgress): void {
+    const el = document.getElementById('hw-main-menu');
+    if (!el) return;
+    const levelBtn = el.querySelector('#hw-level') as HTMLButtonElement | null;
+    if (levelBtn) {
+      const lvl = Math.max(1, p?.level ?? this.currentLevel ?? 1);
+      levelBtn.textContent = `Level ${lvl}`;
+    }
   }
   
   private async initialize(): Promise<void> {
@@ -52,6 +65,17 @@ class App {
     
     // Show Main Menu (do not create game until Play)
     this.ensureMainMenu();
+    // Hydrate progress (remote + local) for Continue button
+    try {
+      const localP = loadLocalProgress();
+      const remoteP = await fetchRemoteProgress();
+      const merged = mergeProgress(localP, remoteP);
+      if (merged) {
+        saveLocalProgress(merged);
+        this.currentLevel = Math.max(1, merged.level);
+        this.updateMenuProgress(merged);
+      }
+    } catch {}
     this.showMainMenu();
   }
 
@@ -115,7 +139,7 @@ class App {
         <div class="text-sm text-hw-text-secondary mt-1">Main Menu</div>
       </div>
       <div class="flex flex-col gap-3 my-4">
-        <button id="hw-play" class="btn-glass-primary py-3 text-lg">Play</button>
+        <button id="hw-level" class="btn-glass-primary py-3 text-lg">Level 1</button>
         <button disabled class="btn-glass opacity-50 cursor-not-allowed py-3">Daily Challenge (soon)</button>
         <button disabled class="btn-glass opacity-50 cursor-not-allowed py-3">Make Your Level (soon)</button>
         <button disabled class="btn-glass opacity-50 cursor-not-allowed py-3">Leaderboard (soon)</button>
@@ -133,12 +157,17 @@ class App {
     this.mainMenuEl = el;
 
     // Wire buttons
-    const playBtn = panel.querySelector('#hw-play') as HTMLButtonElement;
+    const levelBtn = panel.querySelector('#hw-level') as HTMLButtonElement;
     const motionBtn = panel.querySelector('#hw-motion') as HTMLButtonElement;
     const howBtn = panel.querySelector('#hw-howto') as HTMLButtonElement;
 
-    playBtn.onclick = async () => {
-      this.currentLevel = 1;
+    levelBtn.onclick = async () => {
+      // Apply layered blur for depth effect during transition
+      blurTransition.applyLayeredBlur([
+        { elementId: 'hw-main-menu', level: 'xl', delay: 0 },
+        { elementId: 'hex-grid-container', level: 'lg', delay: 50 }
+      ]);
+      
       await this.fadeTransition(async () => {
         await this.loadLevelFromServer(this.currentLevel);
         this.hideMainMenu();
@@ -154,12 +183,20 @@ class App {
       const svc = (window as any).hwAnimSvc as any;
       if (svc?.setReducedMotion) svc.setReducedMotion(next);
     };
-    howBtn.onclick = () => this.showHowTo();
+    howBtn.onclick = async () => {
+      // Focus effect: blur everything except the how-to modal
+      await blurTransition.focusOn('hw-howto-modal', {
+        blurLevel: 'md',
+        duration: 300
+      });
+      this.showHowTo();
+    };
   }
   
   private showHowTo(): void {
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
+    overlay.id = 'hw-howto-modal';
     
     const content = document.createElement('div');
     content.className = 'modal-content panel-hex';
@@ -185,22 +222,20 @@ class App {
     
     const closeBtn = content.querySelector('button');
     if (closeBtn) {
-      closeBtn.addEventListener('click', () => {
+      closeBtn.addEventListener('click', async () => {
+        // Clear focus effect with smooth transition
+        await blurTransition.clearFocus(300);
         overlay.remove();
-        // Restore focus blur
-        blurGameContainer('none');
       });
     }
     
     // Close on overlay click
-    overlay.addEventListener('click', (e) => {
+    overlay.addEventListener('click', async (e) => {
       if (e.target === overlay) {
+        await blurTransition.clearFocus(300);
         overlay.remove();
-        blurGameContainer('none');
       }
     });
-    // Add background blur while help is open
-    blurGameContainer('md');
   }
 
   private async loadLevelFromServer(level: number): Promise<void> {
@@ -249,7 +284,7 @@ class App {
     panel.innerHTML = `
       <div class="text-center mb-3">
         <div class="text-2xl tracking-wide text-hw-text-primary">Level ${level} Complete!</div>
-        <div class="text-sm text-hw-text-secondary mt-1">${clue}</div>
+        <div class="text-lg text-clue-gradient mt-2 uppercase">${clue}</div>
       </div>
       <div class="max-h-56 overflow-auto p-3 rounded-lg border border-hw-surface-tertiary/30 bg-white/5 text-center font-sans text-sm leading-6">
         ${words.join(' • ')}
@@ -265,6 +300,21 @@ class App {
     // Confetti animation from top-left and top-right
     this.launchConfetti();
 
+    // Save progress locally and remotely (best effort)
+    const nextProgress: HWProgress = {
+      level: level + 1,
+      completedLevels: [level],
+      updatedAt: Date.now(),
+    };
+    try {
+      saveLocalProgress(nextProgress);
+      // sync remote in background
+      saveRemoteProgress(nextProgress).then(() => void 0).catch(() => void 0);
+      this.updateMenuProgress(nextProgress);
+      // Keep in-memory state updated for immediate menu display
+      this.currentLevel = Math.max(this.currentLevel, nextProgress.level);
+    } catch {}
+
     const nextBtn = panel.querySelector('#hw-next') as HTMLButtonElement;
     const menuBtn = panel.querySelector('#hw-menu') as HTMLButtonElement;
     // Hover/press interactions (simple)
@@ -273,17 +323,27 @@ class App {
 
     nextBtn.onclick = async () => {
       overlay.remove();
-      blurGameContainer('none');
-      this.currentLevel = level + 1;
-      await this.fadeTransition(async () => {
+      this.currentLevel = Math.max(this.currentLevel, level + 1);
+      // Use blur transition for smooth level progression
+      await blurTransition.transitionWithBlur(async () => {
         await this.loadLevelFromServer(this.currentLevel);
+      }, {
+        blurIntensity: 'xl',
+        inDuration: 250,
+        outDuration: 300
       });
     };
     menuBtn.onclick = async () => {
       overlay.remove();
-      blurGameContainer('none');
-      await this.fadeTransition(async () => {
+      // Update in-memory level when going back to menu
+      this.currentLevel = Math.max(this.currentLevel, level + 1);
+      // Transition back to main menu with blur
+      await blurTransition.transitionWithBlur(async () => {
         this.showMainMenu();
+      }, {
+        blurIntensity: 'lg',
+        inDuration: 200,
+        outDuration: 250
       });
     };
   }
@@ -325,27 +385,25 @@ class App {
 
   // ===== Fade Transition Helpers =====
   private ensureFadeOverlay(): HTMLDivElement {
+    // Retained for compatibility, but not used now that we removed black fades
     if (this.fadeEl) return this.fadeEl;
     const el = document.createElement('div');
     el.id = 'hw-fade';
-    el.style.cssText = 'position:fixed;inset:0;z-index:10010;background:#000;opacity:0;pointer-events:none;';
+    el.style.cssText = 'position:fixed;inset:0;z-index:10010;background:transparent;opacity:0;pointer-events:none;display:none;';
     document.body.appendChild(el);
     this.fadeEl = el;
     return el;
   }
 
+  // Screen transition using progressive blur service
   private async fadeTransition(task: () => Promise<void> | void, durIn = 0.18, durOut = 0.22): Promise<void> {
-    const el = this.ensureFadeOverlay();
-    el.style.display = 'block';
-    el.style.pointerEvents = 'auto';
-    await gsap.to(el, { opacity: 1, duration: durIn, ease: 'power2.out' });
-    try {
-      await task();
-    } finally {
-      await gsap.to(el, { opacity: 0, duration: durOut, ease: 'power2.in' });
-      el.style.pointerEvents = 'none';
-      el.style.display = 'block';
-    }
+    // Use the blur transition service for smoother transitions
+    await blurTransition.transitionWithBlur(task, {
+      targetElement: 'hex-grid-container',
+      blurIntensity: 'lg',
+      inDuration: Math.max(180, Math.round(durIn * 1000)),
+      outDuration: Math.max(220, Math.round(durOut * 1000))
+    });
   }
 
   private showMainMenu(): void {
@@ -353,15 +411,31 @@ class App {
     if (!this.mainMenuEl) return;
     this.mainMenuEl.classList.remove('hidden');
     this.mainMenuEl.classList.add('flex');
-    // Blur gameplay behind the menu
-    blurGameContainer('lg');
+    // Refresh from local progress to ensure latest level is reflected
+    try {
+      const p = loadLocalProgress();
+      if (p?.level) this.currentLevel = Math.max(this.currentLevel, p.level);
+    } catch {}
+    // Refresh button labels to reflect current level
+    try {
+      this.updateMenuProgress({ level: this.currentLevel, completedLevels: [], updatedAt: Date.now() } as HWProgress);
+    } catch {}
+    // Ensure no residual blur remains on menu or game container
+    blurTransition.applyLayeredBlur([
+      { elementId: 'hw-main-menu', level: 'none', delay: 0 },
+      { elementId: 'hex-grid-container', level: 'none', delay: 0 }
+    ]);
   }
 
   private hideMainMenu(): void {
     if (!this.mainMenuEl) return;
     this.mainMenuEl.classList.add('hidden');
     this.mainMenuEl.classList.remove('flex');
-    blurGameContainer('none');
+    // Clear any blur from both container and menu overlay
+    blurTransition.applyLayeredBlur([
+      { elementId: 'hex-grid-container', level: 'none', delay: 0 },
+      { elementId: 'hw-main-menu', level: 'none', delay: 0 }
+    ]);
   }
   
   /**

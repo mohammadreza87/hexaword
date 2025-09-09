@@ -1,4 +1,5 @@
 import { gsap } from 'gsap';
+import { getPaletteForLevel } from '../config/ColorPalettes';
 
 /**
  * Service to handle all game animations using GSAP
@@ -33,11 +34,24 @@ export class AnimationService {
    * Get current palette colors from window
    */
   private getCurrentColors(): any {
-    return (window as any).__currentColors || {
+    const fallback = {
       accent: '#00d9ff',
       solved: '#00ff00',
+      solvedColor: '#00ff00',
       text: '#FFFFFF'
-    };
+    } as any;
+    const cur = (window as any).__currentColors;
+    if (cur) return cur;
+    // Secondary fallback: read from CSS variables injected by palette service
+    try {
+      const root = getComputedStyle(document.documentElement);
+      const accent = root.getPropertyValue('--hw-accent-primary')?.trim() || fallback.accent;
+      const solvedColor = root.getPropertyValue('--hw-cell-solved')?.trim() || fallback.solvedColor;
+      const text = root.getPropertyValue('--hw-text')?.trim() || fallback.text;
+      return { accent, solvedColor, text };
+    } catch {
+      return fallback;
+    }
   }
 
   /**
@@ -254,7 +268,7 @@ export class AnimationService {
   animateClueOverlay(
     clueText: string,
     targetScreen: { x: number; y: number },
-    options?: { fontSizePx?: number; overlayWidthPx?: number; holdMs?: number },
+    options?: { fontSizePx?: number; overlayWidthPx?: number; holdMs?: number; level?: number },
     onComplete?: () => void
   ): void {
     // Create overlay elements
@@ -268,15 +282,45 @@ export class AnimationService {
       backdrop-filter: blur(0px); background: rgba(0,0,0,0);
       pointer-events: none; z-index: 9999; opacity: 0;
     `;
+    // Get theme colors for gradient
+    const level = options?.level ?? 1;
+    const palette = getPaletteForLevel(level);
+    const accentColor = palette.colors[0];
+    const secondaryColor = palette.colors[1];
+    
     const clue = document.createElement('div');
-    clue.textContent = clueText || '';
+    clue.textContent = (clueText || '').toUpperCase();
     clue.style.cssText = `
       position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
-      color: #ffffff; font-family: 'Lilita One', Arial, sans-serif;
+      font-family: 'Inter', Arial, sans-serif; font-weight: 900;
       text-align: center; line-height: 1.1;
       display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-      text-shadow: 0 2px 8px rgba(0,0,0,0.5); opacity: 0;
+      opacity: 0;
+      background: linear-gradient(90deg, ${accentColor}, ${secondaryColor}, ${accentColor});
+      background-size: 200% 100%;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: gradientShift 3s ease infinite;
+      filter: 
+        drop-shadow(0 0 20px ${accentColor}33)
+        drop-shadow(0 0 10px ${accentColor}66)
+        drop-shadow(0 0 5px ${accentColor}99)
+        drop-shadow(0 2px 4px rgba(0,0,0,0.6));
     `;
+    
+    // Add animation keyframes if not already present
+    if (!document.getElementById('clue-gradient-animation')) {
+      const style = document.createElement('style');
+      style.id = 'clue-gradient-animation';
+      style.textContent = `
+        @keyframes gradientShift {
+          0%, 100% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+        }
+      `;
+      document.head.appendChild(style);
+    }
     overlay.appendChild(clue);
     document.body.appendChild(overlay);
 
@@ -475,7 +519,7 @@ export class AnimationService {
         const hexElement = { 
           green: 0, 
           scale: 1,
-          color: currentColors.solved // Store solved color for blinking
+          color: (currentColors as any).solvedColor || (currentColors as any).solved || '#00ff00' // Palette solved color
         };
         
         (window as any).__greenInputHexes = (window as any).__greenInputHexes || {};

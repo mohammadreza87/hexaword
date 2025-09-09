@@ -104,6 +104,31 @@
            bg-clip-text text-transparent;
   }
   
+  /* Clue text with soft glow gradient */
+  .text-clue-gradient {
+    @apply font-black tracking-wide;
+    background: linear-gradient(
+      90deg,
+      var(--hw-clue-gradient-start),
+      var(--hw-clue-gradient-mid),
+      var(--hw-clue-gradient-end)
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: gradient-shift 3s ease infinite;
+    filter: drop-shadow(0 0 20px color-mix(in srgb, var(--hw-clue-glow-color) 30%, transparent))
+            drop-shadow(0 0 10px color-mix(in srgb, var(--hw-clue-glow-color) 50%, transparent))
+            drop-shadow(0 0 5px color-mix(in srgb, var(--hw-clue-glow-color) 70%, transparent))
+            drop-shadow(0 1px 2px rgba(0,0,0,0.6));
+  }
+  
+  @keyframes gradient-shift {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+  }
+  
   /* Toast notifications */
   .toast {
     @apply fixed bottom-4 left-1/2 -translate-x-1/2 z-notification

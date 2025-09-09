@@ -323,7 +323,7 @@ export class InputHexGrid {
           
           // Blend between normal color and solved color from palette
           const normalColor = this.currentColors?.inputCellFill || 'rgba(0, 0, 0, 0.2)';
-          const solvedColor = greenInputState.color || this.currentColors?.solved || '#00ff00';
+          const solvedColor = greenInputState.color || this.currentColors?.solvedColor || '#00ff00';
           const greenIntensity = greenInputState.green;
           
           // Draw with solved color blend
@@ -416,7 +416,7 @@ export class InputHexGrid {
       if (isCenterCell && this.typedWord.length > 0) {
         // Only show X when there's typed text
         this.ctx.fillStyle = '#FFFFFF'; // Pure white for clear button
-        this.ctx.font = `${Math.floor(size * 0.9)}px 'Lilita One', Arial`;
+        this.ctx.font = `900 ${Math.floor(size * 0.9)}px 'Inter', Arial`;
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
         this.ctx.fillText('×', x, y); // Using × symbol for clear
@@ -440,7 +440,7 @@ export class InputHexGrid {
           this.ctx.globalAlpha = 1; // Full opacity for active
         }
         
-        this.ctx.font = `${Math.floor(size * 0.8)}px 'Lilita One', Arial`;
+        this.ctx.font = `900 ${Math.floor(size * 0.8)}px 'Inter', Arial`;
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
         this.ctx.fillText(cell.letter.toUpperCase(), x, y);
@@ -1003,23 +1003,51 @@ export class InputHexGrid {
    * Helper to blend two colors
    */
   private blendColors(color1: string, color2: string, amount: number): string {
-    // Simple blend between two colors
+    // Clamp
     if (amount <= 0) return color1;
     if (amount >= 1) return color2;
-    
-    // For simplicity, just interpolate between the two
-    const r1 = parseInt(color1.slice(1, 3), 16) || 0;
-    const g1 = parseInt(color1.slice(3, 5), 16) || 0;
-    const b1 = parseInt(color1.slice(5, 7), 16) || 0;
-    
-    const r2 = 0; // green is 00ff00
-    const g2 = 255;
-    const b2 = 0;
-    
-    const r = Math.round(r1 + (r2 - r1) * amount);
-    const g = Math.round(g1 + (g2 - g1) * amount);
-    const b = Math.round(b1 + (b2 - b1) * amount);
-    
-    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+
+    const toRGB = (c: string): { r: number; g: number; b: number } => {
+      c = (c || '').trim();
+      if (!c) return { r: 0, g: 0, b: 0 };
+      if (c.startsWith('#')) {
+        const hex = c.slice(1);
+        const h = hex.length === 3
+          ? hex.split('').map(ch => ch + ch).join('')
+          : hex;
+        const r = parseInt(h.slice(0, 2), 16) || 0;
+        const g = parseInt(h.slice(2, 4), 16) || 0;
+        const b = parseInt(h.slice(4, 6), 16) || 0;
+        return { r, g, b };
+      }
+      // rgb/rgba
+      const m = c.match(/rgba?\(([^)]+)\)/i);
+      if (m) {
+        const parts = m[1].split(',').map(v => parseFloat(v.trim()));
+        return { r: parts[0] || 0, g: parts[1] || 0, b: parts[2] || 0 };
+      }
+      // Fallback: try to let canvas parse named colors
+      try {
+        const tmp = document.createElement('canvas').getContext('2d');
+        if (tmp) {
+          tmp.fillStyle = c as any;
+          const v = tmp.fillStyle as string;
+          const m2 = v.match(/rgba?\(([^)]+)\)/i);
+          if (m2) {
+            const parts = m2[1].split(',').map(v => parseFloat(v.trim()));
+            return { r: parts[0] || 0, g: parts[1] || 0, b: parts[2] || 0 };
+          }
+        }
+      } catch {}
+      return { r: 0, g: 0, b: 0 };
+    };
+
+    const a = toRGB(color1);
+    const b = toRGB(color2);
+    const r = Math.round(a.r + (b.r - a.r) * amount);
+    const g = Math.round(a.g + (b.g - a.g) * amount);
+    const bl = Math.round(a.b + (b.b - a.b) * amount);
+    const toHex = (n: number) => n.toString(16).padStart(2, '0');
+    return `#${toHex(r)}${toHex(g)}${toHex(bl)}`;
   }
 }

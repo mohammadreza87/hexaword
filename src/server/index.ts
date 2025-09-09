@@ -15,6 +15,7 @@ import { createPost } from "./core/post";
 import { gameRouter } from "./routes/game";
 import colormindRouter from "./routes/colormind";
 import { requestLogger, errorHandler, Logger, asyncHandler } from "./middleware/errorHandler";
+import progressRouter from "./routes/progress";
 
 const app = express();
 const logger = Logger.getInstance();
@@ -140,6 +141,7 @@ router.post("/internal/menu/post-create", async (_req, res): Promise<void> => {
 app.use(router);
 app.use(gameRouter);
 app.use(colormindRouter);
+app.use(progressRouter);
 
 // Error handler middleware (must be last)
 app.use(errorHandler);

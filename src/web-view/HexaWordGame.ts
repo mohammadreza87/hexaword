@@ -5,6 +5,7 @@ import { HexCell, WordObject } from '../shared/types/hexaword';
 import { createRNG } from '../shared/utils/rng';
 import { AnimationService } from './services/AnimationService';
 import { ColorPaletteService } from './services/ColorPaletteService';
+import { getPaletteForLevel } from './config/ColorPalettes';
 
 export interface GameConfig {
   containerId: string;
@@ -719,7 +720,7 @@ export class HexaWordGame {
       const inputBounds = this.inputGrid.getBounds(layout.inputCenterX, layout.inputCenterY, layout.inputHexSize);
       const startY = inputBounds.topY - Math.max(30, layout.inputHexSize * 1.2);
       this.ctx.save();
-      this.ctx.font = "20px 'Lilita One', Arial";
+      this.ctx.font = "900 20px 'Inter', Arial";
       const widths = lettersUpper.map(ch => this.ctx.measureText(ch).width);
       const gap = 6; // add extra spacing between letters in fallback
       const totalWidth = widths.reduce((a, w) => a + w, 0) + gap * Math.max(lettersUpper.length - 1, 0);
@@ -831,7 +832,7 @@ export class HexaWordGame {
     
     // Left side - Level indicator with glassmorphism
     const levelText = `LEVEL ${this.currentLevel}`;
-    this.ctx.font = '14px "Lilita One", Arial';
+    this.ctx.font = "900 14px 'Inter', Arial";
     const levelWidth = this.ctx.measureText(levelText).width + padding * 2.5;
     
     // Draw glass background for level
@@ -853,7 +854,7 @@ export class HexaWordGame {
     // Center - Progress indicator
     const centerX = canvasWidth / 2;
     const progressText = `${this.foundWords.size} / ${this.placedWords.length}`;
-    this.ctx.font = '14px "Lilita One", Arial';
+    this.ctx.font = "900 14px 'Inter', Arial";
     const progressWidth = this.ctx.measureText(progressText).width + padding * 3;
     const progressX = centerX - progressWidth / 2;
     
@@ -890,7 +891,7 @@ export class HexaWordGame {
     if (this.foundWords.size === this.placedWords.length && this.placedWords.length > 0) {
       // Show completion with star
       this.ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--hw-accent-success');
-      this.ctx.font = '14px "Lilita One", Arial';
+      this.ctx.font = "900 14px 'Inter', Arial";
       this.ctx.textAlign = 'center';
       this.ctx.textBaseline = 'middle';
       this.ctx.fillText('⭐ ' + progressText, centerX, padding + 12);
@@ -923,7 +924,7 @@ export class HexaWordGame {
   }
   
   /**
-   * Renders the clue above the puzzle grid
+   * Renders the clue above the puzzle grid with themed gradient and soft glow
    */
   private renderClue(centerX: number, centerY: number, layout: any): void {
     if (!this.currentClue || this.introActive) return;
@@ -950,7 +951,7 @@ export class HexaWordGame {
     
     // Find the right font size
     do {
-      this.ctx.font = `${fontSize}px 'Lilita One', Arial`;
+      this.ctx.font = `900 ${fontSize}px 'Inter', Arial`;
       textWidth = this.ctx.measureText(clueText).width;
       if (textWidth > maxWidth) {
         fontSize -= 1;
@@ -960,17 +961,59 @@ export class HexaWordGame {
     // Reduce final font size by 5px for main gameplay view
     fontSize = Math.max(12, fontSize - 5);
     
-    // Add strong shadow for better readability
-    this.ctx.shadowColor = 'rgba(0,0,0,0.8)';
-    this.ctx.shadowBlur = 3;
-    this.ctx.shadowOffsetY = 1;
-
-    // Draw clue text in pure white
-    this.ctx.fillStyle = '#FFFFFF';
-    this.ctx.font = `${fontSize}px 'Lilita One', Arial`;
+    // Get theme colors based on level
+    const palette = getPaletteForLevel(this.currentLevel);
+    const accentColor = palette.colors[0];  // Primary accent color
+    const secondaryColor = palette.colors[1];  // Secondary color for gradient
+    
+    // Create gradient for text
+    const gradient = this.ctx.createLinearGradient(
+      centerX - textWidth / 2, clueY,
+      centerX + textWidth / 2, clueY
+    );
+    
+    // Add gradient stops with soft color transition
+    gradient.addColorStop(0, accentColor);
+    gradient.addColorStop(0.5, secondaryColor);
+    gradient.addColorStop(1, accentColor);
+    
+    // Apply multiple layers for soft glow effect
+    this.ctx.font = `900 ${fontSize}px 'Inter', Arial`;
     this.ctx.textAlign = 'center';
     this.ctx.textBaseline = 'bottom';
+    
+    // Layer 1: Outer glow (most diffuse)
+    this.ctx.globalAlpha = 0.3;
+    this.ctx.shadowColor = accentColor;
+    this.ctx.shadowBlur = 20;
+    this.ctx.shadowOffsetY = 0;
+    this.ctx.fillStyle = gradient;
     this.ctx.fillText(clueText, centerX, clueY);
+    
+    // Layer 2: Middle glow
+    this.ctx.globalAlpha = 0.5;
+    this.ctx.shadowBlur = 10;
+    this.ctx.fillText(clueText, centerX, clueY);
+    
+    // Layer 3: Inner glow
+    this.ctx.globalAlpha = 0.7;
+    this.ctx.shadowBlur = 5;
+    this.ctx.fillText(clueText, centerX, clueY);
+    
+    // Layer 4: Main text with gradient
+    this.ctx.globalAlpha = 1;
+    this.ctx.shadowColor = 'rgba(0,0,0,0.6)';
+    this.ctx.shadowBlur = 2;
+    this.ctx.shadowOffsetY = 1;
+    this.ctx.fillStyle = gradient;
+    this.ctx.fillText(clueText, centerX, clueY);
+    
+    // Optional: Add subtle white highlight for extra pop
+    this.ctx.globalAlpha = 0.9;
+    this.ctx.shadowColor = 'transparent';
+    this.ctx.fillStyle = '#FFFFFF';
+    this.ctx.font = `900 ${fontSize - 1}px 'Inter', Arial`;
+    this.ctx.fillText(clueText, centerX, clueY - 1);
     
     this.ctx.restore();
   }
@@ -1000,7 +1043,7 @@ export class HexaWordGame {
     
     // Pure white for typed word
     this.ctx.fillStyle = '#FFFFFF';
-    this.ctx.font = "20px 'Lilita One', Arial";
+    this.ctx.font = "900 20px 'Inter', Arial";
     this.ctx.textAlign = 'center';
     this.ctx.textBaseline = 'middle';
     this.ctx.fillText(this.typedWord.toUpperCase(), canvasWidth / 2, y);
@@ -1058,7 +1101,7 @@ export class HexaWordGame {
       
       // Draw the letter with normal font size
       this.ctx.fillStyle = letterObj.color || '#00d9ff';
-      this.ctx.font = "25px 'Lilita One', Arial"; // Normal size
+      this.ctx.font = "900 25px 'Inter', Arial"; // Normal size
       this.ctx.textAlign = 'center';
       this.ctx.textBaseline = 'middle';
       this.ctx.fillText(letterObj.letter.toUpperCase(), 0, 0);
@@ -1203,7 +1246,7 @@ export class HexaWordGame {
       let width = 0;
       this.ctx.save();
       do {
-        this.ctx.font = `${size}px 'Lilita One', Arial`;
+        this.ctx.font = `900 ${size}px 'Inter', Arial`;
         width = this.ctx.measureText(this.currentClue.toUpperCase()).width;
         if (width > maxWidth) size -= 1;
       } while (width > maxWidth && size > 12);
@@ -1215,7 +1258,7 @@ export class HexaWordGame {
       this.animationService.animateClueOverlay(
         this.currentClue,
         targetScreen,
-        { fontSizePx: size, overlayWidthPx: maxWidth, holdMs: 1000 },
+        { fontSizePx: size, overlayWidthPx: maxWidth, holdMs: 1000, level: this.currentLevel },
         () => {
           // After overlay completes, reveal gameplay clue and redraw
           this.introActive = false;

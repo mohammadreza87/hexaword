@@ -269,7 +269,7 @@ export class HexRenderer {
   private drawLetter(letter: string, x: number, y: number, isSolved: boolean = false): void {
     // Always use pure white for maximum contrast on dark cells
     this.ctx.fillStyle = '#FFFFFF';
-    this.ctx.font = `${Math.floor(this.config.hexSize * 0.8)}px 'Lilita One', ${this.config.fontFamily}`;
+    this.ctx.font = `900 ${Math.floor(this.config.hexSize * 0.8)}px 'Inter', ${this.config.fontFamily}`;
     this.ctx.textAlign = 'center';
     this.ctx.textBaseline = 'middle';
     
