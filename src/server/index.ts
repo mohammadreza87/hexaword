@@ -13,8 +13,13 @@ import {
 } from "@devvit/web/server";
 import { createPost } from "./core/post";
 import { gameRouter } from "./routes/game";
+import { requestLogger, errorHandler, Logger, asyncHandler } from "./middleware/errorHandler";
 
 const app = express();
+const logger = Logger.getInstance();
+
+// Request logging middleware
+app.use(requestLogger);
 
 // Middleware for JSON body parsing
 app.use(express.json());
@@ -28,11 +33,12 @@ const router = express.Router();
 router.get<
   { postId: string },
   InitResponse | { status: string; message: string }
->("/api/init", async (_req, res): Promise<void> => {
+>("/api/init", asyncHandler(async (req, res): Promise<void> => {
   const { postId } = context;
+  const requestId = (req as any).requestId;
 
   if (!postId) {
-    console.error("API Init Error: postId not found in devvit context");
+    logger.error("postId not found in devvit context", undefined, { requestId });
     res.status(400).json({
       status: "error",
       message: "postId is required but missing from context",
@@ -40,27 +46,20 @@ router.get<
     return;
   }
 
-  try {
-    const [count, username] = await Promise.all([
-      redis.get("count"),
-      reddit.getCurrentUsername(),
-    ]);
+  logger.debug("Fetching init data", { postId, requestId });
+  
+  const [count, username] = await Promise.all([
+    redis.get("count"),
+    reddit.getCurrentUsername(),
+  ]);
 
-    res.json({
-      type: "init",
-      postId: postId,
-      count: count ? parseInt(count) : 0,
-      username: username ?? "anonymous",
-    });
-  } catch (error) {
-    console.error(`API Init Error for post ${postId}:`, error);
-    let errorMessage = "Unknown error during initialization";
-    if (error instanceof Error) {
-      errorMessage = `Initialization failed: ${error.message}`;
-    }
-    res.status(400).json({ status: "error", message: errorMessage });
-  }
-});
+  res.json({
+    type: "init",
+    postId: postId,
+    count: count ? parseInt(count) : 0,
+    username: username ?? "anonymous",
+  });
+}));
 
 router.post<
   { postId: string },
@@ -140,6 +139,15 @@ router.post("/internal/menu/post-create", async (_req, res): Promise<void> => {
 app.use(router);
 app.use(gameRouter);
 
+// Error handler middleware (must be last)
+app.use(errorHandler);
+
 const server = createServer(app);
-server.on("error", (err) => console.error(`server error; ${err.stack}`));
-server.listen(getServerPort());
+server.on("error", (err) => {
+  logger.error("Server error", err);
+});
+
+const port = getServerPort();
+server.listen(port, () => {
+  logger.info(`Server started`, { port });
+});

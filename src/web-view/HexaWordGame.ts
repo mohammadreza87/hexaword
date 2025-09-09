@@ -396,17 +396,10 @@ export class HexaWordGame {
       }
     });
     
-    // Shuffle for gameplay
-    if (this.config.seed) {
-      const rng = createRNG(this.config.seed + '_input');
-      letters = rng.shuffle(letters);
-    } else {
-      // Random shuffle if no seed
-      for (let i = letters.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [letters[i], letters[j]] = [letters[j], letters[i]];
-      }
-    }
+    // Shuffle for gameplay - always use seeded RNG for determinism
+    const shuffleSeed = this.config.seed || `game_${Date.now()}`;
+    const rng = createRNG(shuffleSeed + '_input');
+    letters = rng.shuffle(letters);
     
     // Set the letters including duplicates
     const gridLetters = letters.join('');
@@ -445,6 +438,9 @@ export class HexaWordGame {
     
     // Update renderer with dynamic hex size
     this.renderer.updateConfig({ hexSize: layout.hexSize });
+    
+    // Render HUD at the top
+    this.renderHUD(rect.width, rect.height);
     
     // Render clue above the puzzle grid
     this.renderClue(layout.gridCenterX, layout.gridCenterY, layout);
@@ -608,13 +604,55 @@ export class HexaWordGame {
    */
   private handleTouch(event: TouchEvent): void {
     event.preventDefault();
+    
+    // Don't handle touches until game is initialized
+    if (!this.isInitialized) {
+      console.warn('Game not yet initialized');
+      return;
+    }
+    
     const touch = event.touches[0];
     const rect = this.canvas.getBoundingClientRect();
     const x = touch.clientX - rect.left;
     const y = touch.clientY - rect.top;
     
-    // TODO: Implement touch handling
-    console.log(`Touch at (${x}, ${y})`);
+    // Get layout for input grid position
+    const layout = this.calculateLayout(rect.width, rect.height);
+    
+    // Check if touch was on input grid
+    const clickedLetter = this.inputGrid.handleClick(
+      x, 
+      y, 
+      layout.inputCenterX, 
+      layout.inputCenterY, 
+      layout.inputHexSize
+    );
+    
+    if (clickedLetter) {
+      if (clickedLetter === 'CLEAR') {
+        this.animationService.animateClearButton();
+        this.typedWord = '';
+      } else if (clickedLetter === 'BACKSPACE') {
+        // Mirror keyboard backspace behavior when last selected letter is touched again
+        this.typedWord = this.inputGrid.getTypedWord();
+        // Optional: small typed word animation feedback
+        this.animationService.animateTypedWord(this.typedWord);
+      } else {
+        // Animate the touched hex
+        const clickedHex = this.inputGrid.getLastClickedHex();
+        if (clickedHex) {
+          this.animationService.animateInputHexClick(clickedHex.q, clickedHex.r);
+        }
+        
+        this.typedWord += clickedLetter;
+        this.animationService.animateTypedWord(this.typedWord);
+        
+        // Check if typed word matches any placed word
+        this.checkWord();
+      }
+      console.log('Typed word:', this.typedWord);
+      this.render();  // Re-render to show typed word
+    }
   }
   
   /**
@@ -782,6 +820,109 @@ export class HexaWordGame {
   }
   
   /**
+   * Renders the HUD with progress indicators
+   */
+  private renderHUD(canvasWidth: number, canvasHeight: number): void {
+    const padding = 16;
+    const hudHeight = 48;
+    const cornerRadius = 12;
+    
+    this.ctx.save();
+    
+    // Left side - Level indicator with glassmorphism
+    const levelText = `LEVEL ${this.currentLevel}`;
+    this.ctx.font = '14px "Lilita One", Arial';
+    const levelWidth = this.ctx.measureText(levelText).width + padding * 2.5;
+    
+    // Draw glass background for level
+    this.ctx.fillStyle = 'rgba(26, 31, 43, 0.6)';
+    this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+    this.ctx.lineWidth = 1;
+    
+    // Rounded rectangle for level
+    this.drawRoundedRect(padding, padding, levelWidth, 32, cornerRadius);
+    this.ctx.fill();
+    this.ctx.stroke();
+    
+    // Level text - center aligned
+    this.ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--hw-text-secondary');
+    this.ctx.textAlign = 'center';
+    this.ctx.textBaseline = 'middle';
+    this.ctx.fillText(levelText, padding + levelWidth / 2, padding + 16);
+    
+    // Center - Progress indicator
+    const centerX = canvasWidth / 2;
+    const progressText = `${this.foundWords.size} / ${this.placedWords.length}`;
+    this.ctx.font = '14px "Lilita One", Arial';
+    const progressWidth = this.ctx.measureText(progressText).width + padding * 3;
+    const progressX = centerX - progressWidth / 2;
+    
+    // Draw glass background for progress
+    this.ctx.fillStyle = 'rgba(26, 31, 43, 0.6)';
+    this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+    this.drawRoundedRect(progressX, padding, progressWidth, 32, cornerRadius);
+    this.ctx.fill();
+    this.ctx.stroke();
+    
+    // Progress bar background
+    const barWidth = progressWidth - padding * 2;
+    const barHeight = 4;
+    const barX = progressX + padding;
+    const barY = padding + 32 - 10;
+    const progress = this.placedWords.length > 0 ? this.foundWords.size / this.placedWords.length : 0;
+    
+    // Bar background
+    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+    this.drawRoundedRect(barX, barY, barWidth, barHeight, barHeight / 2);
+    this.ctx.fill();
+    
+    // Bar fill with gradient
+    if (progress > 0) {
+      const gradient = this.ctx.createLinearGradient(barX, 0, barX + barWidth * progress, 0);
+      gradient.addColorStop(0, getComputedStyle(document.documentElement).getPropertyValue('--hw-accent-primary'));
+      gradient.addColorStop(1, getComputedStyle(document.documentElement).getPropertyValue('--hw-accent-secondary'));
+      this.ctx.fillStyle = gradient;
+      this.drawRoundedRect(barX, barY, barWidth * progress, barHeight, barHeight / 2);
+      this.ctx.fill();
+    }
+    
+    // Progress text
+    if (this.foundWords.size === this.placedWords.length && this.placedWords.length > 0) {
+      // Show completion with star
+      this.ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--hw-accent-success');
+      this.ctx.font = '14px "Lilita One", Arial';
+      this.ctx.textAlign = 'center';
+      this.ctx.textBaseline = 'middle';
+      this.ctx.fillText('⭐ ' + progressText, centerX, padding + 12);
+    } else {
+      // Regular progress text
+      this.ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--hw-text-primary');
+      this.ctx.textAlign = 'center';
+      this.ctx.textBaseline = 'middle';
+      this.ctx.fillText(progressText, centerX, padding + 12);
+    }
+    
+    this.ctx.restore();
+  }
+  
+  /**
+   * Helper to draw rounded rectangle
+   */
+  private drawRoundedRect(x: number, y: number, width: number, height: number, radius: number): void {
+    this.ctx.beginPath();
+    this.ctx.moveTo(x + radius, y);
+    this.ctx.lineTo(x + width - radius, y);
+    this.ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+    this.ctx.lineTo(x + width, y + height - radius);
+    this.ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    this.ctx.lineTo(x + radius, y + height);
+    this.ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+    this.ctx.lineTo(x, y + radius);
+    this.ctx.quadraticCurveTo(x, y, x + radius, y);
+    this.ctx.closePath();
+  }
+  
+  /**
    * Renders the clue above the puzzle grid
    */
   private renderClue(centerX: number, centerY: number, layout: any): void {
@@ -822,18 +963,8 @@ export class HexaWordGame {
     // Add subtle animation or glow effect
     this.ctx.shadowColor = '#00d9ff';
     this.ctx.shadowBlur = 2;
-    
-    // Draw level number above clue
-    const levelLabel = `LEVEL ${this.currentLevel}`;
-    const levelFont = Math.max(10, Math.round(fontSize - 10));
-    this.ctx.fillStyle = '#ffffff';
-    this.ctx.font = `${levelFont}px 'Lilita One', Arial`;
-    this.ctx.textAlign = 'center';
-    this.ctx.textBaseline = 'bottom';
-    const levelY = clueY - (fontSize + 6);
-    this.ctx.fillText(levelLabel, centerX, levelY);
 
-    // Draw clue text with calculated font size (under the level label)
+    // Draw clue text with calculated font size
     this.ctx.fillStyle = '#ffffff';
     this.ctx.font = `${fontSize}px 'Lilita One', Arial`;
     this.ctx.textAlign = 'center';

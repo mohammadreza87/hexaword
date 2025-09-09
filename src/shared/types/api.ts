@@ -1,3 +1,36 @@
+import { z } from 'zod';
+
+// ============= Zod Validation Schemas =============
+
+export const GameInitRequestSchema = z.object({
+  postId: z.string().optional(),
+  subredditId: z.string().optional(),
+  level: z.number().int().min(1).max(100).optional()
+});
+
+export const GameInitResponseSchema = z.object({
+  type: z.literal('game_init'),
+  postId: z.string(),
+  seed: z.string().min(1),
+  words: z.array(z.string().min(3).max(15)).min(1).max(20),
+  username: z.string().optional(),
+  createdAt: z.string().optional(),
+  level: z.number().int().min(1).optional(),
+  clue: z.string().min(1).max(100).optional()
+});
+
+export const ApiErrorResponseSchema = z.object({
+  error: z.object({
+    code: z.string(),
+    message: z.string(),
+    details: z.unknown().optional(),
+    requestId: z.string().optional(),
+    timestamp: z.string().datetime().optional()
+  })
+});
+
+// ============= Legacy Types (for compatibility) =============
+
 export type InitResponse = {
   type: "init";
   postId: string;
@@ -17,57 +50,38 @@ export type DecrementResponse = {
   count: number;
 };
 
-// ============= Game API Types =============
+// ============= Game API Types (derived from schemas) =============
 
-export interface GameInitRequest {
-  postId?: string;
-  subredditId?: string;
-}
+export type GameInitRequest = z.infer<typeof GameInitRequestSchema>;
+export type GameInitResponse = z.infer<typeof GameInitResponseSchema>;
+export type ApiErrorResponse = z.infer<typeof ApiErrorResponseSchema>;
 
-export interface GameInitResponse {
-  type: 'game_init';
-  postId: string;
-  seed: string;
-  words: string[];
-  username?: string;
-  createdAt?: string;
-  level?: number;
-  clue?: string;
-}
-
-export interface ApiErrorResponse {
-  error: {
-    code: string;
-    message: string;
-    details?: unknown;
-  };
-}
-
-// ============= Type Guards =============
+// ============= Type Guards (using Zod) =============
 
 export function isGameInitResponse(data: unknown): data is GameInitResponse {
-  if (!data || typeof data !== 'object') return false;
-  const obj = data as Record<string, unknown>;
-  
-  return (
-    obj.type === 'game_init' &&
-    typeof obj.postId === 'string' &&
-    typeof obj.seed === 'string' &&
-    Array.isArray(obj.words) &&
-    obj.words.every((w: unknown) => typeof w === 'string')
-  );
+  return GameInitResponseSchema.safeParse(data).success;
 }
 
 export function isApiErrorResponse(data: unknown): data is ApiErrorResponse {
-  if (!data || typeof data !== 'object') return false;
-  const obj = data as Record<string, unknown>;
-  
-  return (
-    typeof obj.error === 'object' &&
-    obj.error !== null &&
-    typeof (obj.error as Record<string, unknown>).code === 'string' &&
-    typeof (obj.error as Record<string, unknown>).message === 'string'
-  );
+  return ApiErrorResponseSchema.safeParse(data).success;
+}
+
+// ============= Validation Helpers =============
+
+export function validateGameInitResponse(data: unknown): GameInitResponse {
+  const result = GameInitResponseSchema.safeParse(data);
+  if (!result.success) {
+    throw new Error(`Invalid game init response: ${result.error.message}`);
+  }
+  return result.data;
+}
+
+export function validateApiErrorResponse(data: unknown): ApiErrorResponse {
+  const result = ApiErrorResponseSchema.safeParse(data);
+  if (!result.success) {
+    throw new Error(`Invalid error response: ${result.error.message}`);
+  }
+  return result.data;
 }
 
 // ============= API Configuration =============

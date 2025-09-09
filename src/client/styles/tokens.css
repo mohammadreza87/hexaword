@@ -1,0 +1,192 @@
+/* Design Tokens - Dark Mode First */
+:root {
+  /* Color Palette - Dark Mode (Default) */
+  --hw-bg-primary: #0F1115;
+  --hw-bg-secondary: #151922;
+  --hw-bg-tertiary: #1A2030;
+  --hw-bg-elevated: #1F2538;
+  --hw-bg-overlay: rgba(15, 17, 21, 0.85);
+  
+  /* Surface colors */
+  --hw-surface-primary: #1A1F2B;
+  --hw-surface-secondary: #2A3446;
+  --hw-surface-tertiary: #3B4760;
+  --hw-surface-hover: #4A5770;
+  --hw-surface-active: #5A6880;
+  
+  /* Text colors */
+  --hw-text-primary: #E6ECF2;
+  --hw-text-secondary: #B8C4D0;
+  --hw-text-tertiary: #8A96A8;
+  --hw-text-muted: #6B7688;
+  --hw-text-disabled: #4A5568;
+  
+  /* Brand colors */
+  --hw-accent-primary: #1FB6FF;
+  --hw-accent-secondary: #00D9FF;
+  --hw-accent-tertiary: #00A3CC;
+  --hw-accent-success: #1DD67C;
+  --hw-accent-warning: #FFB545;
+  --hw-accent-error: #E9458D;
+  
+  /* Game specific colors */
+  --hw-cell-fill: var(--hw-surface-primary);
+  --hw-cell-stroke: var(--hw-surface-tertiary);
+  --hw-cell-active: var(--hw-accent-primary);
+  --hw-cell-solved: var(--hw-accent-success);
+  --hw-cell-intersect: var(--hw-accent-secondary);
+  
+  /* Glassmorphism */
+  --hw-glass-bg: rgba(26, 31, 43, 0.6);
+  --hw-glass-border: rgba(255, 255, 255, 0.08);
+  --hw-glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --hw-glass-blur: 12px;
+  
+  /* Progressive blur levels */
+  --hw-blur-none: 0px;
+  --hw-blur-sm: 4px;
+  --hw-blur-md: 8px;
+  --hw-blur-lg: 12px;
+  --hw-blur-xl: 20px;
+  --hw-blur-2xl: 40px;
+  
+  /* Shadows */
+  --hw-shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
+  --hw-shadow-md: 0 4px 8px rgba(0, 0, 0, 0.4);
+  --hw-shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.5);
+  --hw-shadow-xl: 0 16px 32px rgba(0, 0, 0, 0.6);
+  --hw-shadow-2xl: 0 24px 48px rgba(0, 0, 0, 0.7);
+  --hw-shadow-glow: 0 0 24px var(--hw-accent-primary);
+  
+  /* Spacing (8pt grid) */
+  --hw-spacing-xs: 4px;
+  --hw-spacing-sm: 8px;
+  --hw-spacing-md: 16px;
+  --hw-spacing-lg: 24px;
+  --hw-spacing-xl: 32px;
+  --hw-spacing-2xl: 48px;
+  --hw-spacing-3xl: 64px;
+  
+  /* Typography */
+  --hw-font-display: 'Lilita One', -apple-system, BlinkMacSystemFont, sans-serif;
+  --hw-font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --hw-font-mono: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  
+  /* Font sizes */
+  --hw-text-xs: 0.75rem;
+  --hw-text-sm: 0.875rem;
+  --hw-text-base: 1rem;
+  --hw-text-lg: 1.125rem;
+  --hw-text-xl: 1.25rem;
+  --hw-text-2xl: 1.5rem;
+  --hw-text-3xl: 1.875rem;
+  --hw-text-4xl: 2.25rem;
+  
+  /* Transitions */
+  --hw-transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --hw-transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --hw-transition-slow: 350ms cubic-bezier(0.4, 0, 0.2, 1);
+  --hw-transition-slower: 500ms cubic-bezier(0.4, 0, 0.2, 1);
+  
+  /* Z-index layers */
+  --hw-z-base: 0;
+  --hw-z-dropdown: 1000;
+  --hw-z-sticky: 1020;
+  --hw-z-fixed: 1030;
+  --hw-z-backdrop: 1040;
+  --hw-z-modal: 1050;
+  --hw-z-popover: 1060;
+  --hw-z-tooltip: 1070;
+  --hw-z-notification: 1080;
+  
+  /* Border radius */
+  --hw-radius-sm: 4px;
+  --hw-radius-md: 8px;
+  --hw-radius-lg: 12px;
+  --hw-radius-xl: 16px;
+  --hw-radius-2xl: 24px;
+  --hw-radius-full: 9999px;
+}
+
+/* Light mode overrides */
+[data-theme="light"] {
+  /* Color Palette - Light Mode */
+  --hw-bg-primary: #F5F7FB;
+  --hw-bg-secondary: #FFFFFF;
+  --hw-bg-tertiary: #F3F6FB;
+  --hw-bg-elevated: #FFFFFF;
+  --hw-bg-overlay: rgba(245, 247, 251, 0.85);
+  
+  /* Surface colors */
+  --hw-surface-primary: #FFFFFF;
+  --hw-surface-secondary: #EDF2F7;
+  --hw-surface-tertiary: #E2E8F0;
+  --hw-surface-hover: #CBD5E1;
+  --hw-surface-active: #94A3B8;
+  
+  /* Text colors */
+  --hw-text-primary: #1F2430;
+  --hw-text-secondary: #475569;
+  --hw-text-tertiary: #64748B;
+  --hw-text-muted: #94A3B8;
+  --hw-text-disabled: #CBD5E1;
+  
+  /* Glassmorphism */
+  --hw-glass-bg: rgba(255, 255, 255, 0.6);
+  --hw-glass-border: rgba(0, 0, 0, 0.06);
+  --hw-glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  
+  /* Shadows (lighter) */
+  --hw-shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.06);
+  --hw-shadow-md: 0 4px 8px rgba(0, 0, 0, 0.08);
+  --hw-shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.1);
+  --hw-shadow-xl: 0 16px 32px rgba(0, 0, 0, 0.12);
+  --hw-shadow-2xl: 0 24px 48px rgba(0, 0, 0, 0.14);
+  
+  /* Game specific colors */
+  --hw-cell-fill: var(--hw-surface-primary);
+  --hw-cell-stroke: #CBD5E1;
+  --hw-cell-solved: #17B66A;
+}
+
+/* Utility classes for glassmorphism */
+.hw-glass {
+  background: var(--hw-glass-bg);
+  backdrop-filter: blur(var(--hw-glass-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--hw-glass-blur)) saturate(140%);
+  border: 1px solid var(--hw-glass-border);
+  box-shadow: var(--hw-glass-shadow);
+}
+
+.hw-glass-sm {
+  backdrop-filter: blur(var(--hw-blur-sm)) saturate(120%);
+  -webkit-backdrop-filter: blur(var(--hw-blur-sm)) saturate(120%);
+}
+
+.hw-glass-lg {
+  backdrop-filter: blur(var(--hw-blur-xl)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--hw-blur-xl)) saturate(160%);
+}
+
+/* Progressive blur utilities */
+.hw-blur-progressive {
+  transition: backdrop-filter var(--hw-transition-slow);
+}
+
+.hw-blur-none { backdrop-filter: blur(var(--hw-blur-none)); }
+.hw-blur-sm { backdrop-filter: blur(var(--hw-blur-sm)); }
+.hw-blur-md { backdrop-filter: blur(var(--hw-blur-md)); }
+.hw-blur-lg { backdrop-filter: blur(var(--hw-blur-lg)); }
+.hw-blur-xl { backdrop-filter: blur(var(--hw-blur-xl)); }
+.hw-blur-2xl { backdrop-filter: blur(var(--hw-blur-2xl)); }
+
+/* Focus state with dynamic blur */
+.hw-focus-target {
+  filter: blur(0);
+  transition: filter var(--hw-transition-base);
+}
+
+.hw-focus-blur {
+  filter: blur(var(--hw-blur-sm));
+  transition: filter var(--hw-transition-base);
+}

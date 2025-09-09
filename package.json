@@ -17,20 +17,31 @@
     "dev:server": "cd src/server && vite build --watch",
     "login": "devvit login",
     "launch": "npm run build && npm run deploy && devvit publish",
-    "type-check": "tsc --build"
+    "type-check": "tsc --build",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
+    "test:determinism": "vitest run src/tests/determinism.test.ts"
   },
   "dependencies": {
     "@devvit/web": "0.12.0",
     "devvit": "0.12.0",
     "express": "5.1.0",
     "gsap": "^3.13.0",
-    "honeycomb-grid": "^4.1.5"
+    "honeycomb-grid": "^4.1.5",
+    "zod": "^4.1.5"
   },
   "devDependencies": {
     "@types/express": "5.0.1",
+    "@vitest/ui": "^3.2.4",
+    "autoprefixer": "^10.4.21",
     "concurrently": "9.1.2",
     "dotenv-cli": "8.0.0",
+    "happy-dom": "^18.0.1",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17",
     "typescript": "5.8.2",
-    "vite": "6.2.4"
+    "vite": "6.2.4",
+    "vitest": "^3.2.4"
   }
 }

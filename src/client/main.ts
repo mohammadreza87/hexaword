@@ -3,6 +3,8 @@ import { gsap } from 'gsap';
 import { Physics2DPlugin } from 'gsap/Physics2DPlugin';
 gsap.registerPlugin(Physics2DPlugin);
 import { fetchGameDataWithFallback } from './services/api';
+import './styles/tokens.css';
+import './styles/tailwind.css';
 
 console.log('HexaWord Crossword Generator v4.0 - Modular Architecture');
 
@@ -34,10 +36,9 @@ class App {
   
   private async startGame(): Promise<void> {
     console.log('Starting HexaWord game...');
-    // Apply neutral theme background (no hardcoded dark)
+    // Apply dark theme background
     try {
-      const isLight = localStorage.getItem('hexaword_theme') === 'light';
-      const bg = isLight ? '#F5F7FB' : '#0F1115';
+      const bg = '#0F1115';
       document.documentElement.style.setProperty('background-color', bg, 'important');
       document.body.style.setProperty('background-color', bg, 'important');
       document.body.style.setProperty('background', bg, 'important');
@@ -58,30 +59,20 @@ class App {
     const btn = document.createElement('button');
     btn.id = 'hw-menu-btn';
     btn.textContent = '⚙️';
-    btn.style.cssText = `
-      position: fixed; top: 12px; right: 12px; z-index: 10001;
-      width: 36px; height: 36px; border-radius: 18px; border: none;
-      background: rgba(255,255,255,0.12); color: #fff; backdrop-filter: blur(6px);
-      cursor: pointer; font-size: 18px; line-height: 36px; text-align: center;
-    `;
+    btn.className = 'fixed top-3 right-3 z-fixed w-9 h-9 rounded-full text-hw-text-primary backdrop-blur-md border transition-all duration-base text-lg flex items-center justify-center';
+    btn.style.cssText = 'background: rgba(42, 52, 70, 0.6); border-color: rgba(59, 71, 96, 0.2);';
+    btn.onmouseenter = () => { btn.style.background = 'rgba(59, 71, 96, 0.6)'; };
+    btn.onmouseleave = () => { btn.style.background = 'rgba(42, 52, 70, 0.6)'; };
+    
     const panel = document.createElement('div');
     panel.id = 'hw-menu-panel';
-    panel.style.cssText = `
-      position: fixed; top: 56px; right: 12px; z-index: 10000;
-      min-width: 220px; padding: 12px; border-radius: 12px;
-      background: rgba(20,21,20,0.9); color: #fff; backdrop-filter: blur(8px);
-      box-shadow: 0 8px 24px rgba(0,0,0,0.35);
-      font-family: 'Lilita One', Arial, sans-serif; display: none;
-    `;
+    panel.className = 'fixed top-14 right-3 z-dropdown hidden min-w-[220px] p-3 rounded-xl backdrop-blur-lg border shadow-2xl font-display';
+    panel.style.cssText = 'background: rgba(26, 31, 43, 0.9); border-color: rgba(255, 255, 255, 0.08);';
+    
     const mkItem = (label: string) => {
       const el = document.createElement('button');
       el.textContent = label;
-      el.style.cssText = `
-        display: block; width: 100%; text-align: left; margin: 6px 0; padding: 10px 12px;
-        background: rgba(255,255,255,0.06); color: #fff; border: none; border-radius: 8px; cursor: pointer;
-      `;
-      el.onmouseenter = () => (el.style.background = 'rgba(255,255,255,0.12)');
-      el.onmouseleave = () => (el.style.background = 'rgba(255,255,255,0.06)');
+      el.className = 'menu-item';
       return el;
     };
     const restart = mkItem('Restart Level');
@@ -90,9 +81,6 @@ class App {
     const replayIntro = mkItem('Replay Intro');
     replayIntro.onclick = async () => { await (this.game as any)?.replayIntro?.(); };
 
-    const theme = mkItem('Toggle Theme');
-    theme.onclick = async () => { await this.game?.toggleTheme(); };
-
     const reduceMotion = mkItem('Toggle Reduced Motion');
     reduceMotion.onclick = () => {
       const current = localStorage.getItem('hexaword_reduce_motion') === 'true';
@@ -100,11 +88,11 @@ class App {
       if (svc?.setReducedMotion) svc.setReducedMotion(!current);
     };
 
-    panel.append(restart, theme, reduceMotion);
+    panel.append(restart, reduceMotion);
     document.body.append(btn, panel);
 
     btn.onclick = () => {
-      panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+      panel.classList.toggle('hidden');
     };
 
     // Expose animation service to menu for reduced motion toggle
@@ -116,36 +104,26 @@ class App {
     if (this.mainMenuEl) return;
     const el = document.createElement('div');
     el.id = 'hw-main-menu';
-    el.style.cssText = `
-      position: fixed; inset: 0; z-index: 10002; display: none;
-      background: radial-gradient(1200px 800px at 50% -10%, rgba(0,0,0,0.55), rgba(0,0,0,0.92));
-      backdrop-filter: blur(10px);
-      color: #fff; font-family: 'Lilita One', Arial, sans-serif;
-      align-items: center; justify-content: center;
-    `;
+    el.className = 'modal-overlay hidden';
+    
     const panel = document.createElement('div');
-    panel.style.cssText = `
-      width: min(92vw, 560px); padding: 24px; border-radius: 16px;
-      background: rgba(20,21,20,0.75); box-shadow: 0 16px 48px rgba(0,0,0,0.45);
-      backdrop-filter: blur(8px);
-    `;
+    panel.className = 'modal-content max-w-lg';
     panel.innerHTML = `
-      <div style="text-align:center; margin-bottom: 12px;">
-        <div style="font-size: 28px; letter-spacing: 1px;">HexaWord</div>
-        <div style="opacity:.85; font-size:14px; margin-top:4px;">Main Menu</div>
+      <div class="text-center mb-4">
+        <div class="text-3xl tracking-wide text-gradient">HexaWord</div>
+        <div class="text-sm text-hw-text-secondary mt-1">Main Menu</div>
       </div>
-      <div style="display:flex; flex-direction:column; gap:10px; margin: 12px 0;">
-        <button id=\"hw-play\" style=\"padding:12px 16px; border:none; border-radius:12px; background:#2d7cff; color:#fff; cursor:pointer;\">Play</button>
-        <button disabled style=\"padding:12px 16px; border:none; border-radius:12px; background:rgba(255,255,255,0.12); color:#fff; cursor:not-allowed;\">Daily Challenge (soon)</button>
-        <button disabled style=\"padding:12px 16px; border:none; border-radius:12px; background:rgba(255,255,255,0.12); color:#fff; cursor:not-allowed;\">Make Your Level (soon)</button>
-        <button disabled style=\"padding:12px 16px; border:none; border-radius:12px; background:rgba(255,255,255,0.12); color:#fff; cursor:not-allowed;\">Leaderboard (soon)</button>
+      <div class="flex flex-col gap-3 my-4">
+        <button id="hw-play" class="btn-glass-primary py-3 text-lg">Play</button>
+        <button disabled class="btn-glass opacity-50 cursor-not-allowed py-3">Daily Challenge (soon)</button>
+        <button disabled class="btn-glass opacity-50 cursor-not-allowed py-3">Make Your Level (soon)</button>
+        <button disabled class="btn-glass opacity-50 cursor-not-allowed py-3">Leaderboard (soon)</button>
       </div>
-      <div style=\"margin-top:12px; border-top:1px solid rgba(255,255,255,0.1); padding-top:12px;\">
-        <div style=\"font-size:16px; opacity:.9; margin-bottom:8px;\">Settings</div>
-        <div style=\"display:flex; gap:8px; flex-wrap:wrap;\">
-          <button id=\"hw-theme\" style=\"padding:8px 12px; border:none; border-radius:10px; background:rgba(255,255,255,0.12); color:#fff; cursor:pointer;\">Theme: dark</button>
-          <button id=\"hw-howto\" style=\"padding:8px 12px; border:none; border-radius:10px; background:rgba(255,255,255,0.12); color:#fff; cursor:pointer;\">How to Play</button>
-          <button id=\"hw-motion\" style=\"padding:8px 12px; border:none; border-radius:10px; background:rgba(255,255,255,0.12); color:#fff; cursor:pointer;\">Reduced Motion: Off</button>
+      <div class="mt-4 pt-4 border-t border-hw-surface-tertiary/20">
+        <div class="text-base text-hw-text-secondary mb-2">Settings</div>
+        <div class="flex gap-2 flex-wrap">
+          <button id="hw-howto" class="btn-glass text-sm">How to Play</button>
+          <button id="hw-motion" class="btn-glass text-sm">Reduced Motion: Off</button>
         </div>
       </div>
     `;
@@ -155,7 +133,6 @@ class App {
 
     // Wire buttons
     const playBtn = panel.querySelector('#hw-play') as HTMLButtonElement;
-    const themeBtn = panel.querySelector('#hw-theme') as HTMLButtonElement;
     const motionBtn = panel.querySelector('#hw-motion') as HTMLButtonElement;
     const howBtn = panel.querySelector('#hw-howto') as HTMLButtonElement;
 
@@ -167,17 +144,7 @@ class App {
       });
     };
     // Initialize button labels from stored prefs
-    const storedTheme = (localStorage.getItem('hexaword_theme') as 'dark' | 'light') || 'dark';
-    themeBtn.textContent = `Theme: ${storedTheme}`;
     motionBtn.textContent = `Reduced Motion: ${localStorage.getItem('hexaword_reduce_motion') === 'true' ? 'On' : 'Off'}`;
-
-    themeBtn.onclick = async () => {
-      const current = localStorage.getItem('hexaword_theme') as 'dark' | 'light' | null;
-      const next = current === 'light' ? 'dark' : 'light';
-      localStorage.setItem('hexaword_theme', next || 'dark');
-      themeBtn.textContent = `Theme: ${next || 'dark'}`;
-      if (this.game) await this.game.toggleTheme();
-    };
     motionBtn.onclick = () => {
       const current = localStorage.getItem('hexaword_reduce_motion') === 'true';
       const next = !current;
@@ -188,9 +155,52 @@ class App {
     };
     howBtn.onclick = () => this.showHowTo();
   }
+  
+  private showHowTo(): void {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    
+    const content = document.createElement('div');
+    content.className = 'modal-content';
+    content.innerHTML = `
+      <div class="text-center mb-4">
+        <div class="text-2xl font-display text-hw-text-primary">How to Play</div>
+      </div>
+      <div class="space-y-3 text-hw-text-secondary">
+        <p>🎯 Find all hidden words in the grid</p>
+        <p>💡 Words relate to the clue shown</p>
+        <p>🖱️ Click/tap letters to spell words</p>
+        <p>⌨️ Or type with your keyboard</p>
+        <p>↩️ Tap last letter again to undo</p>
+        <p>✨ Words auto-submit when complete</p>
+      </div>
+      <div class="mt-6 text-center">
+        <button class="btn-glass-primary px-6 py-2">Got it!</button>
+      </div>
+    `;
+    
+    overlay.appendChild(content);
+    document.body.appendChild(overlay);
+    
+    const closeBtn = content.querySelector('button');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        overlay.remove();
+      });
+    }
+    
+    // Close on overlay click
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        overlay.remove();
+      }
+    });
+  }
 
   private async loadLevelFromServer(level: number): Promise<void> {
-    const d = await fetchGameDataWithFallback(level);
+    const d = await fetchGameDataWithFallback(level, (error) => {
+      this.showToast(error.message, 'warning');
+    });
     const words = d.words.slice(0, Math.min(6, d.words.length));
     if (!this.game) {
       // Create the game instance now
@@ -201,7 +211,7 @@ class App {
         seed: d.seed,
         gridRadius: 10,
         level: d.level || level,
-        theme: (localStorage.getItem('hexaword_theme') as 'dark' | 'light') || 'dark',
+        theme: 'dark',
         onReady: () => {
           this.setupUI();
           // Build gear menu after game exists
@@ -346,12 +356,14 @@ class App {
   private showMainMenu(): void {
     this.ensureMainMenu();
     if (!this.mainMenuEl) return;
-    this.mainMenuEl.style.display = 'flex';
+    this.mainMenuEl.classList.remove('hidden');
+    this.mainMenuEl.classList.add('flex');
   }
 
   private hideMainMenu(): void {
     if (!this.mainMenuEl) return;
-    this.mainMenuEl.style.display = 'none';
+    this.mainMenuEl.classList.add('hidden');
+    this.mainMenuEl.classList.remove('flex');
   }
   
   /**

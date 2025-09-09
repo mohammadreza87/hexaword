@@ -172,7 +172,30 @@ export class ColorPaletteService {
    */
   async getCurrentScheme(): Promise<ColorScheme> {
     const palette = await this.generateLevelPalette(this.currentLevel);
-    return this.isDarkMode ? palette.dark : palette.light;
+    const scheme = this.isDarkMode ? palette.dark : palette.light;
+    
+    // Update CSS variables to match current scheme
+    this.updateCSSVariables(scheme);
+    
+    return scheme;
+  }
+  
+  /**
+   * Update CSS variables with current color scheme
+   */
+  private updateCSSVariables(scheme: ColorScheme): void {
+    const root = document.documentElement;
+    
+    // Update data-theme attribute
+    root.setAttribute('data-theme', this.isDarkMode ? 'dark' : 'light');
+    
+    // Update dynamic accent colors based on level
+    root.style.setProperty('--hw-accent-primary', scheme.accent);
+    root.style.setProperty('--hw-accent-secondary', this.lightenColor(scheme.accent, 0.2));
+    root.style.setProperty('--hw-accent-tertiary', this.lightenColor(scheme.accent, -0.2));
+    root.style.setProperty('--hw-cell-active', scheme.accent);
+    root.style.setProperty('--hw-cell-intersect', scheme.intersectionColor);
+    root.style.setProperty('--hw-cell-solved', scheme.solvedColor);
   }
   
   /**

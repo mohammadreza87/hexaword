@@ -1,0 +1,121 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom component styles using Tailwind utilities */
+@layer components {
+  /* Glassmorphism button */
+  .btn-glass {
+    @apply px-4 py-2 rounded-lg bg-hw-surface-secondary backdrop-blur-md border border-hw-surface-tertiary 
+           text-hw-text-primary font-display transition-all duration-base
+           hover:bg-hw-surface-tertiary hover:shadow-lg
+           active:scale-95;
+    background: var(--hw-glass-bg);
+  }
+  
+  .btn-glass-primary {
+    @apply px-4 py-2 rounded-lg backdrop-blur-md border text-hw-accent-primary font-display transition-all duration-base hover:shadow-glow active:scale-95;
+    background: rgba(31, 182, 255, 0.2);
+    border-color: rgba(31, 182, 255, 0.3);
+  }
+  
+  .btn-glass-primary:hover {
+    background: rgba(31, 182, 255, 0.3);
+    border-color: rgba(31, 182, 255, 0.5);
+  }
+  
+  /* Glass panel */
+  .panel-glass {
+    @apply rounded-xl backdrop-blur-lg border shadow-2xl;
+    background: var(--hw-glass-bg);
+    border-color: var(--hw-glass-border);
+  }
+  
+  /* HUD components */
+  .hud-container {
+    @apply fixed top-0 left-0 right-0 z-sticky p-4 pointer-events-none;
+  }
+  
+  .hud-panel {
+    @apply inline-flex items-center gap-2 px-3 py-2 rounded-lg
+           backdrop-blur-md border
+           text-hw-text-secondary text-sm font-display pointer-events-auto;
+    background: var(--hw-glass-bg);
+    border-color: var(--hw-glass-border);
+  }
+  
+  /* Modal overlay */
+  .modal-overlay {
+    @apply fixed inset-0 z-backdrop backdrop-blur-xl 
+           flex items-center justify-center p-4 animate-fade-in;
+    background: var(--hw-bg-overlay);
+  }
+  
+  .modal-content {
+    @apply w-full max-w-lg panel-glass p-6 animate-slide-up;
+  }
+  
+  /* Menu items */
+  .menu-item {
+    @apply w-full text-left px-3 py-2 rounded-md
+           bg-transparent text-hw-text-primary transition-all duration-fast
+           hover:text-hw-accent-primary;
+  }
+  
+  .menu-item:hover {
+    background: rgba(42, 52, 70, 0.6);
+  }
+  
+  .menu-item-active {
+    @apply text-hw-accent-primary;
+    background: rgba(31, 182, 255, 0.2);
+  }
+  
+  /* Progress indicator */
+  .progress-bar {
+    @apply h-1 rounded-full overflow-hidden;
+    background: rgba(59, 71, 96, 0.3);
+  }
+  
+  .progress-fill {
+    @apply h-full bg-gradient-to-r from-hw-accent-primary to-hw-accent-secondary
+           transition-all duration-slow ease-out;
+  }
+  
+  /* Text styles */
+  .text-gradient {
+    @apply bg-gradient-to-r from-hw-accent-primary to-hw-accent-secondary 
+           bg-clip-text text-transparent;
+  }
+  
+  /* Toast notifications */
+  .toast {
+    @apply fixed bottom-4 left-1/2 -translate-x-1/2 z-notification
+           px-4 py-3 rounded-lg shadow-xl backdrop-blur-md
+           animate-slide-up pointer-events-none;
+  }
+  
+  .toast-info {
+    @apply border text-hw-accent-primary;
+    background: rgba(31, 182, 255, 0.2);
+    border-color: rgba(31, 182, 255, 0.3);
+  }
+  
+  .toast-success {
+    @apply border text-hw-accent-success;
+    background: rgba(29, 214, 124, 0.2);
+    border-color: rgba(29, 214, 124, 0.3);
+  }
+  
+  .toast-warning {
+    @apply border text-hw-accent-warning;
+    background: rgba(255, 181, 69, 0.2);
+    border-color: rgba(255, 181, 69, 0.3);
+  }
+  
+  .toast-error {
+    @apply border text-hw-accent-error;
+    background: rgba(233, 69, 141, 0.2);
+    border-color: rgba(233, 69, 141, 0.3);
+  }
+}

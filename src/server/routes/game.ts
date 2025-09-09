@@ -1,10 +1,17 @@
 import express from 'express';
 import { context, reddit } from '@devvit/web/server';
-import { GameInitResponse, ApiErrorResponse, ApiErrorCode } from '../../shared/types/api';
+import { 
+  GameInitResponse, 
+  ApiErrorResponse, 
+  ApiErrorCode,
+  GameInitResponseSchema 
+} from '../../shared/types/api';
 import { LevelSelector } from '../services/LevelSelector';
 import { LevelRepository } from '../services/LevelRepository';
+import { Logger, asyncHandler } from '../middleware/errorHandler';
 
 export const gameRouter = express.Router();
+const logger = Logger.getInstance();
 
 // Simple, static word list for now; replace with server-side generation/dictionary.
 const DEFAULT_WORDS = ['LOG', 'EGO', 'GEL', 'OLD', 'LEG', 'GOD', 'DOG', 'LODE', 'GOLD', 'LODGE'];
@@ -45,30 +52,32 @@ function createErrorResponse(code: ApiErrorCode, message: string, details?: unkn
 
 gameRouter.get<unknown, GameInitResponse | ApiErrorResponse>(
   '/api/game/init',
-  async (req, res): Promise<void> => {
-    try {
-      const { postId } = context;
-      
-      // Validate context
-      if (!postId) {
-        console.error('Missing postId in context');
-        res.status(400).json(
-          createErrorResponse(
-            ApiErrorCode.VALIDATION_ERROR,
-            'PostId is required but not found in context'
-          )
-        );
-        return;
-      }
+  asyncHandler(async (req, res): Promise<void> => {
+    const requestId = (req as any).requestId;
+    const { postId } = context;
+    
+    // Validate context
+    if (!postId) {
+      logger.error('Missing postId in context', undefined, { requestId });
+      res.status(400).json(
+        createErrorResponse(
+          ApiErrorCode.VALIDATION_ERROR,
+          'PostId is required but not found in context'
+        )
+      );
+      return;
+    }
 
-      // Get username (optional, don't fail if unavailable)
-      let username = 'anonymous';
-      try {
-        username = (await reddit.getCurrentUsername()) ?? 'anonymous';
-      } catch (err) {
-        console.warn('Failed to get username:', err);
-        // Continue with anonymous
-      }
+    logger.info('Processing game init request', { requestId, postId });
+
+    // Get username (optional, don't fail if unavailable)
+    let username = 'anonymous';
+    try {
+      username = (await reddit.getCurrentUsername()) ?? 'anonymous';
+    } catch (err) {
+      logger.warn('Failed to get username', undefined, { requestId, error: err });
+      // Continue with anonymous
+    }
       
       // Determine requested level (default 1)
       const levelParam = Number((req.query?.level as string) ?? '1');
@@ -110,7 +119,7 @@ gameRouter.get<unknown, GameInitResponse | ApiErrorResponse>(
       try {
         validateWords(words);
       } catch (err) {
-        console.error('Word validation failed:', err);
+        logger.error('Word validation failed', err as Error, { requestId, postId });
         res.status(500).json(
           createErrorResponse(
             ApiErrorCode.SERVER_ERROR,
@@ -121,7 +130,7 @@ gameRouter.get<unknown, GameInitResponse | ApiErrorResponse>(
         return;
       }
 
-      // Create and validate response
+      // Create response
       const response: GameInitResponse = {
         type: 'game_init',
         postId,
@@ -133,22 +142,30 @@ gameRouter.get<unknown, GameInitResponse | ApiErrorResponse>(
         createdAt: new Date().toISOString(),
       };
       
-      console.log(`Game init successful for post ${postId}, level ${level}, seed: ${seed}`);
-      res.json(response);
+      // Validate response with Zod schema
+      const validationResult = GameInitResponseSchema.safeParse(response);
+      if (!validationResult.success) {
+        logger.error('Response validation failed', undefined, { 
+          requestId, 
+          errors: validationResult.error.errors 
+        });
+        res.status(500).json(
+          createErrorResponse(
+            ApiErrorCode.INTERNAL_ERROR,
+            'Failed to generate valid response'
+          )
+        );
+        return;
+      }
       
-    } catch (err) {
-      console.error('Unexpected error in game init:', err);
+      logger.info('Game init successful', { 
+        requestId, 
+        postId, 
+        level, 
+        seed,
+        wordCount: words.length 
+      });
       
-      res.status(500).json(
-        createErrorResponse(
-          ApiErrorCode.SERVER_ERROR,
-          'An unexpected error occurred',
-          { 
-            error: err instanceof Error ? err.message : 'Unknown error',
-            timestamp: new Date().toISOString()
-          }
-        )
-      );
-    }
-  }
+      res.json(validationResult.data);
+  })
 );

@@ -35,14 +35,15 @@ describe('Deterministic Puzzle Generation', () => {
       const rng1 = createRNG('shuffle-seed');
       const rng2 = createRNG('shuffle-seed');
       
-      const arr1 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-      const arr2 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+      const original = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+      const arr1 = [...original];
+      const arr2 = [...original];
       
-      rng1.shuffle(arr1);
-      rng2.shuffle(arr2);
+      const shuffled1 = rng1.shuffle(arr1);
+      const shuffled2 = rng2.shuffle(arr2);
       
-      expect(arr1).toEqual(arr2);
-      expect(arr1).not.toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]); // Should be shuffled
+      expect(shuffled1).toEqual(shuffled2);
+      expect(shuffled1).not.toEqual(original); // Should be shuffled
     });
   });
   

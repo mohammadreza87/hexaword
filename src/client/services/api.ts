@@ -1,20 +1,132 @@
-import { GameInitResponse, isGameInitResponse } from '../../shared/types/api';
+import { 
+  GameInitResponse, 
+  validateGameInitResponse,
+  ApiErrorResponse,
+  isApiErrorResponse,
+  ApiErrorCode 
+} from '../../shared/types/api';
+
+// Exponential backoff retry configuration
+interface RetryConfig {
+  maxRetries: number;
+  initialDelay: number;
+  maxDelay: number;
+  backoffFactor: number;
+}
+
+const DEFAULT_RETRY_CONFIG: RetryConfig = {
+  maxRetries: 3,
+  initialDelay: 1000,
+  maxDelay: 10000,
+  backoffFactor: 2
+};
+
+class ApiError extends Error {
+  constructor(
+    message: string,
+    public code: ApiErrorCode | string,
+    public statusCode?: number,
+    public details?: unknown
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit = {},
+  retryConfig: RetryConfig = DEFAULT_RETRY_CONFIG
+): Promise<Response> {
+  let lastError: Error | undefined;
+  let delay = retryConfig.initialDelay;
+  
+  for (let attempt = 0; attempt <= retryConfig.maxRetries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      // Don't retry on client errors (4xx)
+      if (response.status >= 400 && response.status < 500) {
+        return response;
+      }
+      
+      // Retry on server errors (5xx) or network issues
+      if (!response.ok && attempt < retryConfig.maxRetries) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      
+      return response;
+    } catch (error) {
+      lastError = error as Error;
+      
+      if (attempt < retryConfig.maxRetries) {
+        // Wait with exponential backoff
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay = Math.min(delay * retryConfig.backoffFactor, retryConfig.maxDelay);
+        console.log(`Retry attempt ${attempt + 1} after ${delay}ms delay`);
+      }
+    }
+  }
+  
+  throw lastError || new Error('Request failed after retries');
+}
 
 export async function getGameInit(level: number = 1): Promise<GameInitResponse> {
   const url = new URL('/api/game/init', window.location.origin);
   url.searchParams.set('level', String(level));
-  const res = await fetch(url.toString(), { method: 'GET' });
-  if (!res.ok) {
-    throw new Error(`init request failed: ${res.status}`);
+  
+  try {
+    const res = await fetchWithRetry(url.toString(), { method: 'GET' });
+    
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      
+      if (isApiErrorResponse(data)) {
+        throw new ApiError(
+          data.error.message,
+          data.error.code,
+          res.status,
+          data.error.details
+        );
+      }
+      
+      throw new ApiError(
+        `Request failed with status ${res.status}`,
+        ApiErrorCode.SERVER_ERROR,
+        res.status
+      );
+    }
+    
+    const data = await res.json();
+    return validateGameInitResponse(data);
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        throw new ApiError('Request timeout', ApiErrorCode.TIMEOUT);
+      }
+      throw new ApiError(error.message, ApiErrorCode.NETWORK_ERROR);
+    }
+    
+    throw new ApiError('Unknown error occurred', ApiErrorCode.NETWORK_ERROR);
   }
-  const data = await res.json();
-  if (!isGameInitResponse(data)) {
-    throw new Error('init response invalid shape');
-  }
-  return data;
 }
 
-export async function fetchGameDataWithFallback(level: number = 1): Promise<{
+export async function fetchGameDataWithFallback(
+  level: number = 1,
+  onError?: (error: Error) => void
+): Promise<{
   seed: string;
   words: string[];
   postId: string;
@@ -35,7 +147,19 @@ export async function fetchGameDataWithFallback(level: number = 1): Promise<{
       level: init.level ?? level,
       clue: init.clue,
     };
-  } catch (e) {
+  } catch (error) {
+    // Log error for debugging
+    console.warn('Failed to fetch game data from server:', error);
+    
+    // Notify caller about the error
+    if (onError) {
+      const message = error instanceof ApiError 
+        ? `Server unavailable: ${error.message}. Playing offline mode.`
+        : 'Unable to connect to server. Playing offline mode.';
+      onError(new Error(message));
+    }
+    
+    // Return fallback data for offline play
     return {
       seed: getLocalSeed(),
       words: defaultWords,
