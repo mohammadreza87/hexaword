@@ -77,3 +77,20 @@ export function applyProgressiveBlur(element: HTMLElement, level: 'none' | 'sm' 
   // Add new blur class
   element.classList.add(`hw-blur-${level}`, 'hw-blur-progressive');
 }
+
+/**
+ * Applies/removes content blur to an element (blurs its contents), progressively.
+ */
+export function setContentBlur(element: HTMLElement, level: 'none' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' = 'md'): void {
+  element.classList.remove('hw-cblur-none', 'hw-cblur-sm', 'hw-cblur-md', 'hw-cblur-lg', 'hw-cblur-xl', 'hw-cblur-2xl');
+  element.classList.add(`hw-cblur-${level}`, 'hw-cblur-progressive');
+}
+
+/**
+ * Convenience to blur/unblur the main game container.
+ */
+export function blurGameContainer(level: 'none' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' = 'lg'): void {
+  const el = document.getElementById('hex-grid-container');
+  if (!el) return;
+  setContentBlur(el, level);
+}

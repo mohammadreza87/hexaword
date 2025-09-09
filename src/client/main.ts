@@ -5,6 +5,7 @@ gsap.registerPlugin(Physics2DPlugin);
 import { fetchGameDataWithFallback } from './services/api';
 import './styles/tokens.css';
 import './styles/tailwind.css';
+import { blurGameContainer } from './utils/ui';
 
 console.log('HexaWord Crossword Generator v4.0 - Modular Architecture');
 
@@ -107,7 +108,7 @@ class App {
     el.className = 'modal-overlay hidden';
     
     const panel = document.createElement('div');
-    panel.className = 'modal-content max-w-lg';
+    panel.className = 'modal-content max-w-lg panel-hex';
     panel.innerHTML = `
       <div class="text-center mb-4">
         <div class="text-3xl tracking-wide text-gradient">HexaWord</div>
@@ -161,7 +162,7 @@ class App {
     overlay.className = 'modal-overlay';
     
     const content = document.createElement('div');
-    content.className = 'modal-content';
+    content.className = 'modal-content panel-hex';
     content.innerHTML = `
       <div class="text-center mb-4">
         <div class="text-2xl font-display text-hw-text-primary">How to Play</div>
@@ -186,6 +187,8 @@ class App {
     if (closeBtn) {
       closeBtn.addEventListener('click', () => {
         overlay.remove();
+        // Restore focus blur
+        blurGameContainer('none');
       });
     }
     
@@ -193,8 +196,11 @@ class App {
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) {
         overlay.remove();
+        blurGameContainer('none');
       }
     });
+    // Add background blur while help is open
+    blurGameContainer('md');
   }
 
   private async loadLevelFromServer(level: number): Promise<void> {
@@ -235,29 +241,22 @@ class App {
   private showLevelCompleteOverlay(level: number): void {
     const overlay = document.createElement('div');
     overlay.id = 'hw-complete-overlay';
-    overlay.style.cssText = `
-      position: fixed; inset: 0; z-index: 10004; display: flex; align-items: center; justify-content: center;
-      background: rgba(0,0,0,0.35); backdrop-filter: blur(8px);
-    `;
+    overlay.className = 'modal-overlay';
     const panel = document.createElement('div');
-    panel.style.cssText = `
-      width: min(92vw, 560px); border-radius: 16px; padding: 20px;
-      background: rgba(20,21,20,0.92); color: #fff; box-shadow: 0 16px 48px rgba(0,0,0,0.45);
-      font-family: 'Lilita One', Arial, sans-serif;
-    `;
+    panel.className = 'modal-content panel-hex max-w-xl';
     const clue = this.game?.getClue() || '';
     const words = (this.game?.getPlacedWords() || []).map(w => w.word);
     panel.innerHTML = `
-      <div style="text-align:center; margin-bottom: 10px;">
-        <div style="font-size: 24px; letter-spacing: .5px;">Level ${level} Complete!</div>
-        <div style="opacity:.9; font-size: 16px; margin-top:6px;">${clue}</div>
+      <div class="text-center mb-3">
+        <div class="text-2xl tracking-wide text-hw-text-primary">Level ${level} Complete!</div>
+        <div class="text-sm text-hw-text-secondary mt-1">${clue}</div>
       </div>
-      <div style="max-height: 180px; overflow:auto; padding: 8px; background: rgba(255,255,255,0.06); border-radius: 10px; font-family: Arial, sans-serif; font-size: 14px; line-height:1.6; text-align:center;">
+      <div class="max-h-56 overflow-auto p-3 rounded-lg border border-hw-surface-tertiary/30 bg-white/5 text-center font-sans text-sm leading-6">
         ${words.join(' • ')}
       </div>
-      <div style="display:flex; flex-direction:row; align-items:center; justify-content:center; gap:10px; margin-top: 14px;">
-        <button id="hw-menu" style="padding:10px 16px; border:none; border-radius:10px; background:rgba(255,255,255,0.12); color:#fff; cursor:pointer; box-shadow: 0 4px 0 rgba(0,0,0,0.35);">Main Menu</button>
-        <button id="hw-next" style="padding:12px 18px; border:none; border-radius:12px; background:#2d7cff; color:#fff; cursor:pointer; box-shadow: 0 5px 0 #1b55d1;">Next Level</button>
+      <div class="flex items-center justify-center gap-3 mt-4">
+        <button id="hw-menu" class="btn-glass px-4 py-2">Main Menu</button>
+        <button id="hw-next" class="btn-glass-primary px-5 py-2">Next Level</button>
       </div>
     `;
     overlay.appendChild(panel);
@@ -269,17 +268,12 @@ class App {
     const nextBtn = panel.querySelector('#hw-next') as HTMLButtonElement;
     const menuBtn = panel.querySelector('#hw-menu') as HTMLButtonElement;
     // Hover/press interactions (simple)
-    const addHover = (b: HTMLButtonElement) => {
-      b.onmouseenter = () => { b.style.transform = 'translateY(-1px)'; };
-      b.onmouseleave = () => { b.style.transform = 'translateY(0)'; };
-      b.onmousedown = () => { b.style.transform = 'translateY(1px)'; };
-      b.onmouseup = () => { b.style.transform = 'translateY(-1px)'; };
-    };
-    addHover(nextBtn);
-    addHover(menuBtn);
+    // Progressive blur background while overlay is open
+    blurGameContainer('lg');
 
     nextBtn.onclick = async () => {
       overlay.remove();
+      blurGameContainer('none');
       this.currentLevel = level + 1;
       await this.fadeTransition(async () => {
         await this.loadLevelFromServer(this.currentLevel);
@@ -287,6 +281,7 @@ class App {
     };
     menuBtn.onclick = async () => {
       overlay.remove();
+      blurGameContainer('none');
       await this.fadeTransition(async () => {
         this.showMainMenu();
       });
@@ -358,12 +353,15 @@ class App {
     if (!this.mainMenuEl) return;
     this.mainMenuEl.classList.remove('hidden');
     this.mainMenuEl.classList.add('flex');
+    // Blur gameplay behind the menu
+    blurGameContainer('lg');
   }
 
   private hideMainMenu(): void {
     if (!this.mainMenuEl) return;
     this.mainMenuEl.classList.add('hidden');
     this.mainMenuEl.classList.remove('flex');
+    blurGameContainer('none');
   }
   
   /**

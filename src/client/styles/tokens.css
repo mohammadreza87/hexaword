@@ -180,6 +180,15 @@
 .hw-blur-xl { backdrop-filter: blur(var(--hw-blur-xl)); }
 .hw-blur-2xl { backdrop-filter: blur(var(--hw-blur-2xl)); }
 
+/* Content blur (blurs the element’s own contents) */
+.hw-cblur-progressive { transition: filter var(--hw-transition-slow); }
+.hw-cblur-none { filter: blur(var(--hw-blur-none)); }
+.hw-cblur-sm { filter: blur(var(--hw-blur-sm)); }
+.hw-cblur-md { filter: blur(var(--hw-blur-md)); }
+.hw-cblur-lg { filter: blur(var(--hw-blur-lg)); }
+.hw-cblur-xl { filter: blur(var(--hw-blur-xl)); }
+.hw-cblur-2xl { filter: blur(var(--hw-blur-2xl)); }
+
 /* Focus state with dynamic blur */
 .hw-focus-target {
   filter: blur(0);
