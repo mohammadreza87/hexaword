@@ -12,6 +12,8 @@ export class InputHexGrid {
   private ctx: CanvasRenderingContext2D;
   private cells: InputCell[] = [];
   private hexSize: number = 25;
+  private baseHexSize: number = 25;
+  private useWideGrid: boolean = false;
   private typedWord: string = '';  // Track typed letters
   private lastClickedHex: {q: number, r: number} | null = null;
   private animationService: AnimationService;
@@ -67,74 +69,122 @@ export class InputHexGrid {
     // Clear and rebuild cells array
     this.cells = [];
     
-    // First, add the clear button at true center (0,0)
-    this.cells.push({ q: 0, r: 0 });
-    
-    // Now add letter cells in the exact order we want them filled
-    let cellsAdded = 0;
-    
-    // Row 1 (r=0): 9 cells total, centered on (0,0)
-    // Clear button is at q=0, so we have 4 cells on each side
-    const row1Positions = [
-      {q: -4, r: 0}, {q: -3, r: 0}, {q: -2, r: 0}, {q: -1, r: 0},
-      {q: 1, r: 0}, {q: 2, r: 0}, {q: 3, r: 0}, {q: 4, r: 0}
-    ];
-    
-    for (const pos of row1Positions) {
-      if (cellsAdded < count) {
-        this.cells.push(pos);
+    // Check if we need to use the wider grid pattern (11-10-9-8) for many letters
+    // 11 + 10 + 9 + 8 = 38 cells max (minus 1 for clear button = 37 letters)
+    if (count > 24) {
+      this.useWideGrid = true;
+      this.hexSize = this.baseHexSize * 0.65; // Make cells 35% smaller to fit in viewport
+      
+      // First, add the clear button at true center (0,0)
+      this.cells.push({ q: 0, r: 0 });
+      
+      let cellsAdded = 0;
+      
+      // Row 1 (r=0): 11 cells total, centered on (0,0)
+      // Clear button is at q=0, so we have 5 cells on each side
+      const row1Positions = [
+        {q: -5, r: 0}, {q: -4, r: 0}, {q: -3, r: 0}, {q: -2, r: 0}, {q: -1, r: 0},
+        {q: 1, r: 0}, {q: 2, r: 0}, {q: 3, r: 0}, {q: 4, r: 0}, {q: 5, r: 0}
+      ];
+      
+      for (const pos of row1Positions) {
+        if (cellsAdded < count) {
+          this.cells.push(pos);
+          cellsAdded++;
+        }
+      }
+      
+      // Row 2 (r=-1): 10 cells, offset by -1 from row 1 (starts at -4)
+      for (let i = 0; i < 10 && cellsAdded < count; i++) {
+        this.cells.push({q: -4 + i, r: -1});
         cellsAdded++;
       }
-    }
-    
-    // Row 2 (r=-1): 8 cells, centered
-    // With hexagonal grid rotation, we need to center properly
-    // 8 cells: centered from -3 to 4 (shifted half cell right from row 1)
-    for (let i = 0; i < 8 && cellsAdded < count; i++) {
-      this.cells.push({q: -3 + i, r: -1});
-      cellsAdded++;
-    }
-    
-    // Row 3 (r=-2): 7 cells, centered
-    // 7 cells: shift right for better visual centering (-2 to 4)
-    for (let i = 0; i < 7 && cellsAdded < count; i++) {
-      this.cells.push({q: -2 + i, r: -2});
-      cellsAdded++;
-    }
-    
-    // Row 4 (r=-3): 6 cells, centered
-    // 6 cells: -2 to 3 (shifted half cell right like other even rows)
-    for (let i = 0; i < 6 && cellsAdded < count; i++) {
-      this.cells.push({q: -2 + i, r: -3});
-      cellsAdded++;
-    }
-    
-    // Row 5 (r=-4): 5 cells, centered
-    // 5 cells: -2 to 2 (odd number, center at 0)
-    for (let i = 0; i < 5 && cellsAdded < count; i++) {
-      this.cells.push({q: -2 + i, r: -4});
-      cellsAdded++;
-    }
-    
-    // Row 6 (r=-5): 4 cells, centered
-    // 4 cells: -1 to 2 (shifted half cell right like other even rows)
-    for (let i = 0; i < 4 && cellsAdded < count; i++) {
-      this.cells.push({q: -1 + i, r: -5});
-      cellsAdded++;
-    }
-    
-    // Row 7 (r=-6): 3 cells, centered
-    // 3 cells: -1 to 1 (odd number, center at 0)
-    for (let i = 0; i < 3 && cellsAdded < count; i++) {
-      this.cells.push({q: -1 + i, r: -6});
-      cellsAdded++;
-    }
-    
-    // Row 8 (r=-7): 2 cells, centered
-    // 2 cells: 0 to 1 (shifted half cell right like other even rows)
-    for (let i = 0; i < 2 && cellsAdded < count; i++) {
-      this.cells.push({q: 0 + i, r: -7});
-      cellsAdded++;
+      
+      // Row 3 (r=-2): 9 cells, offset by -1 from row 2 (starts at -3)
+      for (let i = 0; i < 9 && cellsAdded < count; i++) {
+        this.cells.push({q: -3 + i, r: -2});
+        cellsAdded++;
+      }
+      
+      // Row 4 (r=-3): 8 cells, offset by -1 from row 3 (starts at -3, shifted for even row)
+      for (let i = 0; i < 8 && cellsAdded < count; i++) {
+        this.cells.push({q: -3 + i, r: -3});
+        cellsAdded++;
+      }
+    } else {
+      // Use standard grid pattern (9-8-7-6-5-4-3-2) for 24 or fewer letters
+      this.useWideGrid = false;
+      this.hexSize = this.baseHexSize;
+      
+      // First, add the clear button at true center (0,0)
+      this.cells.push({ q: 0, r: 0 });
+      
+      // Now add letter cells in the exact order we want them filled
+      let cellsAdded = 0;
+      
+      // Row 1 (r=0): 9 cells total, centered on (0,0)
+      // Clear button is at q=0, so we have 4 cells on each side
+      const row1Positions = [
+        {q: -4, r: 0}, {q: -3, r: 0}, {q: -2, r: 0}, {q: -1, r: 0},
+        {q: 1, r: 0}, {q: 2, r: 0}, {q: 3, r: 0}, {q: 4, r: 0}
+      ];
+      
+      for (const pos of row1Positions) {
+        if (cellsAdded < count) {
+          this.cells.push(pos);
+          cellsAdded++;
+        }
+      }
+      
+      // Row 2 (r=-1): 8 cells, centered
+      // With hexagonal grid rotation, we need to center properly
+      // 8 cells: centered from -3 to 4 (shifted half cell right from row 1)
+      for (let i = 0; i < 8 && cellsAdded < count; i++) {
+        this.cells.push({q: -3 + i, r: -1});
+        cellsAdded++;
+      }
+      
+      // Row 3 (r=-2): 7 cells, centered
+      // 7 cells: shift right for better visual centering (-2 to 4)
+      for (let i = 0; i < 7 && cellsAdded < count; i++) {
+        this.cells.push({q: -2 + i, r: -2});
+        cellsAdded++;
+      }
+      
+      // Row 4 (r=-3): 6 cells, centered
+      // 6 cells: -2 to 3 (shifted half cell right like other even rows)
+      for (let i = 0; i < 6 && cellsAdded < count; i++) {
+        this.cells.push({q: -2 + i, r: -3});
+        cellsAdded++;
+      }
+      
+      // Row 5 (r=-4): 5 cells, centered
+      // 5 cells: -2 to 2 (odd number, center at 0)
+      for (let i = 0; i < 5 && cellsAdded < count; i++) {
+        this.cells.push({q: -2 + i, r: -4});
+        cellsAdded++;
+      }
+      
+      // Row 6 (r=-5): 4 cells, centered
+      // 4 cells: -1 to 2 (shifted half cell right like other even rows)
+      for (let i = 0; i < 4 && cellsAdded < count; i++) {
+        this.cells.push({q: -1 + i, r: -5});
+        cellsAdded++;
+      }
+      
+      // Row 7 (r=-6): 3 cells, centered
+      // 3 cells: -1 to 1 (odd number, center at 0)
+      for (let i = 0; i < 3 && cellsAdded < count; i++) {
+        this.cells.push({q: -1 + i, r: -6});
+        cellsAdded++;
+      }
+      
+      // Row 8 (r=-7): 2 cells, centered
+      // 2 cells: 0 to 1 (shifted half cell right like other even rows)
+      for (let i = 0; i < 2 && cellsAdded < count; i++) {
+        this.cells.push({q: 0 + i, r: -7});
+        cellsAdded++;
+      }
     }
   }
   
@@ -152,7 +202,8 @@ export class InputHexGrid {
       this.typedWord = currentTypedWord;
     }
     
-    const size = dynamicSize || this.hexSize;
+    // Use the internal hexSize when in wide grid mode, otherwise use provided size
+    const size = this.useWideGrid ? this.hexSize : (dynamicSize || this.hexSize);
     const Hex = defineHex({
       dimensions: size,
       orientation: 'pointy'
@@ -518,7 +569,8 @@ export class InputHexGrid {
    * Handles click on input grid
    */
   public handleClick(x: number, y: number, centerX: number, centerY: number, dynamicSize?: number): string | null {
-    const size = dynamicSize || this.hexSize;
+    // Use the internal hexSize when in wide grid mode, otherwise use provided size
+    const size = this.useWideGrid ? this.hexSize : (dynamicSize || this.hexSize);
     const Hex = defineHex({
       dimensions: size,
       orientation: 'pointy'
@@ -761,7 +813,8 @@ export class InputHexGrid {
     centerY: number,
     dynamicSize?: number
   ): { leftX: number; rightX: number; topY: number; bottomY: number; topmostCellY: number } {
-    const size = dynamicSize || this.hexSize;
+    // Use the internal hexSize when in wide grid mode, otherwise use provided size
+    const size = this.useWideGrid ? this.hexSize : (dynamicSize || this.hexSize);
     const Hex = defineHex({ dimensions: size, orientation: 'pointy' });
     let maxY = -Infinity, minY = Infinity, maxX = -Infinity, minX = Infinity;
     

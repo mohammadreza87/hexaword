@@ -999,38 +999,46 @@ export class HexaWordGame {
     this.ctx.textAlign = 'center';
     this.ctx.textBaseline = 'bottom';
     
+    // Dynamic shadow/glow based on font size
+    // Smaller text needs less blur to remain readable
+    const glowScale = Math.max(0.3, fontSize / 32); // Scale relative to base size of 32px
+    
     // Layer 1: Outer glow (most diffuse)
     this.ctx.globalAlpha = 0.3;
     this.ctx.shadowColor = accentColor;
-    this.ctx.shadowBlur = 20;
+    this.ctx.shadowBlur = 20 * glowScale;
     this.ctx.shadowOffsetY = 0;
     this.ctx.fillStyle = gradient;
     this.ctx.fillText(clueText, centerX, clueY);
     
     // Layer 2: Middle glow
     this.ctx.globalAlpha = 0.5;
-    this.ctx.shadowBlur = 10;
+    this.ctx.shadowBlur = 10 * glowScale;
     this.ctx.fillText(clueText, centerX, clueY);
     
-    // Layer 3: Inner glow
-    this.ctx.globalAlpha = 0.7;
-    this.ctx.shadowBlur = 5;
-    this.ctx.fillText(clueText, centerX, clueY);
+    // Layer 3: Inner glow (only if text is large enough)
+    if (fontSize > 20) {
+      this.ctx.globalAlpha = 0.7;
+      this.ctx.shadowBlur = 5 * glowScale;
+      this.ctx.fillText(clueText, centerX, clueY);
+    }
     
     // Layer 4: Main text with gradient
     this.ctx.globalAlpha = 1;
     this.ctx.shadowColor = 'rgba(0,0,0,0.6)';
-    this.ctx.shadowBlur = 2;
-    this.ctx.shadowOffsetY = 1;
+    this.ctx.shadowBlur = Math.max(1, 2 * glowScale);
+    this.ctx.shadowOffsetY = Math.max(0.5, glowScale);
     this.ctx.fillStyle = gradient;
     this.ctx.fillText(clueText, centerX, clueY);
     
-    // Optional: Add subtle white highlight for extra pop
-    this.ctx.globalAlpha = 0.9;
-    this.ctx.shadowColor = 'transparent';
-    this.ctx.fillStyle = '#FFFFFF';
-    this.ctx.font = `900 ${fontSize - 1}px 'Inter', Arial`;
-    this.ctx.fillText(clueText, centerX, clueY - 1);
+    // Optional: Add subtle white highlight for extra pop (only for larger text)
+    if (fontSize > 24) {
+      this.ctx.globalAlpha = 0.9;
+      this.ctx.shadowColor = 'transparent';
+      this.ctx.fillStyle = '#FFFFFF';
+      this.ctx.font = `900 ${fontSize - 1}px 'Inter', Arial`;
+      this.ctx.fillText(clueText, centerX, clueY - 1);
+    }
     
     this.ctx.restore();
   }
