@@ -244,29 +244,35 @@ class App {
     });
     const words = d.words.slice(0, Math.min(6, d.words.length));
     if (!this.game) {
-      // Create the game instance now
-      this.game = new HexaWordGame({
-        containerId: 'hex-grid-container',
-        words,
-        clue: d.clue || 'RANDOM MIX',
-        seed: d.seed,
-        gridRadius: 10,
-        level: d.level || level,
-        theme: 'dark',
-        onReady: () => {
-          this.setupUI();
-          // Build gear menu after game exists
-          this.buildMenu();
-        },
-        onLevelComplete: async (lvl) => {
-          this.showLevelCompleteOverlay(lvl);
-        },
-        onError: (error) => {
-          console.error('Game error:', error);
-          this.showError(error.message);
-        }
+      // Create the game instance and wait for onReady before resolving
+      await new Promise<void>((resolve, reject) => {
+        this.game = new HexaWordGame({
+          containerId: 'hex-grid-container',
+          words,
+          clue: d.clue || 'RANDOM MIX',
+          seed: d.seed,
+          gridRadius: 10,
+          level: d.level || level,
+          theme: 'dark',
+          onReady: () => {
+            try {
+              this.setupUI();
+              this.buildMenu();
+            } finally {
+              resolve();
+            }
+          },
+          onLevelComplete: async (lvl) => {
+            this.showLevelCompleteOverlay(lvl);
+          },
+          onError: (error) => {
+            console.error('Game error:', error);
+            this.showError(error.message);
+            reject(error);
+          }
+        });
+        (window as any).hwAnimSvc = (this.game as any)?.animationService || (window as any).hwAnimSvc;
       });
-      (window as any).hwAnimSvc = (this.game as any)?.animationService || (window as any).hwAnimSvc;
       return;
     }
     await this.game.loadLevel({ words, seed: d.seed, clue: d.clue, level: d.level });

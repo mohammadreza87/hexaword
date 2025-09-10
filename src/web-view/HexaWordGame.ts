@@ -1255,7 +1255,7 @@ export class HexaWordGame {
       this.ctx.restore();
 
       // Blur overlay + center clue → move to final position
-      this.animationService.animateClueOverlay(
+      await this.animationService.animateClueOverlay(
         this.currentClue,
         targetScreen,
         { fontSizePx: size, overlayWidthPx: maxWidth, holdMs: 1000, level: this.currentLevel },

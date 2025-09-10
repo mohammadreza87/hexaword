@@ -54,132 +54,88 @@ export class InputHexGrid {
   }
   
   /**
-   * Initializes the input grid with exact number of cells needed
+   * Initialize cells with horizontal row pattern
+   * Pattern: 9 cells (first row), 8, 7, 6, 5, 4, 3, 2
+   * Clear button at true center (0,0), grid built symmetrically around it
    */
   private initializeCells(count: number): void {
-    const MyHex = defineHex({
-      dimensions: 30,
-      orientation: 'pointy'
-    });
+    if (count === 0) {
+      this.cells = [];
+      return;
+    }
 
-    // Always start with center cell (0,0) for clear button
-    const tempCells: InputCell[] = [{ q: 0, r: 0 }];
+    // Clear and rebuild cells array
+    this.cells = [];
     
-    // Define symmetrical placement patterns for different counts
-    // Always maintain left-right and top-bottom symmetry
-    let positions: InputCell[] = [];
+    // First, add the clear button at true center (0,0)
+    this.cells.push({ q: 0, r: 0 });
     
-    if (count === 1) {
-      positions = [
-        { q: 0, r: -1 },  // Top
-      ];
-    } else if (count === 2) {
-      positions = [
-        { q: -1, r: 0 },  // Left
-        { q: 1, r: 0 },   // Right
-      ];
-    } else if (count === 3) {
-      positions = [
-        { q: 0, r: -1 },  // Top
-        { q: -1, r: 1 },  // Bottom-Left
-        { q: 1, r: 0 },   // Right
-      ];
-    } else if (count === 4) {
-      positions = [
-        { q: -1, r: 0 },  // Left
-        { q: 1, r: 0 },   // Right
-        { q: 0, r: -1 },  // Top
-        { q: 0, r: 1 },   // Bottom
-      ];
-    } else if (count === 5) {
-      positions = [
-        { q: -1, r: 0 },  // Left
-        { q: 1, r: 0 },   // Right
-        { q: 0, r: -1 },  // Top
-        { q: -1, r: 1 },  // Bottom-Left
-        { q: 1, r: -1 },  // Top-Right
-      ];
-    } else if (count === 6) {
-      positions = [
-        { q: -1, r: 0 },  // Left
-        { q: 1, r: 0 },   // Right
-        { q: 0, r: -1 },  // Top
-        { q: 0, r: 1 },   // Bottom
-        { q: -1, r: 1 },  // Bottom-Left
-        { q: 1, r: -1 },  // Top-Right
-      ];
-    } else {
-      // For more than 6, start with full first ring
-      positions = [
-        { q: -1, r: 0 },  // Left
-        { q: 1, r: 0 },   // Right
-        { q: 0, r: -1 },  // Top
-        { q: 0, r: 1 },   // Bottom
-        { q: -1, r: 1 },  // Bottom-Left
-        { q: 1, r: -1 },  // Top-Right
-      ];
-    }
+    // Now add letter cells in the exact order we want them filled
+    let cellsAdded = 0;
     
-    // Add the positions we defined
-    for (let i = 0; i < Math.min(count, positions.length); i++) {
-      tempCells.push(positions[i]);
-    }
+    // Row 1 (r=0): 9 cells total, centered on (0,0)
+    // Clear button is at q=0, so we have 4 cells on each side
+    const row1Positions = [
+      {q: -4, r: 0}, {q: -3, r: 0}, {q: -2, r: 0}, {q: -1, r: 0},
+      {q: 1, r: 0}, {q: 2, r: 0}, {q: 3, r: 0}, {q: 4, r: 0}
+    ];
     
-    // If we need more than 6 letters, add second ring symmetrically
-    if (count > 6) {
-      // Add second ring in symmetrical pairs
-      const secondRing = [
-        { q: -2, r: 0 },   // Far Left
-        { q: 2, r: 0 },    // Far Right
-        { q: 0, r: -2 },   // Far Top
-        { q: 0, r: 2 },    // Far Bottom
-        { q: -1, r: -1 },  // Top-Left
-        { q: 1, r: 1 },    // Bottom-Right
-        { q: 1, r: -2 },   // Top-Right-Right
-        { q: -1, r: 2 },   // Bottom-Left-Left
-        { q: 2, r: -2 },   // Far Top-Right
-        { q: -2, r: 2 },   // Far Bottom-Left
-        { q: 2, r: -1 },   // Right-Top
-        { q: -2, r: 1 },   // Left-Bottom
-      ];
-      
-      // Add second ring positions
-      for (let i = 6; i < count && i - 6 < secondRing.length; i++) {
-        tempCells.push(secondRing[i - 6]);
+    for (const pos of row1Positions) {
+      if (cellsAdded < count) {
+        this.cells.push(pos);
+        cellsAdded++;
       }
     }
     
-    // If we need more than 18 letters (6 + 12), add third ring (18 positions)
-    if (count > 18) {
-      const thirdRing = [
-        { q: -3, r: 0 },   // Far Far Left
-        { q: -3, r: 1 },   // 
-        { q: -3, r: 2 },   // 
-        { q: -2, r: -1 },  // 
-        { q: -1, r: -2 },  // 
-        { q: 0, r: -3 },   // Far Far Top
-        { q: 1, r: -3 },   // 
-        { q: 2, r: -3 },   // 
-        { q: 3, r: -3 },   // 
-        { q: 3, r: -2 },   // 
-        { q: 3, r: -1 },   // 
-        { q: 3, r: 0 },    // Far Far Right
-        { q: 2, r: 1 },    // 
-        { q: 1, r: 2 },    // 
-        { q: 0, r: 3 },    // Far Far Bottom
-        { q: -1, r: 3 },   // 
-        { q: -2, r: 3 },   // 
-        { q: -3, r: 3 },   // 
-      ];
-      
-      // Add third ring positions
-      for (let i = 18; i < count && i - 18 < thirdRing.length; i++) {
-        tempCells.push(thirdRing[i - 18]);
-      }
+    // Row 2 (r=-1): 8 cells, centered
+    // With hexagonal grid rotation, we need to center properly
+    // 8 cells: centered from -3 to 4 (shifted half cell right from row 1)
+    for (let i = 0; i < 8 && cellsAdded < count; i++) {
+      this.cells.push({q: -3 + i, r: -1});
+      cellsAdded++;
     }
     
-    // Store cells - center is always at index 0
-    this.cells = tempCells;
+    // Row 3 (r=-2): 7 cells, centered
+    // 7 cells: shift right for better visual centering (-2 to 4)
+    for (let i = 0; i < 7 && cellsAdded < count; i++) {
+      this.cells.push({q: -2 + i, r: -2});
+      cellsAdded++;
+    }
+    
+    // Row 4 (r=-3): 6 cells, centered
+    // 6 cells: -2 to 3 (shifted half cell right like other even rows)
+    for (let i = 0; i < 6 && cellsAdded < count; i++) {
+      this.cells.push({q: -2 + i, r: -3});
+      cellsAdded++;
+    }
+    
+    // Row 5 (r=-4): 5 cells, centered
+    // 5 cells: -2 to 2 (odd number, center at 0)
+    for (let i = 0; i < 5 && cellsAdded < count; i++) {
+      this.cells.push({q: -2 + i, r: -4});
+      cellsAdded++;
+    }
+    
+    // Row 6 (r=-5): 4 cells, centered
+    // 4 cells: -1 to 2 (shifted half cell right like other even rows)
+    for (let i = 0; i < 4 && cellsAdded < count; i++) {
+      this.cells.push({q: -1 + i, r: -5});
+      cellsAdded++;
+    }
+    
+    // Row 7 (r=-6): 3 cells, centered
+    // 3 cells: -1 to 1 (odd number, center at 0)
+    for (let i = 0; i < 3 && cellsAdded < count; i++) {
+      this.cells.push({q: -1 + i, r: -6});
+      cellsAdded++;
+    }
+    
+    // Row 8 (r=-7): 2 cells, centered
+    // 2 cells: 0 to 1 (shifted half cell right like other even rows)
+    for (let i = 0; i < 2 && cellsAdded < count; i++) {
+      this.cells.push({q: 0 + i, r: -7});
+      cellsAdded++;
+    }
   }
   
   /**
@@ -202,6 +158,14 @@ export class InputHexGrid {
       orientation: 'pointy'
     });
     
+    // Save context state before rotation
+    this.ctx.save();
+    
+    // Apply -30 degree rotation to entire grid (rotate counterclockwise)
+    this.ctx.translate(centerX, centerY);
+    this.ctx.rotate(-30 * Math.PI / 180);  // Rotate -30 degrees
+    this.ctx.translate(-centerX, -centerY);
+    
     let maxY = -Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
@@ -219,11 +183,13 @@ export class InputHexGrid {
       });
     });
     
-    // Calculate offsets to center the grid horizontally and position bottom edge correctly
+    // Calculate offsets to center the grid horizontally and position vertically
     const gridWidth = maxX - minX;
     const gridHeight = maxY - minY;
-    const offsetX = centerX - (minX + maxX) / 2;  // Center horizontally
-    const offsetY = centerY - maxY;  // Adjust so maxY aligns with centerY
+    // Center the grid with adjustment for rotation
+    const offsetX = centerX - (minX + maxX) / 2 + 20;  // Small offset to center after rotation
+    // Position grid with good spacing from bottom
+    const offsetY = centerY - maxY + 50;  // Moderate offset for good positioning
     
     // Draw each cell
     this.cells.forEach((cell, index) => {
@@ -415,11 +381,19 @@ export class InputHexGrid {
       // Add letter or X for center cell
       if (isCenterCell && this.typedWord.length > 0) {
         // Only show X when there's typed text
+        // Counter-rotate text to keep it upright
+        this.ctx.save();
+        this.ctx.translate(x, y);
+        this.ctx.rotate(30 * Math.PI / 180);  // Counter-rotate +30 degrees
+        this.ctx.translate(-x, -y);
+        
         this.ctx.fillStyle = '#FFFFFF'; // Pure white for clear button
         this.ctx.font = `900 ${Math.floor(size * 0.9)}px 'Inter', Arial`;
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
         this.ctx.fillText('×', x, y); // Using × symbol for clear
+        
+        this.ctx.restore();
       } else if (cell.letter && !isCenterCell) {
         // Draw letters only for non-center cells
         // Check if this letter has been used
@@ -428,6 +402,12 @@ export class InputHexGrid {
         
         // Add shadow for better readability
         this.ctx.save();
+        
+        // Counter-rotate text to keep it upright
+        this.ctx.translate(x, y);
+        this.ctx.rotate(30 * Math.PI / 180);  // Counter-rotate +30 degrees
+        this.ctx.translate(-x, -y);
+        
         this.ctx.shadowColor = 'rgba(0,0,0,0.4)';
         this.ctx.shadowBlur = 2;
         this.ctx.shadowOffsetY = 1;
@@ -456,6 +436,9 @@ export class InputHexGrid {
     
     // Frame removed - no longer drawing frame
     // this.drawFrame(minX + offsetX, maxX + offsetX, minY + offsetY, maxY + offsetY);
+    
+    // Restore context state after rotation
+    this.ctx.restore();
     
     return minY + offsetY;  // Return the top position of the grid for text placement
   }
@@ -541,6 +524,14 @@ export class InputHexGrid {
       orientation: 'pointy'
     });
     
+    // First, reverse the rotation to get the click in grid coordinates
+    // The grid is rotated -30 degrees, so we need to rotate the click +30 degrees
+    const angle = 30 * Math.PI / 180;
+    const dx = x - centerX;
+    const dy = y - centerY;
+    const rotatedX = centerX + dx * Math.cos(angle) - dy * Math.sin(angle);
+    const rotatedY = centerY + dx * Math.sin(angle) + dy * Math.cos(angle);
+    
     // Calculate grid offsets (same as render)
     let maxY = -Infinity;
     let minY = Infinity;
@@ -558,8 +549,9 @@ export class InputHexGrid {
       });
     });
     
-    const offsetX = centerX - (minX + maxX) / 2;
-    const offsetY = centerY - maxY;
+    // Same offsets as render method
+    const offsetX = centerX - (minX + maxX) / 2 + 20;
+    const offsetY = centerY - maxY + 50;
     
     // Check each cell for click
     for (const cell of this.cells) {
@@ -568,7 +560,8 @@ export class InputHexGrid {
       const hexY = hex.y + offsetY;
       
       // Check if click is within this hex (simple distance check)
-      const distance = Math.sqrt((x - hexX) ** 2 + (y - hexY) ** 2);
+      // Use the rotated click coordinates
+      const distance = Math.sqrt((rotatedX - hexX) ** 2 + (rotatedY - hexY) ** 2);
       if (distance <= size * 0.8) {  // Within hex radius
         // Store the clicked hex position
         this.lastClickedHex = {q: cell.q, r: cell.r};
@@ -814,8 +807,9 @@ export class InputHexGrid {
         minX = Math.min(minX, corner.x);
       });
     });
-    const offsetX = centerX - (minX + maxX) / 2;
-    const offsetY = centerY - maxY;
+    // Same offsets as render method
+    const offsetX = centerX - (minX + maxX) / 2 + 20;
+    const offsetY = centerY - maxY + 50;
     const hex = new Hex([q, r]);
     return { x: hex.x + offsetX, y: hex.y + offsetY };
   }
@@ -859,8 +853,9 @@ export class InputHexGrid {
       });
     });
     
-    const offsetX = centerX - (minX + maxX) / 2;
-    const offsetY = centerY - maxY;
+    // Same offsets as render method
+    const offsetX = centerX - (minX + maxX) / 2 + 20;
+    const offsetY = centerY - maxY + 50;
     
     const positions: Array<{x: number, y: number, q: number, r: number}> = [];
     
@@ -894,14 +889,13 @@ export class InputHexGrid {
     if (chars.length !== this.cells.length - 1) {  // -1 because center is for clear
       this.initializeCells(chars.length);
     }
-    // Skip center cell (index 0) and assign letters to other cells
-    let charIndex = 0;
-    this.cells.forEach((cell, index) => {
-      if (!(cell.q === 0 && cell.r === 0)) {  // Skip center cell
-        cell.letter = chars[charIndex] || undefined;
-        charIndex++;
-      }
-    });
+    
+    // The cells array has center cell at index 0, then all letter positions
+    // We need to assign letters to non-center cells in order
+    // Since center is at index 0, we start from index 1
+    for (let i = 1; i < this.cells.length && i - 1 < chars.length; i++) {
+      this.cells[i].letter = chars[i - 1];
+    }
   }
   
   /**

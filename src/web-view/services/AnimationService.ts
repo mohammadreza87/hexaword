@@ -270,7 +270,7 @@ export class AnimationService {
     targetScreen: { x: number; y: number },
     options?: { fontSizePx?: number; overlayWidthPx?: number; holdMs?: number; level?: number },
     onComplete?: () => void
-  ): void {
+  ): Promise<void> {
     // Create overlay elements
     const existing = document.getElementById('level-intro-overlay');
     if (existing) existing.remove();
@@ -324,10 +324,12 @@ export class AnimationService {
     overlay.appendChild(clue);
     document.body.appendChild(overlay);
 
-    const tl = gsap.timeline({ onComplete: () => {
-      overlay.remove();
-      onComplete?.();
-    }});
+    return new Promise<void>((resolve) => {
+      const tl = gsap.timeline({ onComplete: () => {
+        overlay.remove();
+        onComplete?.();
+        resolve();
+      }});
 
     // Apply exact font size and width to match gameplay view
     const fontSize = options?.fontSizePx ?? 32;
@@ -376,6 +378,7 @@ export class AnimationService {
       duration: 0.35,
       ease: 'power2.in'
     }, '<+0.05');
+    });
   }
   /**
    * Animate removal of input hexes (scale to 0 with stagger), then callback.
@@ -737,5 +740,24 @@ export class AnimationService {
     delete (window as any).__inputAnimations;
     delete (window as any).__typedWordAnimation;
     delete (window as any).__clearButtonAnimation;
+  }
+
+  /**
+   * Force-clear any input glow/scale animations (used when clearing the typed word).
+   */
+  clearInputGlows(keys?: string[]): void {
+    const bag = (window as any).__inputAnimations;
+    if (!bag) return;
+    const entries = keys && keys.length
+      ? keys.map(k => ({ k, s: bag[k] })).filter(e => e.s)
+      : Object.entries<any>(bag).map(([k, s]) => ({ k, s }));
+    entries.forEach(({ s }) => {
+      try { gsap.killTweensOf(s); } catch {}
+      if (s) {
+        if (typeof s.glow === 'number') s.glow = 0;
+        if (typeof s.opacity === 'number') s.opacity = 1;
+        if (typeof s.scale === 'number') s.scale = 1;
+      }
+    });
   }
 }
