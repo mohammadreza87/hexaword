@@ -113,6 +113,12 @@ class App {
       }
     });
     
+    this.gameUI.onReveal(() => {
+      if (this.game) {
+        this.game.revealRandomLetter();
+      }
+    });
+    
     // Update initial values
     if (this.game) {
       this.gameUI.updateLevel(this.currentLevel);

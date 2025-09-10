@@ -476,15 +476,6 @@ export class HexaWordGame {
       // Position typed word just above the topmost cell center
       const typedBaseline = inputBounds.topmostCellY + 50; // 50px below the topmost cell center
       
-      // Debug logging
-      console.log('DEBUG: Typed word positioning:', {
-        topmostCellY: inputBounds.topmostCellY,
-        inputHexSize: layout.inputHexSize,
-        typedBaseline: typedBaseline,
-        topY: inputBounds.topY,
-        bottomY: inputBounds.bottomY
-      });
-      
       this.renderTypedWord(rect.width, typedBaseline);
     }
     
@@ -1146,6 +1137,75 @@ export class HexaWordGame {
   public shuffleInputGrid(): void {
     this.inputGrid.shuffleLetters();
     this.render();
+  }
+  
+  /**
+   * Reveals a random letter from an unfound word
+   */
+  public revealRandomLetter(): boolean {
+    // Find all unsolved cells from unfound words
+    const unsolvedCells: Array<{cell: HexCell, word: WordObject}> = [];
+    
+    this.placedWords.forEach(word => {
+      // Skip if word is already found
+      if (this.foundWords.has(word.word)) {
+        return;
+      }
+      
+      // Check each cell in the word
+      word.cells.forEach(cell => {
+        const key = `${cell.q},${cell.r}`;
+        if (!this.solvedCells.has(key)) {
+          unsolvedCells.push({ cell, word });
+        }
+      });
+    });
+    
+    // No cells to reveal
+    if (unsolvedCells.length === 0) {
+      return false;
+    }
+    
+    // Pick a random unsolved cell
+    const randomIndex = Math.floor(Math.random() * unsolvedCells.length);
+    const { cell, word } = unsolvedCells[randomIndex];
+    const key = `${cell.q},${cell.r}`;
+    
+    // Mark cell as solved
+    this.solvedCells.add(key);
+    
+    // Trigger reveal animation
+    this.animationService.triggerRevealAnimation(key);
+    
+    // Re-render to show the revealed letter
+    this.render();
+    
+    // Check if this completes any word
+    this.checkForCompletedWords();
+    
+    return true;
+  }
+  
+  /**
+   * Checks if any words are now complete after revealing a letter
+   */
+  private checkForCompletedWords(): void {
+    this.placedWords.forEach(word => {
+      if (this.foundWords.has(word.word)) {
+        return; // Already found
+      }
+      
+      // Check if all cells in this word are solved
+      const isComplete = word.cells.every(cell => {
+        const key = `${cell.q},${cell.r}`;
+        return this.solvedCells.has(key);
+      });
+      
+      if (isComplete) {
+        this.foundWords.add(word.word);
+        this.checkWinCondition();
+      }
+    });
   }
   
   /**

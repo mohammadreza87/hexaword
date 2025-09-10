@@ -130,16 +130,22 @@ export class HexRenderer {
     let x = hex.x + offsetX;
     let y = hex.y + offsetY;
     
+    // Apply animation transforms if any
+    const animState = this.animationService.getCellAnimationState(cellKey);
+    
     // Check if this cell should be green from animation
     const greenCellState = (window as any).__greenCells?.[cellKey];
     const greenAmount = greenCellState ? greenCellState.green : 0;
-    const glowAmount = greenCellState ? greenCellState.glow || 0 : 0;
+    // Use glow from either source (reveal animation or word found animation)
+    const glowAmount = (animState?.glow || 0) + (greenCellState?.glow || 0);
     const shouldBeGreen = isSolved || greenAmount > 0;
-    
-    // Apply animation transforms if any
-    const animState = this.animationService.getCellAnimationState(cellKey);
     if (animState) {
       this.ctx.save();
+      
+      // Apply blur filter if present
+      if (animState.blur && animState.blur > 0) {
+        this.ctx.filter = `blur(${animState.blur}px)`;
+      }
       
       // Apply scale and rotation transforms
       this.ctx.translate(x, y);

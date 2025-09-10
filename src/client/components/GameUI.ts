@@ -9,6 +9,7 @@ export class GameUI {
   private settingsBtn: HTMLButtonElement;
   private menuPanel: HTMLElement;
   private shuffleBtn: HTMLButtonElement;
+  private revealBtn: HTMLButtonElement;
   
   constructor() {
     this.container = this.createUIContainer();
@@ -17,6 +18,7 @@ export class GameUI {
     this.settingsBtn = this.createSettingsButton();
     this.menuPanel = this.createMenuPanel();
     this.shuffleBtn = this.createShuffleButton();
+    this.revealBtn = this.createRevealButton();
     
     this.setupEventListeners();
     this.appendElements();
@@ -92,6 +94,19 @@ export class GameUI {
     return btn;
   }
   
+  private createRevealButton(): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.id = 'hw-reveal-btn';
+    btn.className = 'absolute left-1 w-10 h-10 rounded-full text-hw-text-primary backdrop-blur-md border transition-all duration-base flex items-center justify-center pointer-events-auto';
+    btn.style.cssText = 'bottom: calc(35% - 50px); background: rgba(42, 52, 70, 0.8); border-color: rgba(59, 71, 96, 0.3);';
+    
+    // Lightbulb emoji for hint/reveal
+    btn.textContent = '💡';
+    btn.style.fontSize = '18px';
+    
+    return btn;
+  }
+  
   
   private setupEventListeners(): void {
     // Settings button toggle
@@ -119,6 +134,17 @@ export class GameUI {
       this.shuffleBtn.style.transform = 'scale(1)';
     });
     
+    // Reveal button hover effect
+    this.revealBtn.addEventListener('mouseenter', () => {
+      this.revealBtn.style.background = 'rgba(59, 71, 96, 0.9)';
+      this.revealBtn.style.transform = 'scale(1.1)';
+    });
+    
+    this.revealBtn.addEventListener('mouseleave', () => {
+      this.revealBtn.style.background = 'rgba(42, 52, 70, 0.8)';
+      this.revealBtn.style.transform = 'scale(1)';
+    });
+    
     // Close menu when clicking outside
     document.addEventListener('click', (e) => {
       if (!this.settingsBtn.contains(e.target as Node) && 
@@ -134,6 +160,7 @@ export class GameUI {
     this.container.appendChild(this.settingsBtn);
     this.container.appendChild(this.menuPanel);
     this.container.appendChild(this.shuffleBtn);
+    this.container.appendChild(this.revealBtn);
     document.body.appendChild(this.container);
   }
   
@@ -173,6 +200,12 @@ export class GameUI {
   
   public onShuffle(callback: () => void): void {
     this.shuffleBtn.addEventListener('click', () => {
+      callback();
+    });
+  }
+  
+  public onReveal(callback: () => void): void {
+    this.revealBtn.addEventListener('click', () => {
       callback();
     });
   }

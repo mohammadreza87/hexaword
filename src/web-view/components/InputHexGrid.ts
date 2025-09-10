@@ -883,12 +883,6 @@ export class InputHexGrid {
       }
     });
     
-    console.log('DEBUG: Finding topmost row:', {
-      topmostRow,
-      totalCells: this.cells.length,
-      allRows: [...new Set(this.cells.map(c => c.r))].sort()
-    });
-    
     // Calculate bounds and find the Y position of topmost cell
     this.cells.forEach(cell => {
       const hex = new Hex([cell.q, cell.r]);
@@ -902,19 +896,11 @@ export class InputHexGrid {
       // Get the center Y position of the topmost row cells
       if (cell.r === topmostRow) {
         topmostCellY = Math.min(topmostCellY, hex.y);
-        console.log('DEBUG: Cell in topmost row:', { q: cell.q, r: cell.r, y: hex.y });
       }
     });
     
     const offsetX = centerX - (minX + maxX) / 2;  // same centering as render
     const offsetY = centerY - maxY;               // bottom aligns with centerY
-    
-    console.log('DEBUG: Final bounds calculation:', {
-      topmostCellY_raw: topmostCellY,
-      offsetY,
-      topmostCellY_final: topmostCellY + offsetY,
-      centerY
-    });
     
     return {
       leftX: minX + offsetX,

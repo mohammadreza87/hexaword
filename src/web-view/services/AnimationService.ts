@@ -779,6 +779,66 @@ export class AnimationService {
   }
   
   /**
+   * Trigger reveal animation for a hex cell
+   */
+  triggerRevealAnimation(hexKey: string): void {
+    if (this.reducedMotion) return;
+    
+    (window as any).__cellAnimations = (window as any).__cellAnimations || {};
+    const state = { scale: 0, glow: 0, opacity: 1, blur: 10 };
+    (window as any).__cellAnimations[hexKey] = state;
+    
+    // Create a smooth blur fade in with scale from 0 to 1
+    gsap.timeline()
+      .set(state, {
+        scale: 0,
+        blur: 12,
+        glow: 20,
+        opacity: 0.8
+      })
+      .to(state, {
+        scale: 1.15,
+        blur: 3,
+        glow: 15,
+        opacity: 1,
+        duration: 0.2,
+        ease: 'power2.out'
+      })
+      .to(state, {
+        scale: 0.97,
+        blur: 0,
+        glow: 8,
+        duration: 0.12,
+        ease: 'power2.inOut'
+      })
+      .to(state, {
+        scale: 1,
+        glow: 3,
+        duration: 0.1,
+        ease: 'elastic.out(1, 0.5)'
+      })
+      .to(state, {
+        glow: 0,
+        duration: 0.2,
+        ease: 'power2.out',
+        onComplete: () => {
+          delete (window as any).__cellAnimations[hexKey];
+        }
+      });
+    
+    // Request render update continuously during animation
+    const updateRender = () => {
+      if ((window as any).__requestRender) {
+        (window as any).__requestRender();
+      }
+      if ((window as any).__cellAnimations?.[hexKey]) {
+        requestAnimationFrame(updateRender);
+      }
+    };
+    updateRender();
+  }
+  
+  /**
    * Clean up completed animations
    */
   cleanup(): void {
