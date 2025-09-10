@@ -1,0 +1,183 @@
+/**
+ * GameUI - Manages the UI overlay for the game
+ * Handles all UI elements that sit above the game canvas
+ */
+export class GameUI {
+  private container: HTMLElement;
+  private levelEl: HTMLElement;
+  private wordCountEl: HTMLElement;
+  private settingsBtn: HTMLButtonElement;
+  private menuPanel: HTMLElement;
+  private shuffleBtn: HTMLButtonElement;
+  
+  constructor() {
+    this.container = this.createUIContainer();
+    this.levelEl = this.createLevelIndicator();
+    this.wordCountEl = this.createWordCounter();
+    this.settingsBtn = this.createSettingsButton();
+    this.menuPanel = this.createMenuPanel();
+    this.shuffleBtn = this.createShuffleButton();
+    
+    this.setupEventListeners();
+    this.appendElements();
+  }
+  
+  private createUIContainer(): HTMLElement {
+    const container = document.createElement('div');
+    container.id = 'game-ui-overlay';
+    container.className = 'fixed inset-0 pointer-events-none z-50';
+    return container;
+  }
+  
+  private createLevelIndicator(): HTMLElement {
+    const levelEl = document.createElement('div');
+    levelEl.id = 'hw-level-indicator';
+    levelEl.className = 'absolute top-1 left-1 h-6 px-2 rounded-lg text-hw-text-secondary backdrop-blur-md border transition-all duration-base text-xs font-bold flex items-center justify-center pointer-events-auto';
+    levelEl.style.cssText = 'background: rgba(26, 31, 43, 0.6); border-color: rgba(255, 255, 255, 0.08);';
+    levelEl.textContent = 'LEVEL 1';
+    return levelEl;
+  }
+  
+  private createWordCounter(): HTMLElement {
+    const wordCountEl = document.createElement('div');
+    wordCountEl.id = 'hw-word-count';
+    wordCountEl.className = 'absolute top-1 left-1/2 -translate-x-1/2 h-6 px-3 rounded-lg text-hw-text-primary backdrop-blur-md border transition-all duration-base text-xs font-bold flex items-center justify-center pointer-events-auto';
+    wordCountEl.style.cssText = 'background: rgba(26, 31, 43, 0.6); border-color: rgba(255, 255, 255, 0.08);';
+    wordCountEl.textContent = '0 / 0';
+    return wordCountEl;
+  }
+  
+  private createSettingsButton(): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.id = 'hw-settings-btn';
+    btn.textContent = '⚙️';
+    btn.className = 'absolute top-1 right-1 w-6 h-6 rounded-full text-hw-text-primary backdrop-blur-md border transition-all duration-base text-sm flex items-center justify-center pointer-events-auto';
+    btn.style.cssText = 'background: rgba(42, 52, 70, 0.6); border-color: rgba(59, 71, 96, 0.2);';
+    return btn;
+  }
+  
+  private createMenuPanel(): HTMLElement {
+    const panel = document.createElement('div');
+    panel.id = 'hw-menu-panel';
+    panel.className = 'absolute top-8 right-1 hidden min-w-[200px] p-2 rounded-xl backdrop-blur-lg border shadow-2xl font-display pointer-events-auto';
+    panel.style.cssText = 'background: rgba(26, 31, 43, 0.9); border-color: rgba(255, 255, 255, 0.08);';
+    
+    // Menu items
+    const items = [
+      { label: 'Restart Level', id: 'restart-level' },
+      { label: 'Reduce Motion', id: 'toggle-motion' }
+    ];
+    
+    items.forEach(item => {
+      const btn = document.createElement('button');
+      btn.id = item.id;
+      btn.textContent = item.label;
+      btn.className = 'block w-full text-left px-3 py-2 text-sm text-hw-text-primary hover:bg-hw-surface-secondary rounded-lg transition-colors';
+      panel.appendChild(btn);
+    });
+    
+    return panel;
+  }
+  
+  private createShuffleButton(): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.id = 'hw-shuffle-btn';
+    btn.className = 'absolute left-1 w-10 h-10 rounded-full text-hw-text-primary backdrop-blur-md border transition-all duration-base flex items-center justify-center pointer-events-auto';
+    btn.style.cssText = 'bottom: 35%; background: rgba(42, 52, 70, 0.8); border-color: rgba(59, 71, 96, 0.3);';
+    
+    // Just the shuffle emoji
+    btn.textContent = '🔀';
+    btn.style.fontSize = '18px';
+    
+    return btn;
+  }
+  
+  
+  private setupEventListeners(): void {
+    // Settings button toggle
+    this.settingsBtn.addEventListener('click', () => {
+      this.menuPanel.classList.toggle('hidden');
+    });
+    
+    // Hover effects
+    this.settingsBtn.addEventListener('mouseenter', () => {
+      this.settingsBtn.style.background = 'rgba(59, 71, 96, 0.6)';
+    });
+    
+    this.settingsBtn.addEventListener('mouseleave', () => {
+      this.settingsBtn.style.background = 'rgba(42, 52, 70, 0.6)';
+    });
+    
+    // Shuffle button hover effect
+    this.shuffleBtn.addEventListener('mouseenter', () => {
+      this.shuffleBtn.style.background = 'rgba(59, 71, 96, 0.9)';
+      this.shuffleBtn.style.transform = 'scale(1.1)';
+    });
+    
+    this.shuffleBtn.addEventListener('mouseleave', () => {
+      this.shuffleBtn.style.background = 'rgba(42, 52, 70, 0.8)';
+      this.shuffleBtn.style.transform = 'scale(1)';
+    });
+    
+    // Close menu when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!this.settingsBtn.contains(e.target as Node) && 
+          !this.menuPanel.contains(e.target as Node)) {
+        this.menuPanel.classList.add('hidden');
+      }
+    });
+  }
+  
+  private appendElements(): void {
+    this.container.appendChild(this.levelEl);
+    this.container.appendChild(this.wordCountEl);
+    this.container.appendChild(this.settingsBtn);
+    this.container.appendChild(this.menuPanel);
+    this.container.appendChild(this.shuffleBtn);
+    document.body.appendChild(this.container);
+  }
+  
+  public updateLevel(level: number): void {
+    this.levelEl.textContent = `LEVEL ${level}`;
+  }
+  
+  public updateWordCount(found: number, total: number): void {
+    const progressText = `${found} / ${total}`;
+    if (found === total && total > 0) {
+      this.wordCountEl.textContent = '⭐ ' + progressText;
+      this.wordCountEl.style.color = 'var(--hw-accent-success)';
+    } else {
+      this.wordCountEl.textContent = progressText;
+      this.wordCountEl.style.color = 'var(--hw-text-primary)';
+    }
+  }
+  
+  public onRestartLevel(callback: () => void): void {
+    const restartBtn = this.menuPanel.querySelector('#restart-level');
+    restartBtn?.addEventListener('click', () => {
+      callback();
+      this.menuPanel.classList.add('hidden');
+    });
+  }
+  
+  public onToggleMotion(callback: () => void): void {
+    const motionBtn = this.menuPanel.querySelector('#toggle-motion');
+    motionBtn?.addEventListener('click', () => {
+      callback();
+      const current = localStorage.getItem('hexaword_reduce_motion') === 'true';
+      if (motionBtn) {
+        motionBtn.textContent = `Reduce Motion: ${!current ? 'On' : 'Off'}`;
+      }
+    });
+  }
+  
+  public onShuffle(callback: () => void): void {
+    this.shuffleBtn.addEventListener('click', () => {
+      callback();
+    });
+  }
+  
+  public destroy(): void {
+    this.container.remove();
+  }
+}

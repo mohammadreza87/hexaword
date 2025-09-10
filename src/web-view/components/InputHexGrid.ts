@@ -259,8 +259,19 @@ export class InputHexGrid {
       if (animState) {
         this.ctx.save();
         
-        // Apply scale transform
+        // Apply blur filter if present
+        if (animState.blur && animState.blur > 0) {
+          this.ctx.filter = `blur(${animState.blur}px)`;
+        }
+        
+        // Apply opacity
+        this.ctx.globalAlpha = animState.opacity !== undefined ? animState.opacity : 1;
+        
+        // Apply scale and rotation transforms
         this.ctx.translate(x, y);
+        if (animState.rotation) {
+          this.ctx.rotate(animState.rotation * Math.PI / 180);
+        }
         this.ctx.scale(animState.scale || 1, animState.scale || 1);
         this.ctx.translate(-x, -y);
       }
@@ -438,7 +449,7 @@ export class InputHexGrid {
         this.ctx.rotate(30 * Math.PI / 180);  // Counter-rotate +30 degrees
         this.ctx.translate(-x, -y);
         
-        this.ctx.fillStyle = '#FFFFFF'; // Pure white for clear button
+        this.ctx.fillStyle = '#FF4444'; // Red color for clear button
         this.ctx.font = `900 ${Math.floor(size * 0.9)}px 'Inter', Arial`;
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
@@ -566,6 +577,49 @@ export class InputHexGrid {
   }
   
   /**
+   * Shuffles the letters in the input grid
+   * Keeps the clear button (center cell) in place
+   */
+  public shuffleLetters(): void {
+    // Get all letters (excluding the center clear button)
+    const letters: string[] = [];
+    const letterCells: InputCell[] = [];
+    
+    this.cells.forEach(cell => {
+      // Skip the center cell (clear button)
+      if (!(cell.q === 0 && cell.r === 0) && cell.letter) {
+        letters.push(cell.letter);
+        letterCells.push(cell);
+      }
+    });
+    
+    // Fisher-Yates shuffle algorithm
+    for (let i = letters.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [letters[i], letters[j]] = [letters[j], letters[i]];
+    }
+    
+    // Wait for blur fade out before reassigning letters
+    setTimeout(() => {
+      // Reassign shuffled letters back to cells
+      letterCells.forEach((cell, index) => {
+        cell.letter = letters[index];
+      });
+    }, 300); // Wait for blur fade out to complete
+    
+    // Trigger shuffle animation for each cell with staggered delay
+    this.cells.forEach((cell, index) => {
+      if (!(cell.q === 0 && cell.r === 0)) {
+        const hexKey = `input_${cell.q},${cell.r}`;
+        // Create a wave effect from center outward
+        const distance = Math.sqrt(cell.q * cell.q + cell.r * cell.r);
+        const delay = distance * 0.02; // Stagger based on distance from center
+        this.animationService.triggerInputShuffleAnimation(hexKey, delay);
+      }
+    });
+  }
+  
+  /**
    * Handles click on input grid
    */
   public handleClick(x: number, y: number, centerX: number, centerY: number, dynamicSize?: number): string | null {
@@ -623,6 +677,7 @@ export class InputHexGrid {
           this.typedWord = '';
           this.selectedPositions = [];
           this.usedLetters.clear(); // Clear all used letters
+          this.activeCell = null; // Clear the active cell glow
           return 'CLEAR';
         }
         // Backspace behavior: if this is the last selected cell, toggle it off

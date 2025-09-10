@@ -1,0 +1,64 @@
+/**
+ * Z-index layering system for HexaWord
+ * Following best practices for game UI layering
+ */
+
+:root {
+  /* Z-index scale for proper layering */
+  --z-game-canvas: 1;        /* Base game canvas */
+  --z-game-effects: 10;      /* Game visual effects */
+  --z-ui-overlay: 20;        /* Game UI overlay (HUD) */
+  --z-modal-backdrop: 30;    /* Modal backgrounds */
+  --z-modal-content: 31;     /* Modal content */
+  --z-dropdown: 40;          /* Dropdown menus */
+  --z-tooltip: 50;           /* Tooltips */
+  --z-notification: 60;      /* Toast notifications */
+  --z-debug: 100;            /* Debug overlays */
+}
+
+/* Apply z-index to elements */
+#hex-grid-container {
+  position: relative;
+  z-index: var(--z-game-canvas);
+}
+
+#game-ui-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-ui-overlay);
+  pointer-events: none; /* Allow clicks through to game */
+}
+
+#game-ui-overlay > * {
+  pointer-events: auto; /* But UI elements are clickable */
+}
+
+.modal-overlay {
+  z-index: var(--z-modal-backdrop);
+}
+
+.modal-content {
+  z-index: var(--z-modal-content);
+}
+
+#hw-menu-panel {
+  z-index: var(--z-dropdown);
+}
+
+.toast-notification {
+  z-index: var(--z-notification);
+}
+
+#debug-panel {
+  z-index: var(--z-debug);
+}
+
+/* Ensure proper stacking context */
+.z-game-canvas { z-index: var(--z-game-canvas) !important; }
+.z-game-effects { z-index: var(--z-game-effects) !important; }
+.z-ui-overlay { z-index: var(--z-ui-overlay) !important; }
+.z-modal { z-index: var(--z-modal-backdrop) !important; }
+.z-dropdown { z-index: var(--z-dropdown) !important; }
+.z-tooltip { z-index: var(--z-tooltip) !important; }
+.z-notification { z-index: var(--z-notification) !important; }
+.z-debug { z-index: var(--z-debug) !important; }

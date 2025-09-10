@@ -728,6 +728,57 @@ export class AnimationService {
   }
   
   /**
+   * Trigger shuffle animation for input hex
+   */
+  triggerInputShuffleAnimation(hexKey: string, delay: number = 0): void {
+    if (this.reducedMotion) return;
+    
+    (window as any).__inputAnimations = (window as any).__inputAnimations || {};
+    const state = { scale: 1, rotation: 0, opacity: 1, blur: 0 };
+    (window as any).__inputAnimations[hexKey] = state;
+    
+    // Create a smooth blur fade out, shuffle, blur fade in effect
+    gsap.timeline()
+      .to(state, {
+        opacity: 0.3,
+        scale: 0.85,
+        blur: 8,
+        duration: 0.3,
+        delay: delay,
+        ease: 'power2.in'
+      })
+      .to(state, {
+        rotation: 180,
+        duration: 0.1,
+        ease: 'none'
+      })
+      .to(state, {
+        opacity: 1,
+        scale: 1,
+        blur: 0,
+        rotation: 360,
+        duration: 0.3,
+        ease: 'power2.out',
+        onComplete: () => {
+          state.rotation = 0;
+          state.blur = 0;
+          delete (window as any).__inputAnimations[hexKey];
+        }
+      });
+    
+    // Request render update continuously during animation
+    const updateRender = () => {
+      if ((window as any).__requestRender) {
+        (window as any).__requestRender();
+      }
+      if ((window as any).__inputAnimations?.[hexKey]) {
+        requestAnimationFrame(updateRender);
+      }
+    };
+    updateRender();
+  }
+  
+  /**
    * Clean up completed animations
    */
   cleanup(): void {

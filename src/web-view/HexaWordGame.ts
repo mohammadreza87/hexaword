@@ -6,6 +6,7 @@ import { createRNG } from '../shared/utils/rng';
 import { AnimationService } from './services/AnimationService';
 import { ColorPaletteService } from './services/ColorPaletteService';
 import { getPaletteForLevel } from './config/ColorPalettes';
+import { BoosterService, BoosterType } from '../shared/game/application/services/BoosterService';
 
 export interface GameConfig {
   containerId: string;
@@ -29,6 +30,7 @@ export class HexaWordGame {
   private inputGrid: InputHexGrid;
   private animationService: AnimationService;
   private colorPaletteService: ColorPaletteService;
+  private boosterService: BoosterService;
   private currentLevel: number = 1;
   
   private board: Map<string, HexCell> = new Map();
@@ -78,6 +80,7 @@ export class HexaWordGame {
       this.inputGrid = new InputHexGrid(this.ctx);
       this.animationService = AnimationService.getInstance();
       this.colorPaletteService = ColorPaletteService.getInstance();
+      this.boosterService = new BoosterService();
       
       // Initialize color palette with level and theme
       this.currentLevel = this.config.level || 1;
@@ -440,8 +443,8 @@ export class HexaWordGame {
     // Update renderer with dynamic hex size
     this.renderer.updateConfig({ hexSize: layout.hexSize });
     
-    // Render HUD at the top
-    this.renderHUD(rect.width, rect.height);
+    // Update UI overlay
+    this.updateGameUI();
     
     // Render clue above the puzzle grid
     this.renderClue(layout.gridCenterX, layout.gridCenterY, layout);
@@ -519,7 +522,7 @@ export class HexaWordGame {
   } {
     // Spacing guided by 8pt grid (inspired by Apple HIG)
     const unit = 8;
-    const paddingTop = unit * 8;    // 64px top spacing for title/clue band
+    const paddingTop = unit * 10;   // 80px top spacing for UI elements and clue
     const paddingSide = unit * 2;   // 16px safe side margins
     const bottomSafe = unit * 2;    // 16px bottom safe area
     // Reserve input area proportionally with sensible bounds
@@ -840,87 +843,13 @@ export class HexaWordGame {
   /**
    * Renders the HUD with progress indicators
    */
-  private renderHUD(canvasWidth: number, canvasHeight: number): void {
-    const padding = 16;
-    const hudHeight = 48;
-    const cornerRadius = 12;
-    
-    this.ctx.save();
-    
-    // Left side - Level indicator with glassmorphism
-    const levelText = `LEVEL ${this.currentLevel}`;
-    this.ctx.font = "900 14px 'Inter', Arial";
-    const levelWidth = this.ctx.measureText(levelText).width + padding * 2.5;
-    
-    // Draw glass background for level
-    this.ctx.fillStyle = 'rgba(26, 31, 43, 0.6)';
-    this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-    this.ctx.lineWidth = 1;
-    
-    // Rounded rectangle for level
-    this.drawRoundedRect(padding, padding, levelWidth, 32, cornerRadius);
-    this.ctx.fill();
-    this.ctx.stroke();
-    
-    // Level text - center aligned
-    this.ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--hw-text-secondary');
-    this.ctx.textAlign = 'center';
-    this.ctx.textBaseline = 'middle';
-    this.ctx.fillText(levelText, padding + levelWidth / 2, padding + 16);
-    
-    // Center - Progress indicator
-    const centerX = canvasWidth / 2;
-    const progressText = `${this.foundWords.size} / ${this.placedWords.length}`;
-    this.ctx.font = "900 14px 'Inter', Arial";
-    const progressWidth = this.ctx.measureText(progressText).width + padding * 3;
-    const progressX = centerX - progressWidth / 2;
-    
-    // Draw glass background for progress
-    this.ctx.fillStyle = 'rgba(26, 31, 43, 0.6)';
-    this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-    this.drawRoundedRect(progressX, padding, progressWidth, 32, cornerRadius);
-    this.ctx.fill();
-    this.ctx.stroke();
-    
-    // Progress bar background
-    const barWidth = progressWidth - padding * 2;
-    const barHeight = 4;
-    const barX = progressX + padding;
-    const barY = padding + 32 - 10;
-    const progress = this.placedWords.length > 0 ? this.foundWords.size / this.placedWords.length : 0;
-    
-    // Bar background
-    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-    this.drawRoundedRect(barX, barY, barWidth, barHeight, barHeight / 2);
-    this.ctx.fill();
-    
-    // Bar fill with gradient
-    if (progress > 0) {
-      const gradient = this.ctx.createLinearGradient(barX, 0, barX + barWidth * progress, 0);
-      gradient.addColorStop(0, getComputedStyle(document.documentElement).getPropertyValue('--hw-accent-primary'));
-      gradient.addColorStop(1, getComputedStyle(document.documentElement).getPropertyValue('--hw-accent-secondary'));
-      this.ctx.fillStyle = gradient;
-      this.drawRoundedRect(barX, barY, barWidth * progress, barHeight, barHeight / 2);
-      this.ctx.fill();
+  private updateGameUI(): void {
+    // Notify the UI layer about state changes
+    if ((window as any).gameUI) {
+      const ui = (window as any).gameUI;
+      ui.updateLevel(this.currentLevel);
+      ui.updateWordCount(this.foundWords.size, this.placedWords.length);
     }
-    
-    // Progress text
-    if (this.foundWords.size === this.placedWords.length && this.placedWords.length > 0) {
-      // Show completion with star
-      this.ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--hw-accent-success');
-      this.ctx.font = "900 14px 'Inter', Arial";
-      this.ctx.textAlign = 'center';
-      this.ctx.textBaseline = 'middle';
-      this.ctx.fillText('⭐ ' + progressText, centerX, padding + 12);
-    } else {
-      // Regular progress text
-      this.ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--hw-text-primary');
-      this.ctx.textAlign = 'center';
-      this.ctx.textBaseline = 'middle';
-      this.ctx.fillText(progressText, centerX, padding + 12);
-    }
-    
-    this.ctx.restore();
   }
   
   /**
@@ -950,9 +879,11 @@ export class HexaWordGame {
     const bounds = this.renderer.calculateBounds(this.board);
     const offset = this.renderer.calculateCenterOffset(bounds);
     
-    // Position clue above the topmost hex with 24px spacing (8pt grid * 3)
+    // Position clue below the top UI elements (level, word count, settings)
+    // Top UI takes about 30px, so start clue at 40px from top
     const unit = 8;
-    const clueY = centerY + offset.y + bounds.minY - unit * 3;
+    const topUIHeight = 40; // Space taken by top UI elements
+    const clueY = topUIHeight + unit; // Add 8px padding below UI
     
     // Get the clue text without "Clue:" prefix
     const clueText = this.currentClue.toUpperCase();
@@ -997,7 +928,7 @@ export class HexaWordGame {
     // Apply multiple layers for soft glow effect
     this.ctx.font = `900 ${fontSize}px 'Inter', Arial`;
     this.ctx.textAlign = 'center';
-    this.ctx.textBaseline = 'bottom';
+    this.ctx.textBaseline = 'top';
     
     // Dynamic shadow/glow based on font size
     // Smaller text needs less blur to remain readable
@@ -1207,6 +1138,21 @@ export class HexaWordGame {
    */
   public getClue(): string {
     return this.currentClue;
+  }
+  
+  /**
+   * Shuffles the input grid letters (free, unlimited use)
+   */
+  public shuffleInputGrid(): void {
+    this.inputGrid.shuffleLetters();
+    this.render();
+  }
+  
+  /**
+   * Gets the booster service
+   */
+  public getBoosterService(): BoosterService {
+    return this.boosterService;
   }
 
   /**

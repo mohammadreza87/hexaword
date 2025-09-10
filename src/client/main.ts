@@ -5,9 +5,11 @@ gsap.registerPlugin(Physics2DPlugin);
 import { fetchGameDataWithFallback } from './services/api';
 import './styles/tokens.css';
 import './styles/tailwind.css';
+import './styles/layers.css';
 import { blurGameContainer, animateGameBlur } from './utils/ui';
 import { blurTransition } from './services/BlurTransitionService';
 import { loadLocalProgress, saveLocalProgress, fetchRemoteProgress, saveRemoteProgress, mergeProgress, Progress as HWProgress } from './services/progress';
+import { GameUI } from './components/GameUI';
 
 console.log('HexaWord Crossword Generator v4.0 - Modular Architecture');
 
@@ -16,6 +18,7 @@ console.log('HexaWord Crossword Generator v4.0 - Modular Architecture');
  */
 class App {
   private game: HexaWordGame | null = null;
+  private gameUI: GameUI | null = null;
   private currentLevel = 1;
   private mainMenuEl: HTMLDivElement | null = null;
   private fadeEl: HTMLDivElement | null = null;
@@ -79,48 +82,44 @@ class App {
     this.showMainMenu();
   }
 
-  // Create a floating menu with core actions
-  private buildMenu(): void {
-    const btn = document.createElement('button');
-    btn.id = 'hw-menu-btn';
-    btn.textContent = '⚙️';
-    btn.className = 'fixed top-3 right-3 z-fixed w-9 h-9 rounded-full text-hw-text-primary backdrop-blur-md border transition-all duration-base text-lg flex items-center justify-center';
-    btn.style.cssText = 'background: rgba(42, 52, 70, 0.6); border-color: rgba(59, 71, 96, 0.2);';
-    btn.onmouseenter = () => { btn.style.background = 'rgba(59, 71, 96, 0.6)'; };
-    btn.onmouseleave = () => { btn.style.background = 'rgba(42, 52, 70, 0.6)'; };
+  // Initialize the game UI overlay
+  private initializeGameUI(): void {
+    // Clean up existing UI if any
+    if (this.gameUI) {
+      this.gameUI.destroy();
+    }
     
-    const panel = document.createElement('div');
-    panel.id = 'hw-menu-panel';
-    panel.className = 'fixed top-14 right-3 z-dropdown hidden min-w-[220px] p-3 rounded-xl backdrop-blur-lg border shadow-2xl font-display';
-    panel.style.cssText = 'background: rgba(26, 31, 43, 0.9); border-color: rgba(255, 255, 255, 0.08);';
+    // Create new UI
+    this.gameUI = new GameUI();
     
-    const mkItem = (label: string) => {
-      const el = document.createElement('button');
-      el.textContent = label;
-      el.className = 'menu-item';
-      return el;
-    };
-    const restart = mkItem('Restart Level');
-    restart.onclick = async () => { await this.game?.reset(); };
-
-    const replayIntro = mkItem('Replay Intro');
-    replayIntro.onclick = async () => { await (this.game as any)?.replayIntro?.(); };
-
-    const reduceMotion = mkItem('Toggle Reduced Motion');
-    reduceMotion.onclick = () => {
+    // Expose to window for game to access
+    (window as any).gameUI = this.gameUI;
+    
+    // Set up UI callbacks
+    this.gameUI.onRestartLevel(async () => {
+      await this.game?.reset();
+    });
+    
+    this.gameUI.onToggleMotion(() => {
       const current = localStorage.getItem('hexaword_reduce_motion') === 'true';
+      localStorage.setItem('hexaword_reduce_motion', String(!current));
       const svc = (window as any).hwAnimSvc as any;
       if (svc?.setReducedMotion) svc.setReducedMotion(!current);
-    };
-
-    panel.append(restart, reduceMotion);
-    document.body.append(btn, panel);
-
-    btn.onclick = () => {
-      panel.classList.toggle('hidden');
-    };
-
-    // Expose animation service to menu for reduced motion toggle
+    });
+    
+    this.gameUI.onShuffle(() => {
+      if (this.game) {
+        this.game.shuffleInputGrid();
+      }
+    });
+    
+    // Update initial values
+    if (this.game) {
+      this.gameUI.updateLevel(this.currentLevel);
+      // The word count will be updated from the game's render loop
+    }
+    
+    // Expose animation service for reduced motion toggle
     (window as any).hwAnimSvc = (this.game as any)?.animationService || (window as any).hwAnimSvc;
   }
 
@@ -257,7 +256,7 @@ class App {
           onReady: () => {
             try {
               this.setupUI();
-              this.buildMenu();
+              this.initializeGameUI();
             } finally {
               resolve();
             }
