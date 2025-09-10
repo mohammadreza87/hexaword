@@ -10,6 +10,8 @@ export class GameUI {
   private menuPanel: HTMLElement;
   private shuffleBtn: HTMLButtonElement;
   private revealBtn: HTMLButtonElement;
+  private targetBtn: HTMLButtonElement;
+  private shareBtn: HTMLButtonElement;
   
   constructor() {
     this.container = this.createUIContainer();
@@ -19,6 +21,8 @@ export class GameUI {
     this.menuPanel = this.createMenuPanel();
     this.shuffleBtn = this.createShuffleButton();
     this.revealBtn = this.createRevealButton();
+    this.targetBtn = this.createTargetButton();
+    this.shareBtn = this.createShareButton();
     
     this.setupEventListeners();
     this.appendElements();
@@ -107,6 +111,32 @@ export class GameUI {
     return btn;
   }
   
+  private createTargetButton(): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.id = 'hw-target-btn';
+    btn.className = 'absolute right-1 w-10 h-10 rounded-full text-hw-text-primary backdrop-blur-md border transition-all duration-base flex items-center justify-center pointer-events-auto';
+    btn.style.cssText = 'bottom: calc(35% - 50px); background: rgba(42, 52, 70, 0.8); border-color: rgba(59, 71, 96, 0.3);';
+    
+    // Target emoji for target hint
+    btn.textContent = '🎯';
+    btn.style.fontSize = '18px';
+    
+    return btn;
+  }
+  
+  private createShareButton(): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.id = 'hw-share-btn';
+    btn.className = 'absolute right-1 w-10 h-10 rounded-full text-hw-text-primary backdrop-blur-md border transition-all duration-base flex items-center justify-center pointer-events-auto';
+    btn.style.cssText = 'bottom: 35%; background: rgba(42, 52, 70, 0.8); border-color: rgba(59, 71, 96, 0.3);';
+    
+    // Share emoji
+    btn.textContent = '📤';
+    btn.style.fontSize = '18px';
+    
+    return btn;
+  }
+  
   
   private setupEventListeners(): void {
     // Settings button toggle
@@ -145,6 +175,28 @@ export class GameUI {
       this.revealBtn.style.transform = 'scale(1)';
     });
     
+    // Target button hover effect
+    this.targetBtn.addEventListener('mouseenter', () => {
+      this.targetBtn.style.background = 'rgba(59, 71, 96, 0.9)';
+      this.targetBtn.style.transform = 'scale(1.1)';
+    });
+    
+    this.targetBtn.addEventListener('mouseleave', () => {
+      this.targetBtn.style.background = 'rgba(42, 52, 70, 0.8)';
+      this.targetBtn.style.transform = 'scale(1)';
+    });
+    
+    // Share button hover effect
+    this.shareBtn.addEventListener('mouseenter', () => {
+      this.shareBtn.style.background = 'rgba(59, 71, 96, 0.9)';
+      this.shareBtn.style.transform = 'scale(1.1)';
+    });
+    
+    this.shareBtn.addEventListener('mouseleave', () => {
+      this.shareBtn.style.background = 'rgba(42, 52, 70, 0.8)';
+      this.shareBtn.style.transform = 'scale(1)';
+    });
+    
     // Close menu when clicking outside
     document.addEventListener('click', (e) => {
       if (!this.settingsBtn.contains(e.target as Node) && 
@@ -161,6 +213,8 @@ export class GameUI {
     this.container.appendChild(this.menuPanel);
     this.container.appendChild(this.shuffleBtn);
     this.container.appendChild(this.revealBtn);
+    this.container.appendChild(this.targetBtn);
+    this.container.appendChild(this.shareBtn);
     document.body.appendChild(this.container);
   }
   
@@ -206,6 +260,18 @@ export class GameUI {
   
   public onReveal(callback: () => void): void {
     this.revealBtn.addEventListener('click', () => {
+      callback();
+    });
+  }
+  
+  public onTargetHint(callback: () => void): void {
+    this.targetBtn.addEventListener('click', () => {
+      callback();
+    });
+  }
+  
+  public onShare(callback: () => void): void {
+    this.shareBtn.addEventListener('click', () => {
       callback();
     });
   }

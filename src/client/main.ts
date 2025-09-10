@@ -10,6 +10,7 @@ import { blurGameContainer, animateGameBlur } from './utils/ui';
 import { blurTransition } from './services/BlurTransitionService';
 import { loadLocalProgress, saveLocalProgress, fetchRemoteProgress, saveRemoteProgress, mergeProgress, Progress as HWProgress } from './services/progress';
 import { GameUI } from './components/GameUI';
+import { ShareService } from './services/ShareService';
 
 console.log('HexaWord Crossword Generator v4.0 - Modular Architecture');
 
@@ -22,8 +23,10 @@ class App {
   private currentLevel = 1;
   private mainMenuEl: HTMLDivElement | null = null;
   private fadeEl: HTMLDivElement | null = null;
+  private shareService: ShareService;
   
   constructor() {
+    this.shareService = ShareService.getInstance();
     this.initialize();
   }
 
@@ -119,6 +122,18 @@ class App {
       }
     });
     
+    this.gameUI.onTargetHint(() => {
+      if (this.game) {
+        this.game.startTargetHint();
+      }
+    });
+    
+    this.gameUI.onShare(() => {
+      if (this.game) {
+        this.handleShare();
+      }
+    });
+    
     // Update initial values
     if (this.game) {
       this.gameUI.updateLevel(this.currentLevel);
@@ -129,6 +144,26 @@ class App {
     (window as any).hwAnimSvc = (this.game as any)?.animationService || (window as any).hwAnimSvc;
   }
 
+  /**
+   * Handles share button click
+   */
+  private handleShare(): void {
+    if (!this.game) return;
+    
+    // Get game state
+    const gameData = {
+      level: this.currentLevel,
+      clue: this.game.getClue(),
+      letters: this.game.getInputLetters(),
+      foundWords: this.game.getFoundCount(),
+      totalWords: this.game.getTotalWords(),
+      canvas: document.querySelector('canvas') as HTMLCanvasElement
+    };
+    
+    // Open share modal
+    this.shareService.openShareModal(gameData);
+  }
+  
   // ===== Main Menu Scene =====
   private ensureMainMenu(): void {
     if (this.mainMenuEl) return;

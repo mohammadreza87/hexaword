@@ -42,6 +42,9 @@ export class HexaWordGame {
   private levelCompleted: boolean = false;  // Ensure completion fires once per level
   private currentClue: string = '';  // Current level clue
   private introActive: boolean = false; // Hide gameplay clue while intro anim runs
+  private isTargetHintMode: boolean = false;  // Track target hint mode
+  private targetHintOverlay: HTMLElement | null = null;  // Blur overlay element
+  private targetHintInstruction: HTMLElement | null = null;  // Instruction text element
   
   // Default word list - Uncommon Occupations theme
   private defaultWords = [
@@ -446,6 +449,7 @@ export class HexaWordGame {
     // Update UI overlay
     this.updateGameUI();
     
+    // Render everything normally first
     // Render clue above the puzzle grid
     this.renderClue(layout.gridCenterX, layout.gridCenterY, layout);
     
@@ -464,6 +468,31 @@ export class HexaWordGame {
       layout.inputHexSize,
       this.typedWord  // Pass typed word for clear button visibility
     );
+    
+    // Apply blur and dimming effect during target hint mode
+    if (this.isTargetHintMode) {
+      // Save context state
+      this.ctx.save();
+      
+      // Draw a dark overlay with blur
+      this.ctx.filter = 'blur(10px)';
+      this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+      this.ctx.fillRect(0, 0, rect.width, rect.height);
+      
+      // Reset filter
+      this.ctx.filter = 'none';
+      
+      // Restore context
+      this.ctx.restore();
+      
+      // Re-render the word grid clearly on top (no blur)
+      this.renderer.renderGrid(
+        this.board,
+        layout.gridCenterX,
+        layout.gridCenterY,
+        this.solvedCells
+      );
+    }
     
     // Render typed word dynamically positioned above the topmost input grid cells
     if (this.typedWord) {
@@ -572,6 +601,12 @@ export class HexaWordGame {
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
     
+    // Handle target hint mode clicks
+    if (this.isTargetHintMode) {
+      this.handleTargetHintClick(x, y);
+      return;
+    }
+    
     // Get layout for input grid position
     const layout = this.calculateLayout(rect.width, rect.height);
     
@@ -627,6 +662,12 @@ export class HexaWordGame {
     const rect = this.canvas.getBoundingClientRect();
     const x = touch.clientX - rect.left;
     const y = touch.clientY - rect.top;
+    
+    // Handle target hint mode touches
+    if (this.isTargetHintMode) {
+      this.handleTargetHintClick(x, y);
+      return;
+    }
     
     // Get layout for input grid position
     const layout = this.calculateLayout(rect.width, rect.height);
@@ -1132,6 +1173,13 @@ export class HexaWordGame {
   }
   
   /**
+   * Gets the letters from the input grid
+   */
+  public getInputLetters(): string[] {
+    return this.inputGrid.getLetters();
+  }
+  
+  /**
    * Shuffles the input grid letters (free, unlimited use)
    */
   public shuffleInputGrid(): void {
@@ -1189,6 +1237,152 @@ export class HexaWordGame {
   /**
    * Checks if any words are now complete after revealing a letter
    */
+  /**
+   * Starts target hint mode - player selects a cell to reveal
+   */
+  public startTargetHint(): void {
+    // Set target hint mode flag
+    this.isTargetHintMode = true;
+    
+    // Create blur overlay behind canvas
+    this.createTargetHintOverlay();
+    
+    // Re-render to show hint mode
+    this.render();
+  }
+  
+  /**
+   * Creates the blur overlay for target hint mode
+   */
+  private createTargetHintOverlay(): void {
+    // Remove any existing overlay
+    this.removeTargetHintOverlay();
+    
+    // Create semi-transparent dark overlay (no blur here)
+    const overlay = document.createElement('div');
+    overlay.id = 'target-hint-overlay';
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 1;
+      transition: all 0.3s ease;
+      pointer-events: none;
+    `;
+    
+    // Create instruction text
+    const instruction = document.createElement('div');
+    instruction.style.cssText = `
+      position: fixed;
+      bottom: 30%;
+      left: 50%;
+      transform: translateX(-50%);
+      color: white;
+      font-size: 18px;
+      font-weight: bold;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+      z-index: 100;
+      pointer-events: none;
+    `;
+    instruction.textContent = 'Choose a cell to reveal';
+    
+    // Insert overlay behind canvas
+    document.body.insertBefore(overlay, document.body.firstChild);
+    document.body.appendChild(instruction);
+    
+    // Store references
+    this.targetHintOverlay = overlay;
+    this.targetHintInstruction = instruction;
+  }
+  
+  /**
+   * Removes the target hint overlay
+   */
+  private removeTargetHintOverlay(): void {
+    if (this.targetHintOverlay) {
+      // Fade out animation
+      this.targetHintOverlay.style.opacity = '0';
+      
+      setTimeout(() => {
+        this.targetHintOverlay?.remove();
+        this.targetHintOverlay = null;
+      }, 300);
+    }
+    
+    if (this.targetHintInstruction) {
+      this.targetHintInstruction.style.opacity = '0';
+      setTimeout(() => {
+        this.targetHintInstruction?.remove();
+        this.targetHintInstruction = null;
+      }, 300);
+    }
+  }
+  
+  /**
+   * Handles cell click in target hint mode
+   */
+  private handleTargetHintClick(x: number, y: number): void {
+    if (!this.isTargetHintMode) return;
+    
+    // Get canvas dimensions
+    const rect = this.canvas.getBoundingClientRect();
+    
+    // Convert click coordinates to hex coordinates
+    const layout = this.calculateLayout(rect.width, rect.height);
+    const clickX = x - layout.gridCenterX;
+    const clickY = y - layout.gridCenterY;
+    
+    // Find clicked cell
+    let clickedCell: HexCell | null = null;
+    let minDistance = Infinity;
+    
+    this.board.forEach(cell => {
+      if (!cell.letter) return;
+      
+      const pos = this.renderer.getHexPosition(cell.q, cell.r);
+      const distance = Math.sqrt(Math.pow(pos.x - clickX, 2) + Math.pow(pos.y - clickY, 2));
+      
+      // Check if click is within hex bounds (approximate)
+      if (distance < layout.hexSize && distance < minDistance) {
+        minDistance = distance;
+        clickedCell = cell;
+      }
+    });
+    
+    if (clickedCell) {
+      const key = `${clickedCell.q},${clickedCell.r}`;
+      
+      // Check if cell is already solved
+      if (this.solvedCells.has(key)) {
+        // Cell already revealed, just exit target hint mode
+        this.isTargetHintMode = false;
+        this.removeTargetHintOverlay();
+        return;
+      }
+      
+      // Reveal the cell
+      this.solvedCells.add(key);
+      
+      // Trigger reveal animation
+      this.animationService.triggerRevealAnimation(key);
+      
+      // Exit target hint mode
+      this.isTargetHintMode = false;
+      
+      // Remove overlay with fade out
+      this.removeTargetHintOverlay();
+      
+      // Re-render
+      this.render();
+      
+      // Check if this completes any word
+      this.checkForCompletedWords();
+    }
+  }
+  
   private checkForCompletedWords(): void {
     this.placedWords.forEach(word => {
       if (this.foundWords.has(word.word)) {

@@ -570,10 +570,19 @@ export class InputHexGrid {
   /**
    * Gets all letters as a string
    */
-  public getLetters(): string {
+  public getLettersString(): string {
     return this.cells
       .map(cell => cell.letter || '')
       .join('');
+  }
+  
+  /**
+   * Gets all letters from the grid as an array
+   */
+  public getLetters(): string[] {
+    return this.cells
+      .filter(cell => cell.letter && cell.letter !== 'CLEAR')
+      .map(cell => cell.letter!);
   }
   
   /**
