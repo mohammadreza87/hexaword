@@ -760,10 +760,28 @@ export class InputHexGrid {
     centerX: number,
     centerY: number,
     dynamicSize?: number
-  ): { leftX: number; rightX: number; topY: number; bottomY: number } {
+  ): { leftX: number; rightX: number; topY: number; bottomY: number; topmostCellY: number } {
     const size = dynamicSize || this.hexSize;
     const Hex = defineHex({ dimensions: size, orientation: 'pointy' });
     let maxY = -Infinity, minY = Infinity, maxX = -Infinity, minX = Infinity;
+    
+    // Find the topmost row (smallest r value, since negative r is up)
+    let topmostRow = 0;
+    let topmostCellY = Infinity;
+    this.cells.forEach(cell => {
+      if (cell.q === 0 && cell.r === 0) return; // skip clear button
+      if (cell.r < topmostRow) {
+        topmostRow = cell.r;
+      }
+    });
+    
+    console.log('DEBUG: Finding topmost row:', {
+      topmostRow,
+      totalCells: this.cells.length,
+      allRows: [...new Set(this.cells.map(c => c.r))].sort()
+    });
+    
+    // Calculate bounds and find the Y position of topmost cell
     this.cells.forEach(cell => {
       const hex = new Hex([cell.q, cell.r]);
       const corners = hex.corners;
@@ -773,14 +791,29 @@ export class InputHexGrid {
         maxX = Math.max(maxX, corner.x);
         minX = Math.min(minX, corner.x);
       });
+      // Get the center Y position of the topmost row cells
+      if (cell.r === topmostRow) {
+        topmostCellY = Math.min(topmostCellY, hex.y);
+        console.log('DEBUG: Cell in topmost row:', { q: cell.q, r: cell.r, y: hex.y });
+      }
     });
+    
     const offsetX = centerX - (minX + maxX) / 2;  // same centering as render
     const offsetY = centerY - maxY;               // bottom aligns with centerY
+    
+    console.log('DEBUG: Final bounds calculation:', {
+      topmostCellY_raw: topmostCellY,
+      offsetY,
+      topmostCellY_final: topmostCellY + offsetY,
+      centerY
+    });
+    
     return {
       leftX: minX + offsetX,
       rightX: maxX + offsetX,
       topY: minY + offsetY,
       bottomY: maxY + offsetY,
+      topmostCellY: topmostCellY + offsetY  // The Y position of topmost cell center
     };
   }
 

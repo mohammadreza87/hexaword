@@ -462,9 +462,26 @@ export class HexaWordGame {
       this.typedWord  // Pass typed word for clear button visibility
     );
     
-    // Render typed word centered within the reserved band above the input grid
+    // Render typed word dynamically positioned above the topmost input grid cells
     if (this.typedWord) {
-      const typedBaseline = inputGridTop - Math.round(layout.inputTypedBand * 0.5);
+      // Get the actual bounds of the input grid to position text above it
+      const inputBounds = this.inputGrid.getBounds(
+        layout.inputCenterX, 
+        layout.inputCenterY, 
+        layout.inputHexSize
+      );
+      // Position typed word just above the topmost cell center
+      const typedBaseline = inputBounds.topmostCellY + 50; // 50px below the topmost cell center
+      
+      // Debug logging
+      console.log('DEBUG: Typed word positioning:', {
+        topmostCellY: inputBounds.topmostCellY,
+        inputHexSize: layout.inputHexSize,
+        typedBaseline: typedBaseline,
+        topY: inputBounds.topY,
+        bottomY: inputBounds.bottomY
+      });
+      
       this.renderTypedWord(rect.width, typedBaseline);
     }
     
@@ -718,9 +735,9 @@ export class HexaWordGame {
     let sourcePositionsAll: Array<{ x: number; y: number }> | undefined = (window as any).__typedGlyphPositions;
     if (!sourcePositionsAll || sourcePositionsAll.length !== lettersUpper.length) {
       const inputBounds = this.inputGrid.getBounds(layout.inputCenterX, layout.inputCenterY, layout.inputHexSize);
-      const startY = inputBounds.topY - Math.max(30, layout.inputHexSize * 1.2);
+      const startY = inputBounds.topmostCellY + 50; // Use same positioning as renderTypedWord
       this.ctx.save();
-      this.ctx.font = "900 20px 'Inter', Arial";
+      this.ctx.font = "900 16px 'Inter', Arial"; // Match font size from renderTypedWord
       const widths = lettersUpper.map(ch => this.ctx.measureText(ch).width);
       const gap = 6; // add extra spacing between letters in fallback
       const totalWidth = widths.reduce((a, w) => a + w, 0) + gap * Math.max(lettersUpper.length - 1, 0);
@@ -958,8 +975,8 @@ export class HexaWordGame {
       }
     } while (textWidth > maxWidth && fontSize > 12);
 
-    // Reduce final font size by 5px for main gameplay view
-    fontSize = Math.max(12, fontSize - 5);
+    // Reduce final font size by 10px for main gameplay view (5px more than before)
+    fontSize = Math.max(12, fontSize - 10);
     
     // Get theme colors based on level
     const palette = getPaletteForLevel(this.currentLevel);
@@ -1043,7 +1060,7 @@ export class HexaWordGame {
     
     // Pure white for typed word
     this.ctx.fillStyle = '#FFFFFF';
-    this.ctx.font = "900 20px 'Inter', Arial";
+    this.ctx.font = "900 16px 'Inter', Arial";  // Reduced from 20px
     this.ctx.textAlign = 'center';
     this.ctx.textBaseline = 'middle';
     this.ctx.fillText(this.typedWord.toUpperCase(), canvasWidth / 2, y);

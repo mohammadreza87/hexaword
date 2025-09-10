@@ -594,15 +594,15 @@ export class AnimationService {
       const targetPos = targetPositions[index];
       if (!targetPos) return;
       const start = Array.isArray(sourcePos) ? sourcePos[index] : sourcePos as { x: number; y: number };
-      const upY = start.y - 16; // Smaller hop above baseline
+      // No vertical jump - stay at the same y position
 
       // Each letter's journey starts with just 50ms delay from previous
       const startTime = index * 0.05; // 50ms delay between each letter starting
       
-      // Jump UP
+      // Scale up in place at exact typing position
       tl.to(jumpLetter, {
         x: jumpLetter.x,
-        y: upY - 0, // keep API parity; upY already encodes small hop
+        y: start.y, // Keep at exact typing position
         scale: 1.3,
         duration: 0.3,
         ease: 'back.out(1.2)',
