@@ -449,11 +449,7 @@ export class HexaWordGame {
     // Update UI overlay
     this.updateGameUI();
     
-    // Render everything normally first
-    // Render clue above the puzzle grid
-    this.renderClue(layout.gridCenterX, layout.gridCenterY, layout);
-    
-    // Render main grid with solved cells
+    // Render main grid always
     this.renderer.renderGrid(
       this.board,
       layout.gridCenterX,
@@ -461,51 +457,30 @@ export class HexaWordGame {
       this.solvedCells
     );
     
-    // Render input grid and get its top position
-    const inputGridTop = this.inputGrid.render(
-      layout.inputCenterX,
-      layout.inputCenterY,
-      layout.inputHexSize,
-      this.typedWord  // Pass typed word for clear button visibility
-    );
-    
-    // Apply blur and dimming effect during target hint mode
-    if (this.isTargetHintMode) {
-      // Save context state
-      this.ctx.save();
+    // Only render clue, input grid and typed word if NOT in target hint mode
+    if (!this.isTargetHintMode) {
+      this.renderClue(layout.gridCenterX, layout.gridCenterY, layout);
       
-      // Draw a dark overlay with blur
-      this.ctx.filter = 'blur(10px)';
-      this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-      this.ctx.fillRect(0, 0, rect.width, rect.height);
-      
-      // Reset filter
-      this.ctx.filter = 'none';
-      
-      // Restore context
-      this.ctx.restore();
-      
-      // Re-render the word grid clearly on top (no blur)
-      this.renderer.renderGrid(
-        this.board,
-        layout.gridCenterX,
-        layout.gridCenterY,
-        this.solvedCells
+      const inputGridTop = this.inputGrid.render(
+        layout.inputCenterX,
+        layout.inputCenterY,
+        layout.inputHexSize,
+        this.typedWord
       );
-    }
-    
-    // Render typed word dynamically positioned above the topmost input grid cells
-    if (this.typedWord) {
-      // Get the actual bounds of the input grid to position text above it
-      const inputBounds = this.inputGrid.getBounds(
-        layout.inputCenterX, 
-        layout.inputCenterY, 
-        layout.inputHexSize
-      );
-      // Position typed word just above the topmost cell center
-      const typedBaseline = inputBounds.topmostCellY + 50; // 50px below the topmost cell center
       
-      this.renderTypedWord(rect.width, typedBaseline);
+      // Render typed word dynamically positioned above the topmost input grid cells
+      if (this.typedWord) {
+        // Get the actual bounds of the input grid to position text above it
+        const inputBounds = this.inputGrid.getBounds(
+          layout.inputCenterX, 
+          layout.inputCenterY, 
+          layout.inputHexSize
+        );
+        // Position typed word just above the topmost cell center
+        const typedBaseline = inputBounds.topmostCellY + 50; // 50px below the topmost cell center
+        
+        this.renderTypedWord(rect.width, typedBaseline);
+      }
     }
     
     // Render jumping letters animation
@@ -1241,14 +1216,18 @@ export class HexaWordGame {
    * Starts target hint mode - player selects a cell to reveal
    */
   public startTargetHint(): void {
-    // Set target hint mode flag
-    this.isTargetHintMode = true;
-    
-    // Create blur overlay behind canvas
-    this.createTargetHintOverlay();
-    
-    // Re-render to show hint mode
-    this.render();
+    // Toggle target hint mode
+    if (this.isTargetHintMode) {
+      // Exit target hint mode
+      this.isTargetHintMode = false;
+      this.removeTargetHintOverlay();
+      this.render();
+    } else {
+      // Enter target hint mode
+      this.isTargetHintMode = true;
+      this.createTargetHintOverlay();
+      this.render();
+    }
   }
   
   /**
@@ -1258,7 +1237,7 @@ export class HexaWordGame {
     // Remove any existing overlay
     this.removeTargetHintOverlay();
     
-    // Create semi-transparent dark overlay (no blur here)
+    // Create full-screen dark overlay
     const overlay = document.createElement('div');
     overlay.id = 'target-hint-overlay';
     overlay.style.cssText = `
@@ -1267,30 +1246,71 @@ export class HexaWordGame {
       left: 0;
       width: 100%;
       height: 100%;
-      background: rgba(0, 0, 0, 0.7);
-      z-index: 1;
-      transition: all 0.3s ease;
+      background: rgba(0, 0, 0, 0.85);
+      z-index: 1000;
+      transition: opacity 0.3s ease;
       pointer-events: none;
     `;
     
     // Create instruction text
     const instruction = document.createElement('div');
+    instruction.id = 'target-hint-instruction';
     instruction.style.cssText = `
       position: fixed;
-      bottom: 30%;
+      bottom: 10%;
       left: 50%;
       transform: translateX(-50%);
       color: white;
       font-size: 18px;
-      font-weight: bold;
-      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
-      z-index: 100;
+      font-weight: 600;
+      text-align: center;
+      z-index: 1002;
+      padding: 10px 20px;
+      background: rgba(42, 52, 70, 0.9);
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
       pointer-events: none;
     `;
-    instruction.textContent = 'Choose a cell to reveal';
+    instruction.textContent = 'Tap a letter to reveal';
     
-    // Insert overlay behind canvas
-    document.body.insertBefore(overlay, document.body.firstChild);
+    // Hide all UI elements except the target button
+    const gameUI = document.getElementById('game-ui-overlay');
+    if (gameUI) {
+      Array.from(gameUI.children).forEach(child => {
+        const el = child as HTMLElement;
+        if (child.id !== 'hw-target-btn') {
+          (el as any).__originalVisibility = el.style.visibility;
+          el.style.visibility = 'hidden';
+        }
+      });
+    }
+    
+    // Ensure canvas container is above overlay
+    const canvasContainer = this.canvas?.parentElement;
+    if (canvasContainer) {
+      (canvasContainer as any).__originalZIndex = canvasContainer.style.zIndex;
+      (canvasContainer as any).__originalPosition = canvasContainer.style.position;
+      canvasContainer.style.position = 'relative';
+      canvasContainer.style.zIndex = '1001';
+    }
+    
+    // Move target button to body to ensure it's above everything
+    const targetBtn = document.getElementById('hw-target-btn');
+    if (targetBtn && targetBtn.parentElement) {
+      // Store original parent
+      (targetBtn as any).__originalParent = targetBtn.parentElement;
+      (targetBtn as any).__originalZIndex = targetBtn.style.zIndex;
+      (targetBtn as any).__originalPointerEvents = targetBtn.style.pointerEvents;
+      
+      // Move to body with high z-index
+      document.body.appendChild(targetBtn);
+      targetBtn.style.zIndex = '10000';
+      targetBtn.style.visibility = 'visible';
+      targetBtn.style.pointerEvents = 'auto';
+    }
+    
+    // Append elements
+    document.body.appendChild(overlay);
     document.body.appendChild(instruction);
     
     // Store references
@@ -1302,16 +1322,60 @@ export class HexaWordGame {
    * Removes the target hint overlay
    */
   private removeTargetHintOverlay(): void {
-    if (this.targetHintOverlay) {
-      // Fade out animation
-      this.targetHintOverlay.style.opacity = '0';
+    // Restore UI elements
+    const gameUI = document.getElementById('game-ui-overlay');
+    if (gameUI) {
+      // Show all children again
+      Array.from(gameUI.children).forEach(child => {
+        const el = child as HTMLElement;
+        const originalVisibility = (el as any).__originalVisibility;
+        el.style.visibility = originalVisibility || '';
+        delete (el as any).__originalVisibility;
+      });
+    }
+    
+    // Reset canvas container z-index
+    const canvasContainer = this.canvas?.parentElement;
+    if (canvasContainer) {
+      const originalZIndex = (canvasContainer as any).__originalZIndex;
+      const originalPosition = (canvasContainer as any).__originalPosition;
+      canvasContainer.style.zIndex = originalZIndex || '';
+      canvasContainer.style.position = originalPosition || '';
+      delete (canvasContainer as any).__originalZIndex;
+      delete (canvasContainer as any).__originalPosition;
+    }
+    
+    // Restore target button to original parent
+    const targetBtn = document.getElementById('hw-target-btn');
+    if (targetBtn) {
+      const originalParent = (targetBtn as any).__originalParent;
+      const originalZIndex = (targetBtn as any).__originalZIndex;
+      const originalPointerEvents = (targetBtn as any).__originalPointerEvents;
       
+      // Move back to original parent if it was moved
+      if (originalParent && targetBtn.parentElement === document.body) {
+        originalParent.appendChild(targetBtn);
+      }
+      
+      targetBtn.style.zIndex = originalZIndex || '';
+      targetBtn.style.pointerEvents = originalPointerEvents || '';
+      targetBtn.style.visibility = '';
+      
+      delete (targetBtn as any).__originalParent;
+      delete (targetBtn as any).__originalZIndex;
+      delete (targetBtn as any).__originalPointerEvents;
+    }
+    
+    // Remove overlay with fade
+    if (this.targetHintOverlay) {
+      this.targetHintOverlay.style.opacity = '0';
       setTimeout(() => {
         this.targetHintOverlay?.remove();
         this.targetHintOverlay = null;
       }, 300);
     }
     
+    // Remove instruction with fade
     if (this.targetHintInstruction) {
       this.targetHintInstruction.style.opacity = '0';
       setTimeout(() => {
@@ -1330,10 +1394,12 @@ export class HexaWordGame {
     // Get canvas dimensions
     const rect = this.canvas.getBoundingClientRect();
     
-    // Convert click coordinates to hex coordinates
+    // Get layout for grid position
     const layout = this.calculateLayout(rect.width, rect.height);
-    const clickX = x - layout.gridCenterX;
-    const clickY = y - layout.gridCenterY;
+    
+    // Calculate the offset used by the renderer (same as in renderGrid)
+    const bounds = this.renderer.calculateBounds(this.board);
+    const offset = this.renderer.calculateCenterOffset(bounds);
     
     // Find clicked cell
     let clickedCell: HexCell | null = null;
@@ -1342,13 +1408,23 @@ export class HexaWordGame {
     this.board.forEach(cell => {
       if (!cell.letter) return;
       
+      // Get hex position relative to origin
       const pos = this.renderer.getHexPosition(cell.q, cell.r);
-      const distance = Math.sqrt(Math.pow(pos.x - clickX, 2) + Math.pow(pos.y - clickY, 2));
       
-      // Check if click is within hex bounds (approximate)
-      if (distance < layout.hexSize && distance < minDistance) {
-        minDistance = distance;
-        clickedCell = cell;
+      // Calculate actual screen position matching renderHexCell
+      // renderHexCell uses: hex.x + (centerX + offset.x)
+      const hexCenterX = pos.x + layout.gridCenterX + offset.x;
+      const hexCenterY = pos.y + layout.gridCenterY + offset.y;
+      
+      // Calculate distance from click to hex center
+      const distance = Math.sqrt(Math.pow(x - hexCenterX, 2) + Math.pow(y - hexCenterY, 2));
+      
+      // Check if click is within hex bounds
+      if (distance < layout.hexSize) {
+        if (distance < minDistance) {
+          minDistance = distance;
+          clickedCell = cell;
+        }
       }
     });
     
@@ -1360,6 +1436,7 @@ export class HexaWordGame {
         // Cell already revealed, just exit target hint mode
         this.isTargetHintMode = false;
         this.removeTargetHintOverlay();
+        this.render();
         return;
       }
       
@@ -1371,8 +1448,6 @@ export class HexaWordGame {
       
       // Exit target hint mode
       this.isTargetHintMode = false;
-      
-      // Remove overlay with fade out
       this.removeTargetHintOverlay();
       
       // Re-render
