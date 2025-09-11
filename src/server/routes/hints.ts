@@ -22,12 +22,12 @@ router.get('/api/hints', async (req: Request, res: Response) => {
     const data = await redis.get(key);
     
     if (!data) {
-      // New user - give them free hints
+      // New user - one-time free hints (constant economy)
       const initialData: HintData = {
-        revealHints: 5,
-        targetHints: 3,
-        freeReveals: 5,
-        freeTargets: 3,
+        revealHints: 2,
+        targetHints: 2,
+        freeReveals: 0,
+        freeTargets: 0,
         lastUpdated: Date.now()
       };
       
@@ -57,10 +57,10 @@ router.post('/api/hints', async (req: Request, res: Response) => {
     
     if (!currentData) {
       hints = {
-        revealHints: 5,
-        targetHints: 3,
-        freeReveals: 5,
-        freeTargets: 3,
+        revealHints: 2,
+        targetHints: 2,
+        freeReveals: 0,
+        freeTargets: 0,
         lastUpdated: Date.now()
       };
     } else {
@@ -69,13 +69,31 @@ router.post('/api/hints', async (req: Request, res: Response) => {
     
     // Handle different actions
     switch (action) {
-      case 'use':
-        if (hintType === 'reveal' && hints.revealHints > 0) {
+      case 'use': {
+        // Server-authoritative spend before consuming a hint (constant pricing)
+        const cost = hintType === 'reveal' ? 50 : 100;
+        const coinKey = username ? `hw:coins:${username}` : null;
+        if (!coinKey) {
+          return res.status(401).json({ error: 'unauthorized' });
+        }
+        const coinRaw = await redis.get(coinKey);
+        let coins = coinRaw ? JSON.parse(coinRaw) : { balance: 100, totalEarned: 100, totalSpent: 0, lastUpdated: Date.now() };
+        if (coins.balance < cost) {
+          return res.status(400).json({ error: 'insufficient_coins', balance: coins.balance, cost });
+        }
+        if (hintType === 'reveal') {
+          if (hints.revealHints <= 0) return res.status(400).json({ error: 'no_reveal_hints' });
           hints.revealHints--;
-        } else if (hintType === 'target' && hints.targetHints > 0) {
+        } else if (hintType === 'target') {
+          if (hints.targetHints <= 0) return res.status(400).json({ error: 'no_target_hints' });
           hints.targetHints--;
         }
+        coins.balance -= cost;
+        coins.totalSpent += cost;
+        coins.lastUpdated = Date.now();
+        await redis.set(coinKey, JSON.stringify(coins));
         break;
+      }
         
       case 'add':
         if (hintType === 'reveal') {
@@ -96,12 +114,12 @@ router.post('/api/hints', async (req: Request, res: Response) => {
         break;
         
       case 'reset':
-        // Reset to initial state
+        // Reset to initial state (constant economy defaults)
         hints = {
-          revealHints: 5,
-          targetHints: 3,
-          freeReveals: 5,
-          freeTargets: 3,
+          revealHints: 2,
+          targetHints: 2,
+          freeReveals: 0,
+          freeTargets: 0,
           lastUpdated: Date.now()
         };
         break;

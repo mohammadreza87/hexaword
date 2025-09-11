@@ -34,6 +34,13 @@ export async function fetchRemoteProgress(): Promise<Progress | null> {
   try {
     const res = await fetch('/api/progress', { method: 'GET', credentials: 'include' });
     if (!res.ok) return null;
+    
+    // Check if response is JSON before parsing
+    const contentType = res.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      throw new Error('Server returned non-JSON response');
+    }
+    
     const data = await res.json();
     if (typeof data?.level !== 'number') return null;
     return {

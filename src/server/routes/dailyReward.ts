@@ -17,14 +17,16 @@ const router = express.Router();
 // Wheel prize definitions (must match client IDs)
 type PrizeDef = { id: string; type: 'coins' | 'hints' | 'bundle' | 'jackpot'; value: number; weight: number };
 const PRIZES: PrizeDef[] = [
-  { id: 'coins_50', type: 'coins', value: 50, weight: 30 },
-  { id: 'coins_100', type: 'coins', value: 100, weight: 25 },
-  { id: 'hints_reveal_2', type: 'hints', value: 2, weight: 15 },
-  { id: 'coins_250', type: 'coins', value: 250, weight: 12 },
-  { id: 'hints_target_2', type: 'hints', value: 2, weight: 8 },
-  { id: 'bundle_premium', type: 'bundle', value: 1, weight: 6 },
-  { id: 'coins_500', type: 'coins', value: 500, weight: 3 },
-  { id: 'jackpot', type: 'jackpot', value: 1000, weight: 1 }
+  // Coins (reduced EV)
+  { id: 'coins_50', type: 'coins', value: 50, weight: 6 },
+  { id: 'coins_100', type: 'coins', value: 100, weight: 4 },
+  { id: 'coins_250', type: 'coins', value: 250, weight: 2 },
+  { id: 'coins_500', type: 'coins', value: 500, weight: 1 },
+  { id: 'jackpot', type: 'jackpot', value: 1000, weight: 0.1 },
+  // Hints (primary rewards)
+  { id: 'hints_reveal_2', type: 'hints', value: 2, weight: 40 },
+  { id: 'hints_target_2', type: 'hints', value: 2, weight: 30 },
+  { id: 'bundle_premium', type: 'bundle', value: 1, weight: 16.9 }
 ];
 
 function weightedPick(prizes: PrizeDef[]): PrizeDef {

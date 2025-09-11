@@ -41,27 +41,27 @@ export interface CoinState {
 
 export class CoinService {
   private static readonly DEFAULT_CONFIG: CoinRewardConfig = {
-    // Base rewards
-    baseCompletion: 50,        // 50 coins for completing any level
-    perWordFound: 10,          // 10 coins per word
-    letterBonus: 5,            // 5 coins per letter in 6+ letter words
+    // Base rewards (constant economy)
+    baseCompletion: 20,        // 20 coins for completing any level
+    perWordFound: 8,           // 8 coins per word
+    letterBonus: 0,            // No letter length bonus in constant economy
     
-    // Skill bonuses
-    perfectBonus: 100,         // 100 coins for no hints
-    speedBonus: 50,            // Up to 50 coins for speed
-    firstTryBonus: 20,         // 20 coins for words found without errors
+    // Skill bonuses (constant, modest)
+    perfectBonus: 10,          // 10 coins for no hints
+    speedBonus: 5,             // 5 coins if under time threshold
+    firstTryBonus: 3,          // 3 coins per word found without errors
     
-    // Level scaling
-    levelMultiplier: 0.1,      // 10% more coins per 10 levels
-    maxMultiplier: 3.0,        // Max 3x multiplier at level 200+
+    // Level scaling disabled
+    levelMultiplier: 0.0,
+    maxMultiplier: 1.0,
     
     // Time thresholds
-    speedBonusTime: 60,        // 60 seconds for max speed bonus
+    speedBonusTime: 60,        // 60 seconds threshold for speed bonus
     
     // Hint costs (for spending)
     shuffleCost: 0,            // Shuffle is free
-    revealLetterCost: 30,      // 30 coins to reveal a letter
-    targetHintCost: 20         // 20 coins for target hint
+    revealLetterCost: 50,      // 50 coins to reveal a letter
+    targetHintCost: 100        // 100 coins for target hint
   };
 
   private config: CoinRewardConfig;
@@ -103,11 +103,6 @@ export class CoinService {
   ): number {
     let reward = this.config.perWordFound;
     
-    // Bonus for longer words (6+ letters)
-    if (word.length >= 6) {
-      reward += (word.length - 5) * this.config.letterBonus;
-    }
-    
     // Bonus for finding quickly (within first attempt)
     if (foundQuickly) {
       reward += this.config.firstTryBonus;
@@ -128,7 +123,7 @@ export class CoinService {
   ): number {
     let reward = this.config.baseCompletion;
     
-    // Add per-word rewards (already tracked in levelEarnings)
+    // Add per-word rewards accumulated during level
     reward += this.state.levelEarnings;
     
     // Perfect bonus (no hints)
@@ -136,20 +131,14 @@ export class CoinService {
       reward += this.config.perfectBonus;
     }
     
-    // Speed bonus (linear decrease from max to 0)
+    // Binary speed bonus: if under threshold, add full bonus
     const seconds = timeElapsed / 1000;
-    if (seconds < this.config.speedBonusTime) {
-      const speedMultiplier = 1 - (seconds / this.config.speedBonusTime);
-      reward += Math.floor(this.config.speedBonus * speedMultiplier);
+    if (seconds <= this.config.speedBonusTime) {
+      reward += this.config.speedBonus;
     }
     
-    // Level scaling (more coins at higher levels)
-    const levelTier = Math.floor(level / 10);
-    const multiplier = Math.min(
-      1 + (levelTier * this.config.levelMultiplier),
-      this.config.maxMultiplier
-    );
-    reward = Math.floor(reward * multiplier);
+    // No level scaling in constant economy
+    // reward remains as-is
     
     // Update state
     this.state.balance += reward;

@@ -80,11 +80,12 @@ async function fetchWithRetry(
 }
 
 export async function getGameInit(level: number = 1): Promise<GameInitResponse> {
-  const url = new URL('/api/game/init', window.location.origin);
-  url.searchParams.set('level', String(level));
+  // IMPORTANT: Use a relative path so Devvit's sandbox/proxy can route requests
+  // Building with window.location.origin breaks on reddit.com and yields 404 HTML
+  const url = `/api/game/init?level=${encodeURIComponent(level)}`;
   
   try {
-    const res = await fetchWithRetry(url.toString(), { method: 'GET' });
+    const res = await fetchWithRetry(url, { method: 'GET' });
     
     if (!res.ok) {
       const data = await res.json().catch(() => null);
@@ -105,6 +106,11 @@ export async function getGameInit(level: number = 1): Promise<GameInitResponse> 
       );
     }
     
+    // Guard against HTML error pages (e.g., reddit.com 404) by checking content-type
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      throw new ApiError('Invalid response content type', ApiErrorCode.INVALID_RESPONSE, res.status);
+    }
     const data = await res.json();
     return validateGameInitResponse(data);
   } catch (error) {

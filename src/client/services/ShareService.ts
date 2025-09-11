@@ -261,6 +261,12 @@ Play HexaWord on Reddit! 🎮`;
         })
       });
       
+      // Check if response is JSON before parsing
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned non-JSON response');
+      }
+      
       const result = await response.json();
       
       if (result.status === 'success') {

@@ -496,6 +496,11 @@ class App {
         try {
           const listRes = await fetch('/api/level-progress');
           if (listRes.ok) {
+            // Check if response is JSON before parsing
+            const contentType = listRes.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+              throw new Error('Server returned non-JSON response');
+            }
             const { levels } = await listRes.json();
             if (Array.isArray(levels)) {
               await Promise.all(levels.map((lvl: number) => fetch(`/api/level-progress/${lvl}`, { method: 'DELETE' })));
@@ -676,12 +681,18 @@ class App {
     // Get score and coin data from the game
     const scoreData = (this.game as any)?.scoreService?.getState() || { levelScore: 0, currentScore: 0 };
     const coinService = (this.game as any)?.coinService;
+    const coinStorageService = (this.game as any)?.coinStorageService;
     const coinState = coinService?.getState() || { levelEarnings: 0 };
     // Calculate total coins earned this level (base + word rewards)
     const hintsUsed = scoreData.hintsUsed || 0;
     const coinReward = coinService ? 
       coinService.calculateLevelReward(level, words.length, Date.now() - (scoreData.timeStarted || Date.now()), hintsUsed) : 
       coinState.levelEarnings;
+    
+    // Get current coin balance BEFORE reward
+    const coinsBeforeReward = coinStorageService?.getCachedBalance() || 0;
+    // Calculate total coins AFTER adding the level reward
+    const totalCoinsAfterReward = coinsBeforeReward + coinReward;
     
     panel.innerHTML = `
       <div class="text-center mb-3">
@@ -697,8 +708,11 @@ class App {
           <div class="text-xl font-bold">${scoreData.levelScore.toLocaleString()}</div>
         </div>
         <div class="text-center">
-          <div class="text-xs text-hw-text-secondary uppercase">High Score</div>
-          <div class="text-xl font-bold">${scoreData.currentScore.toLocaleString()}</div>
+          <div class="text-xs text-hw-text-secondary uppercase">Coins</div>
+          <div class="text-xl font-bold text-hw-accent-yellow">
+            <span class="text-lg">🪙</span> ${totalCoinsAfterReward.toLocaleString()}
+          </div>
+          ${coinReward > 0 ? `<div class="text-xs text-hw-accent-success mt-1">+${coinReward} earned</div>` : ''}
         </div>
       </div>
       <div class="flex items-center justify-center gap-3 mt-4">

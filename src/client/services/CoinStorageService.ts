@@ -46,6 +46,12 @@ export class CoinStorageService {
         };
       }
       
+      // Check if response is JSON before parsing
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned non-JSON response');
+      }
+      
       const data = await response.json();
       this.cachedData = data;
       return data;
@@ -74,6 +80,12 @@ export class CoinStorageService {
       
       if (!response.ok) {
         throw new Error('Failed to add coins');
+      }
+      
+      // Check if response is JSON before parsing
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned non-JSON response');
       }
       
       const data = await response.json();
@@ -105,6 +117,12 @@ export class CoinStorageService {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'spend', amount })
       });
+      
+      // Check if response is JSON before parsing
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned non-JSON response');
+      }
       
       const data = await response.json();
       
@@ -141,6 +159,12 @@ export class CoinStorageService {
         return false;
       }
       
+      // Check if response is JSON before parsing
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned non-JSON response');
+      }
+      
       const data = await response.json();
       return data.canAfford;
     } catch (error) {
@@ -169,6 +193,12 @@ export class CoinStorageService {
       
       if (!response.ok) {
         throw new Error('Failed to sync coins');
+      }
+      
+      // Check if response is JSON before parsing
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned non-JSON response');
       }
       
       const data = await response.json();

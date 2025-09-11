@@ -8,7 +8,6 @@ import { ColorPaletteService } from './services/ColorPaletteService';
 import { getPaletteForLevel } from './config/ColorPalettes';
 import { BoosterService, BoosterType } from '../shared/game/application/services/BoosterService';
 import { ScoreService, ScoreState } from '../shared/game/domain/services/ScoreService';
-import { HighScoreService } from '../client/services/HighScoreService';
 import { CoinService } from '../shared/game/domain/services/CoinService';
 import { CoinStorageService } from '../client/services/CoinStorageService';
 import { HintService } from '../shared/game/domain/services/HintService';
@@ -41,7 +40,6 @@ export class HexaWordGame {
   private colorPaletteService: ColorPaletteService;
   private boosterService: BoosterService;
   private scoreService: ScoreService;
-  private highScoreService: HighScoreService;
   private coinService: CoinService;
   private coinStorageService: CoinStorageService;
   private hintService: HintService;
@@ -103,7 +101,6 @@ export class HexaWordGame {
       this.colorPaletteService = ColorPaletteService.getInstance();
       this.boosterService = new BoosterService();
       this.scoreService = new ScoreService();
-      this.highScoreService = HighScoreService.getInstance();
       this.coinService = new CoinService();
       this.coinStorageService = CoinStorageService.getInstance();
       this.hintService = new HintService();
@@ -950,23 +947,7 @@ export class HexaWordGame {
     
     // No more ugly popup notifications - scores are shown in the complete panel
     
-    // Submit high score
-    const scoreData = this.scoreService.exportForLeaderboard();
-    const result = await this.highScoreService.submitScore({
-      score: scoreData.score,
-      level: this.currentLevel,
-      wordsFound: scoreData.wordsFound,
-      timeElapsed: scoreData.timeElapsed,
-      hintsUsed: scoreData.hintsUsed,
-      perfect: scoreData.perfect
-    });
-    
-    // Show new high score notification if applicable
-    if (result.newHighScore) {
-      setTimeout(() => {
-        this.showNewHighScoreNotification(result.score);
-      }, 1000); // Show after bonus notification
-    }
+    // High score functionality has been removed
     
     if (this.config.onLevelComplete) {
       try {
@@ -1549,71 +1530,6 @@ export class HexaWordGame {
     }, 2000);
   }
   
-  /**
-   * Shows a new high score notification
-   */
-  private showNewHighScoreNotification(score: number): void {
-    const notification = document.createElement('div');
-    notification.className = 'highscore-notification';
-    notification.innerHTML = `
-      <div style="font-size: 28px; margin-bottom: 8px;">🏆 NEW HIGH SCORE! 🏆</div>
-      <div style="font-size: 36px; font-weight: bold;">${score.toLocaleString()}</div>
-    `;
-    notification.style.cssText = `
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
-      color: #1a1f2b;
-      padding: 24px 48px;
-      border-radius: 16px;
-      text-align: center;
-      z-index: 10001;
-      animation: highScorePop 2.5s ease-out forwards;
-      pointer-events: none;
-      box-shadow: 0 8px 32px rgba(255, 215, 0, 0.4);
-    `;
-    
-    // Add animation keyframes if not already present
-    if (!document.getElementById('highscore-animation-styles')) {
-      const style = document.createElement('style');
-      style.id = 'highscore-animation-styles';
-      style.textContent = `
-        @keyframes highScorePop {
-          0% {
-            transform: translate(-50%, -50%) scale(0) rotate(-180deg);
-            opacity: 0;
-          }
-          50% {
-            transform: translate(-50%, -50%) scale(1.1) rotate(5deg);
-            opacity: 1;
-          }
-          60% {
-            transform: translate(-50%, -50%) scale(0.95) rotate(-2deg);
-          }
-          70% {
-            transform: translate(-50%, -50%) scale(1.05) rotate(1deg);
-          }
-          80% {
-            transform: translate(-50%, -50%) scale(1) rotate(0deg);
-          }
-          100% {
-            transform: translate(-50%, -50%) scale(1) rotate(0deg);
-            opacity: 0;
-          }
-        }
-      `;
-      document.head.appendChild(style);
-    }
-    
-    document.body.appendChild(notification);
-    
-    // Remove after animation
-    setTimeout(() => {
-      notification.remove();
-    }, 2500);
-  }
   
   /**
    * Reveals a random letter from an unfound word
@@ -1636,9 +1552,9 @@ export class HexaWordGame {
           const totalCost = quantity * 50;
           if (coinBalance < totalCost) return false;
           
-          // Deduct coins and add hints
-          this.coinService.addCoins(-totalCost);
-          await this.coinStorageService.spendCoins(totalCost);
+          // Deduct coins on server and add hints
+          const spendRes = await this.coinStorageService.spendCoins(totalCost);
+          if (!spendRes.success) return false;
           this.hintService.addHints(quantity, 0);
           await this.hintStorageService.addHints('reveal', quantity);
           
@@ -1662,8 +1578,8 @@ export class HexaWordGame {
     
     // Deduct coins if needed
     if (hintCheck.cost > 0) {
-      this.coinService.addCoins(-hintCheck.cost);
-      await this.coinStorageService.spendCoins(hintCheck.cost);
+      const spendRes = await this.coinStorageService.spendCoins(hintCheck.cost);
+      if (!spendRes.success) return false;
       this.updateCoinDisplay();
     } else {
       // Using free hint, sync with server
@@ -1753,9 +1669,9 @@ export class HexaWordGame {
             const totalCost = quantity * 100;
             if (coinBalance < totalCost) return false;
             
-            // Deduct coins and add hints
-            this.coinService.addCoins(-totalCost);
-            await this.coinStorageService.spendCoins(totalCost);
+            // Deduct coins on server and add hints
+            const spendRes = await this.coinStorageService.spendCoins(totalCost);
+            if (!spendRes.success) return false;
             this.hintService.addHints(0, quantity);
             await this.hintStorageService.addHints('target', quantity);
             
@@ -2018,8 +1934,8 @@ export class HexaWordGame {
       
       // Deduct coins if needed
       if (hintResult.cost > 0) {
-        this.coinService.addCoins(-hintResult.cost);
-        await this.coinStorageService.spendCoins(hintResult.cost);
+        const spendRes = await this.coinStorageService.spendCoins(hintResult.cost);
+        if (!spendRes.success) return;
         this.updateCoinDisplay();
       } else {
         // Using free hint, sync with server

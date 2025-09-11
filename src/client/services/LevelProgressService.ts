@@ -47,6 +47,12 @@ export class LevelProgressService {
         throw new Error(`Failed to load progress: ${response.status}`);
       }
       
+      // Check if response is JSON before parsing
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned non-JSON response');
+      }
+      
       const data = await response.json();
       this.currentProgress = data;
       return data;

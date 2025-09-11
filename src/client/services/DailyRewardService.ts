@@ -42,6 +42,12 @@ export class DailyRewardService {
         return 1; // Default to 1 token if API fails
       }
       
+      // Check if response is JSON before parsing
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned non-JSON response');
+      }
+      
       const data = await response.json();
       
       // Check if we should grant daily token
@@ -101,6 +107,12 @@ export class DailyRewardService {
         return { canClaim: true }; // Allow claim if check fails
       }
       
+      // Check if response is JSON before parsing
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned non-JSON response');
+      }
+      
       const data = await response.json();
       const now = Date.now();
       const timeSinceLastClaim = now - (data.lastClaimTime || 0);
@@ -125,6 +137,13 @@ export class DailyRewardService {
       const msg = await res.text().catch(() => 'Failed to start spin');
       throw new Error(msg || 'Failed to start spin');
     }
+    
+    // Check if response is JSON before parsing
+    const contentType = res.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned non-JSON response');
+    }
+    
     return res.json();
   }
 
@@ -159,6 +178,12 @@ export class DailyRewardService {
       
       if (!response.ok) {
         return null;
+      }
+      
+      // Check if response is JSON before parsing
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned non-JSON response');
       }
       
       return await response.json();
