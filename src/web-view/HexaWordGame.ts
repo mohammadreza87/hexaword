@@ -1337,6 +1337,25 @@ export class HexaWordGame {
   }
 
   /**
+   * Public: Reload hint inventory from server storage and refresh UI badges.
+   * Useful after rewards (spinner) so in-game logic matches displayed counts.
+   */
+  public async syncHintInventory(): Promise<void> {
+    try {
+      const inv = await this.hintStorageService.loadHints();
+      this.hintService.loadInventory({
+        revealHints: inv.revealHints,
+        targetHints: inv.targetHints,
+        freeReveals: inv.freeReveals,
+        freeTargets: inv.freeTargets,
+      });
+      this.updateHintDisplay();
+    } catch (e) {
+      console.warn('syncHintInventory failed:', e);
+    }
+  }
+
+  /**
    * Public method to immediately persist progress to the server.
    * Ensures current in-memory state is captured before leaving the game.
    */

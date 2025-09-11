@@ -207,22 +207,20 @@ class App {
             this.gameUI.updateCoins(newData.balance);
           }
         } else if (prize.type === 'hints') {
-          // Force reload hint inventory
+          // Force reload hint inventory, then sync in-game HintService
           const hintService = HintStorageService.getInstance();
           hintService.clearCache();
           await hintService.loadHints();
-          
-          if (this.game) {
-            (this.game as any).updateHintDisplay();
+          if (this.game && (this.game as any).syncHintInventory) {
+            await (this.game as any).syncHintInventory();
           }
         } else if (prize.type === 'bundle') {
           // Bundle includes only hints (x2 reveal + x2 target) - no coins
           const hintService = HintStorageService.getInstance();
           hintService.clearCache();
           await hintService.loadHints();
-          
-          if (this.game) {
-            (this.game as any).updateHintDisplay();
+          if (this.game && (this.game as any).syncHintInventory) {
+            await (this.game as any).syncHintInventory();
           }
         }
         
@@ -460,10 +458,16 @@ class App {
           } else if (prize.type === 'hints') {
             const hintService = HintStorageService.getInstance();
             await hintService.loadHints();
+            if (this.game && (this.game as any).syncHintInventory) {
+              await (this.game as any).syncHintInventory();
+            }
           } else if (prize.type === 'bundle') {
             // Bundle only gives hints now (x2 reveal + x2 target)
             const hintService = HintStorageService.getInstance();
             await hintService.loadHints();
+            if (this.game && (this.game as any).syncHintInventory) {
+              await (this.game as any).syncHintInventory();
+            }
           }
         } else {
           console.log('Failed to claim reward - likely no tokens');
