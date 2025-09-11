@@ -18,6 +18,11 @@ import { requestLogger, errorHandler, Logger, asyncHandler } from "./middleware/
 import progressRouter from "./routes/progress";
 import shareRouter from "./routes/share";
 import schedulerRouter from "./routes/scheduler";
+import highscoresRouter from "./routes/highscores";
+import coinsRouter from "./routes/coins";
+import hintsRouter from "./routes/hints";
+import levelProgressRouter from "./routes/levelProgress";
+import dailyRewardRouter from "./routes/dailyReward";
 
 const app = express();
 const logger = Logger.getInstance();
@@ -146,6 +151,11 @@ app.use(colormindRouter);
 app.use(progressRouter);
 app.use(shareRouter);
 app.use(schedulerRouter);
+app.use(highscoresRouter);
+app.use(coinsRouter);
+app.use(hintsRouter);
+app.use(levelProgressRouter);
+app.use(dailyRewardRouter);
 
 // Error handler middleware (must be last)
 app.use(errorHandler);

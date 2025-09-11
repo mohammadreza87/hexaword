@@ -7,6 +7,14 @@ import { AnimationService } from './services/AnimationService';
 import { ColorPaletteService } from './services/ColorPaletteService';
 import { getPaletteForLevel } from './config/ColorPalettes';
 import { BoosterService, BoosterType } from '../shared/game/application/services/BoosterService';
+import { ScoreService, ScoreState } from '../shared/game/domain/services/ScoreService';
+import { HighScoreService } from '../client/services/HighScoreService';
+import { CoinService } from '../shared/game/domain/services/CoinService';
+import { CoinStorageService } from '../client/services/CoinStorageService';
+import { HintService } from '../shared/game/domain/services/HintService';
+import { HintStorageService } from '../client/services/HintStorageService';
+import { HintPurchaseUI } from '../client/services/HintPurchaseUI';
+import { LevelProgressService } from '../client/services/LevelProgressService';
 
 export interface GameConfig {
   containerId: string;
@@ -32,7 +40,16 @@ export class HexaWordGame {
   private animationService: AnimationService;
   private colorPaletteService: ColorPaletteService;
   private boosterService: BoosterService;
+  private scoreService: ScoreService;
+  private highScoreService: HighScoreService;
+  private coinService: CoinService;
+  private coinStorageService: CoinStorageService;
+  private hintService: HintService;
+  private hintStorageService: HintStorageService;
+  private hintPurchaseUI: HintPurchaseUI;
+  private levelProgressService: LevelProgressService;
   private currentLevel: number = 1;
+  private wordStartTime: number = Date.now();
   
   private board: Map<string, HexCell> = new Map();
   private placedWords: WordObject[] = [];
@@ -85,6 +102,14 @@ export class HexaWordGame {
       this.animationService = AnimationService.getInstance();
       this.colorPaletteService = ColorPaletteService.getInstance();
       this.boosterService = new BoosterService();
+      this.scoreService = new ScoreService();
+      this.highScoreService = HighScoreService.getInstance();
+      this.coinService = new CoinService();
+      this.coinStorageService = CoinStorageService.getInstance();
+      this.hintService = new HintService();
+      this.hintStorageService = HintStorageService.getInstance();
+      this.hintPurchaseUI = new HintPurchaseUI();
+      this.levelProgressService = LevelProgressService.getInstance();
       
       // Initialize color palette with level and theme
       this.currentLevel = this.config.level || 1;
@@ -106,10 +131,32 @@ export class HexaWordGame {
       this.isInitialized = true;
       this.levelCompleted = false;
       
-      // Initial render
+      // Load and initialize coins
+      const coinData = await this.coinStorageService.loadCoins();
+      this.coinService.initialize(coinData.balance);
+      this.coinService.startLevel();
+      
+      // Load and initialize hints
+      const hintInventory = await this.hintStorageService.loadHints();
+      this.hintService.loadInventory({
+        revealHints: hintInventory.revealHints,
+        targetHints: hintInventory.targetHints,
+        freeReveals: hintInventory.freeReveals,
+        freeTargets: hintInventory.freeTargets
+      });
+      this.updateHintDisplay();
+      
+      // Load saved progress for this level
+      await this.loadSavedProgress();
+      
+      // Initial render and display updates
       this.render();
-      // Play level intro
-      await this.playLevelIntro();
+      this.updateCoinDisplay();
+      // Play level intro (only if no saved progress)
+      const hasProgress = this.foundWords.size > 0 || this.solvedCells.size > 0;
+      if (!hasProgress) {
+        await this.playLevelIntro();
+      }
       this.config.onReady?.();
     } catch (error) {
       console.error('Failed to initialize game:', error);
@@ -712,6 +759,37 @@ export class HexaWordGame {
     // Found a new word!
     this.foundWords.add(word.word);
     
+    // Save progress
+    this.saveProgress();
+    
+    // Calculate score
+    const timeToFind = Date.now() - this.wordStartTime;
+    const hasIntersections = word.cells.some(cell => {
+      const key = `${cell.q},${cell.r}`;
+      const hexCell = this.board.get(key);
+      return hexCell && hexCell.wordIds && hexCell.wordIds.length > 1;
+    });
+    
+    const points = this.scoreService.scoreWord(
+      word.word,
+      hasIntersections,
+      timeToFind
+    );
+    
+    // Calculate and add coin reward for the word
+    const foundQuickly = timeToFind < 5000; // Found within 5 seconds
+    const coinReward = this.coinService.calculateWordReward(word.word, foundQuickly);
+    
+    // Sync coins with server (fire and forget)
+    this.coinStorageService.addCoins(coinReward).catch(console.error);
+    
+    // Update displays
+    this.updateScoreDisplay();
+    this.updateCoinDisplay();
+    
+    // Reset timer for next word
+    this.wordStartTime = Date.now();
+    
     // Call the onWordFound callback if provided
     if (this.config.onWordFound) {
       this.config.onWordFound(word.word);
@@ -837,12 +915,59 @@ export class HexaWordGame {
   /**
    * Checks if all words are found and triggers completion callback
    */
-  private checkLevelCompletion(): void {
+  private async checkLevelCompletion(): Promise<void> {
     if (this.levelCompleted) return;
     if (this.placedWords.length === 0) return;
     const allFound = this.foundWords.size >= this.placedWords.length;
     if (!allFound) return;
     this.levelCompleted = true;
+    
+    // Clear saved progress for this level since it's complete
+    this.levelProgressService.clearProgress(this.currentLevel);
+    
+    // Calculate and apply level completion bonus
+    const timeElapsed = Date.now() - this.scoreService.getState().timeStarted;
+    const bonus = this.scoreService.completeLevelBonus(
+      this.placedWords.length,
+      timeElapsed
+    );
+    
+    // Calculate and award coin rewards
+    const hintsUsed = this.scoreService.getState().hintsUsed;
+    const coinReward = this.coinService.calculateLevelReward(
+      this.currentLevel,
+      this.placedWords.length,
+      timeElapsed,
+      hintsUsed
+    );
+    
+    // Sync level reward with server
+    this.coinStorageService.addCoins(coinReward).catch(console.error);
+    
+    // Update displays
+    this.updateScoreDisplay();
+    this.updateCoinDisplay();
+    
+    // No more ugly popup notifications - scores are shown in the complete panel
+    
+    // Submit high score
+    const scoreData = this.scoreService.exportForLeaderboard();
+    const result = await this.highScoreService.submitScore({
+      score: scoreData.score,
+      level: this.currentLevel,
+      wordsFound: scoreData.wordsFound,
+      timeElapsed: scoreData.timeElapsed,
+      hintsUsed: scoreData.hintsUsed,
+      perfect: scoreData.perfect
+    });
+    
+    // Show new high score notification if applicable
+    if (result.newHighScore) {
+      setTimeout(() => {
+        this.showNewHighScoreNotification(result.score);
+      }, 1000); // Show after bonus notification
+    }
+    
     if (this.config.onLevelComplete) {
       try {
         this.config.onLevelComplete(this.currentLevel);
@@ -1097,11 +1222,21 @@ export class HexaWordGame {
    * Public API: Resets the game
    */
   public async reset(): Promise<void> {
+    // Clear saved progress for this level
+    await this.levelProgressService.clearProgress(this.currentLevel);
+    
     // Clear state
     this.foundWords.clear();
     this.solvedCells.clear();
     this.typedWord = '';
     this.levelCompleted = false;
+    
+    // Reset score for new level
+    this.scoreService.resetLevel();
+    this.coinService.startLevel();
+    this.wordStartTime = Date.now();
+    this.updateScoreDisplay();
+    this.updateCoinDisplay();
 
     // Reset input selections (but don't wipe letters — they will be repopulated)
     this.inputGrid.clearTypedWord();
@@ -1168,9 +1303,340 @@ export class HexaWordGame {
   }
   
   /**
+   * Updates the score display in the UI
+   */
+  private updateScoreDisplay(): void {
+    // Score is now only shown in the level complete panel
+    // This method is kept for compatibility but doesn't update UI anymore
+  }
+  
+  /**
+   * Updates the coin display in the UI
+   */
+  private updateCoinDisplay(): void {
+    const balance = this.coinService.getBalance();
+    
+    // Update the UI using GameUI component
+    if ((window as any).gameUI) {
+      const ui = (window as any).gameUI;
+      ui.updateCoins(balance);
+    }
+  }
+  
+  /**
+   * Updates the hint badge display in the UI
+   */
+  private updateHintDisplay(): void {
+    const inventory = this.hintService.getInventory();
+    
+    // Update the UI using GameUI component
+    if ((window as any).gameUI) {
+      const ui = (window as any).gameUI;
+      ui.updateHintBadges(inventory.revealHints, inventory.targetHints);
+    }
+  }
+  
+  /**
+   * Shows a temporary bonus notification (deprecated - now shown in complete panel)
+   */
+  private showBonusNotification(bonus: number): void {
+    const notification = document.createElement('div');
+    notification.className = 'bonus-notification';
+    notification.textContent = `+${bonus.toLocaleString()} Bonus!`;
+    notification.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: linear-gradient(135deg, #8B5CF6 0%, #A78BFA 100%);
+      color: white;
+      padding: 16px 32px;
+      border-radius: 12px;
+      font-size: 24px;
+      font-weight: bold;
+      z-index: 10000;
+      animation: bonusPop 1.5s ease-out forwards;
+      pointer-events: none;
+    `;
+    
+    // Add animation keyframes if not already present
+    if (!document.getElementById('bonus-animation-styles')) {
+      const style = document.createElement('style');
+      style.id = 'bonus-animation-styles';
+      style.textContent = `
+        @keyframes bonusPop {
+          0% {
+            transform: translate(-50%, -50%) scale(0);
+            opacity: 0;
+          }
+          50% {
+            transform: translate(-50%, -50%) scale(1.2);
+            opacity: 1;
+          }
+          100% {
+            transform: translate(-50%, -60%) scale(1);
+            opacity: 0;
+          }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    
+    document.body.appendChild(notification);
+    
+    // Remove after animation
+    setTimeout(() => {
+      notification.remove();
+    }, 1500);
+  }
+  
+  /**
+   * Shows level complete notification (deprecated - now shown in complete panel)
+   */
+  private showLevelCompleteNotification(score: number, coins: number): void {
+    const notification = document.createElement('div');
+    notification.className = 'level-complete-notification';
+    notification.innerHTML = `
+      <div style="font-size: 24px; margin-bottom: 12px; font-weight: bold;">⭐ Level Complete! ⭐</div>
+      <div style="display: flex; flex-direction: column; gap: 8px; align-items: center;">
+        <div style="font-size: 18px;">
+          Score: <span style="font-weight: bold; color: #8B5CF6;">${score.toLocaleString()}</span>
+        </div>
+        <div style="font-size: 20px; font-weight: bold;">
+          <span style="font-size: 18px;">🪙</span> +${coins}
+        </div>
+      </div>
+    `;
+    notification.style.cssText = `
+      position: fixed;
+      top: 45%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: linear-gradient(135deg, #1a1f2b 0%, #2a3142 100%);
+      color: white;
+      padding: 24px 48px;
+      border-radius: 16px;
+      text-align: center;
+      z-index: 10000;
+      animation: levelCompletePop 2.5s ease-out forwards;
+      pointer-events: none;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+      border: 2px solid rgba(139, 92, 246, 0.3);
+    `;
+    
+    // Add animation keyframes if not already present
+    if (!document.getElementById('level-complete-animation-styles')) {
+      const style = document.createElement('style');
+      style.id = 'level-complete-animation-styles';
+      style.textContent = `
+        @keyframes levelCompletePop {
+          0% {
+            transform: translate(-50%, -50%) scale(0);
+            opacity: 0;
+          }
+          40% {
+            transform: translate(-50%, -50%) scale(1.1);
+            opacity: 1;
+          }
+          60% {
+            transform: translate(-50%, -50%) scale(0.95);
+          }
+          80% {
+            transform: translate(-50%, -50%) scale(1);
+            opacity: 1;
+          }
+          100% {
+            transform: translate(-50%, -50%) scale(1);
+            opacity: 0;
+          }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    
+    document.body.appendChild(notification);
+    
+    // Remove after animation
+    setTimeout(() => {
+      notification.remove();
+    }, 2500);
+  }
+  
+  /**
+   * Shows insufficient funds notification
+   */
+  private showInsufficientFundsNotification(hintType: string, cost: number): void {
+    const notification = document.createElement('div');
+    notification.className = 'insufficient-funds-notification';
+    notification.innerHTML = `
+      <div style="font-size: 18px; margin-bottom: 4px;">Not enough coins!</div>
+      <div style="font-size: 14px;">Need ${cost} coins for ${hintType}</div>
+    `;
+    notification.style.cssText = `
+      position: fixed;
+      bottom: 100px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(220, 38, 38, 0.9);
+      color: white;
+      padding: 12px 24px;
+      border-radius: 8px;
+      text-align: center;
+      z-index: 10000;
+      animation: slideInUp 0.3s ease-out;
+      pointer-events: none;
+    `;
+    
+    // Add animation keyframes if not already present
+    if (!document.getElementById('insufficient-funds-styles')) {
+      const style = document.createElement('style');
+      style.id = 'insufficient-funds-styles';
+      style.textContent = `
+        @keyframes slideInUp {
+          from {
+            transform: translateX(-50%) translateY(20px);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+          }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    
+    document.body.appendChild(notification);
+    
+    // Remove after 2 seconds
+    setTimeout(() => {
+      notification.remove();
+    }, 2000);
+  }
+  
+  /**
+   * Shows a new high score notification
+   */
+  private showNewHighScoreNotification(score: number): void {
+    const notification = document.createElement('div');
+    notification.className = 'highscore-notification';
+    notification.innerHTML = `
+      <div style="font-size: 28px; margin-bottom: 8px;">🏆 NEW HIGH SCORE! 🏆</div>
+      <div style="font-size: 36px; font-weight: bold;">${score.toLocaleString()}</div>
+    `;
+    notification.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+      color: #1a1f2b;
+      padding: 24px 48px;
+      border-radius: 16px;
+      text-align: center;
+      z-index: 10001;
+      animation: highScorePop 2.5s ease-out forwards;
+      pointer-events: none;
+      box-shadow: 0 8px 32px rgba(255, 215, 0, 0.4);
+    `;
+    
+    // Add animation keyframes if not already present
+    if (!document.getElementById('highscore-animation-styles')) {
+      const style = document.createElement('style');
+      style.id = 'highscore-animation-styles';
+      style.textContent = `
+        @keyframes highScorePop {
+          0% {
+            transform: translate(-50%, -50%) scale(0) rotate(-180deg);
+            opacity: 0;
+          }
+          50% {
+            transform: translate(-50%, -50%) scale(1.1) rotate(5deg);
+            opacity: 1;
+          }
+          60% {
+            transform: translate(-50%, -50%) scale(0.95) rotate(-2deg);
+          }
+          70% {
+            transform: translate(-50%, -50%) scale(1.05) rotate(1deg);
+          }
+          80% {
+            transform: translate(-50%, -50%) scale(1) rotate(0deg);
+          }
+          100% {
+            transform: translate(-50%, -50%) scale(1) rotate(0deg);
+            opacity: 0;
+          }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    
+    document.body.appendChild(notification);
+    
+    // Remove after animation
+    setTimeout(() => {
+      notification.remove();
+    }, 2500);
+  }
+  
+  /**
    * Reveals a random letter from an unfound word
    */
-  public revealRandomLetter(): boolean {
+  public async revealRandomLetter(): Promise<boolean> {
+    // Check if user has hints
+    const inventory = this.hintService.getInventory();
+    const coinBalance = this.coinService.getBalance();
+    
+    // If no hints, show purchase UI
+    if (inventory.revealHints === 0) {
+      this.hintPurchaseUI.show({
+        type: 'reveal',
+        icon: '💡',
+        name: 'Reveal Letter Hint',
+        description: 'Reveals a random letter from an unfound word, helping you progress when stuck.',
+        cost: 50,
+        currentBalance: coinBalance,
+        onPurchase: async (quantity) => {
+          const totalCost = quantity * 50;
+          if (coinBalance < totalCost) return false;
+          
+          // Deduct coins and add hints
+          this.coinService.addCoins(-totalCost);
+          await this.coinStorageService.spendCoins(totalCost);
+          this.hintService.addHints(quantity, 0);
+          await this.hintStorageService.addHints('reveal', quantity);
+          
+          // Update displays
+          this.updateCoinDisplay();
+          this.updateHintDisplay();
+          
+          return true;
+        }
+      });
+      return false;
+    }
+    
+    // Use hint normally
+    const hintCheck = this.hintService.useRevealHint(coinBalance);
+    
+    if (!hintCheck.success) {
+      // Should not happen since we checked above
+      return false;
+    }
+    
+    // Deduct coins if needed
+    if (hintCheck.cost > 0) {
+      this.coinService.addCoins(-hintCheck.cost);
+      await this.coinStorageService.spendCoins(hintCheck.cost);
+      this.updateCoinDisplay();
+    } else {
+      // Using free hint, sync with server
+      await this.hintStorageService.useHint('reveal');
+    }
+    
+    // Update hint display
+    this.updateHintDisplay();
     // Find all unsolved cells from unfound words
     const unsolvedCells: Array<{cell: HexCell, word: WordObject}> = [];
     
@@ -1202,6 +1668,10 @@ export class HexaWordGame {
     // Mark cell as solved
     this.solvedCells.add(key);
     
+    // Apply hint penalty to score
+    this.scoreService.useHint('letter');
+    this.updateScoreDisplay();
+    
     // Trigger reveal animation
     this.animationService.triggerRevealAnimation(key);
     
@@ -1210,6 +1680,9 @@ export class HexaWordGame {
     
     // Check if this completes any word
     this.checkForCompletedWords();
+    
+    // Save progress
+    this.saveProgress();
     
     return true;
   }
@@ -1228,6 +1701,47 @@ export class HexaWordGame {
       this.removeTargetHintOverlay();
       this.render();
     } else {
+      // Check if user has hints
+      const inventory = this.hintService.getInventory();
+      const coinBalance = this.coinService.getBalance();
+      
+      // If no hints, show purchase UI
+      if (inventory.targetHints === 0) {
+        this.hintPurchaseUI.show({
+          type: 'target',
+          icon: '🎯',
+          name: 'Target Hint',
+          description: 'Tap any cell to reveal its letter. Perfect for uncovering specific letters you need.',
+          cost: 100,
+          currentBalance: coinBalance,
+          onPurchase: async (quantity) => {
+            const totalCost = quantity * 100;
+            if (coinBalance < totalCost) return false;
+            
+            // Deduct coins and add hints
+            this.coinService.addCoins(-totalCost);
+            await this.coinStorageService.spendCoins(totalCost);
+            this.hintService.addHints(0, quantity);
+            await this.hintStorageService.addHints('target', quantity);
+            
+            // Update displays
+            this.updateCoinDisplay();
+            this.updateHintDisplay();
+            
+            return true;
+          }
+        });
+        return;
+      }
+      
+      // Check if user can use target hint
+      const hintCheck = this.hintService.canUseTargetHint(coinBalance);
+      
+      if (!hintCheck.canUse) {
+        // Not enough coins (shouldn't happen since we have hints)
+        return;
+      }
+      
       // Enter target hint mode
       this.isTargetHintMode = true;
       this.createTargetHintOverlay();
@@ -1393,8 +1907,20 @@ export class HexaWordGame {
   /**
    * Handles cell click in target hint mode
    */
-  private handleTargetHintClick(x: number, y: number): void {
+  private async handleTargetHintClick(x: number, y: number): Promise<void> {
     if (!this.isTargetHintMode) return;
+    
+    // Use the hint when cell is clicked
+    const coinBalance = this.coinService.getBalance();
+    const hintResult = this.hintService.useTargetHint(coinBalance);
+    
+    if (!hintResult.success) {
+      // Should not happen as we checked before entering mode
+      this.isTargetHintMode = false;
+      this.removeTargetHintOverlay();
+      this.render();
+      return;
+    }
     
     // Get canvas dimensions
     const rect = this.canvas.getBoundingClientRect();
@@ -1448,8 +1974,25 @@ export class HexaWordGame {
       // Reveal the cell
       this.solvedCells.add(key);
       
+      // Apply hint penalty for target hint
+      this.scoreService.useHint('position');
+      this.updateScoreDisplay();
+      
       // Trigger reveal animation
       this.animationService.triggerRevealAnimation(key);
+      
+      // Deduct coins if needed
+      if (hintResult.cost > 0) {
+        this.coinService.addCoins(-hintResult.cost);
+        await this.coinStorageService.spendCoins(hintResult.cost);
+        this.updateCoinDisplay();
+      } else {
+        // Using free hint, sync with server
+        await this.hintStorageService.useHint('target');
+      }
+      
+      // Update hint display
+      this.updateHintDisplay();
       
       // Exit target hint mode
       this.isTargetHintMode = false;
@@ -1460,6 +2003,9 @@ export class HexaWordGame {
       
       // Check if this completes any word
       this.checkForCompletedWords();
+      
+      // Save progress
+      this.saveProgress();
     }
   }
   
@@ -1477,9 +2023,78 @@ export class HexaWordGame {
       
       if (isComplete) {
         this.foundWords.add(word.word);
+        
+        // Remove letters from input grid that are no longer needed
+        const rect = this.canvas.getBoundingClientRect();
+        const layout = this.calculateLayout(rect.width, rect.height);
+        
+        try {
+          const remainingWords = this.placedWords
+            .filter(w => !this.foundWords.has(w.word))
+            .map(w => w.word);
+          const remainingLetters = new Set<string>();
+          remainingWords.forEach(w => w.split('').forEach(ch => remainingLetters.add(ch.toUpperCase())));
+          const retireSet = new Set<string>();
+          word.word.split('').forEach(ch => {
+            const up = ch.toUpperCase();
+            if (!remainingLetters.has(up)) retireSet.add(up);
+          });
+          if (retireSet.size > 0) {
+            this.inputGrid.removeLettersBySet(
+              retireSet,
+              { centerX: layout.inputCenterX, centerY: layout.inputCenterY, size: layout.inputHexSize },
+              () => {
+                (window as any).__requestRender?.();
+              }
+            );
+          }
+        } catch (e) {
+          console.warn('Failed to remove retired letters:', e);
+        }
+        
+        // Calculate score (no time bonus since it was found through hints)
+        const hasIntersections = word.cells.some(cell => {
+          const key = `${cell.q},${cell.r}`;
+          const hexCell = this.board.get(key);
+          return hexCell && hexCell.wordIds && hexCell.wordIds.length > 1;
+        });
+        
+        // Score the word with a large time penalty (as if it took a long time)
+        const points = this.scoreService.scoreWord(
+          word.word,
+          hasIntersections,
+          60000 // 60 seconds - no time bonus for hint-revealed words
+        );
+        
+        // Calculate and add coin reward for the word
+        const foundQuickly = false; // Not found quickly since it was through hints
+        const coinReward = this.coinService.calculateWordReward(word.word, foundQuickly);
+        
+        // Sync coins with server (fire and forget)
+        this.coinStorageService.addCoins(coinReward).catch(console.error);
+        
+        // Update displays
+        this.updateCoinDisplay();
+        this.updateScoreDisplay();
+        
+        // Save progress
+        this.saveProgress();
+        
+        // Call the onWordFound callback if provided
+        if (this.config.onWordFound) {
+          this.config.onWordFound(word.word);
+        }
+        
         this.checkWinCondition();
       }
     });
+  }
+
+  /**
+   * Check if the player has won and trigger level completion
+   */
+  private checkWinCondition(): void {
+    this.checkLevelCompletion();
   }
   
   /**
@@ -1574,5 +2189,105 @@ export class HexaWordGame {
       console.warn('Level intro animation failed:', e);
       this.introActive = false;
     }
+  }
+  
+  /**
+   * Loads saved progress for the current level
+   */
+  private async loadSavedProgress(): Promise<void> {
+    try {
+      const progress = await this.levelProgressService.loadProgress(this.currentLevel);
+      
+      if (!progress) {
+        return; // No saved progress
+      }
+      
+      // Restore found words
+      progress.foundWords.forEach(word => {
+        this.foundWords.add(word);
+        // Mark all cells of this word as solved
+        const wordObj = this.placedWords.find(w => w.word === word);
+        if (wordObj) {
+          wordObj.cells.forEach(cell => {
+            const key = `${cell.q},${cell.r}`;
+            this.solvedCells.add(key);
+          });
+        }
+      });
+      
+      // Restore revealed cells
+      progress.revealedCells.forEach(cellKey => {
+        this.solvedCells.add(cellKey);
+      });
+      
+      // Restore selected cells
+      this.selectedCells = [];
+      progress.selectedCells.forEach(cellKey => {
+        const [q, r] = cellKey.split(',').map(Number);
+        const cell = this.board.get(cellKey);
+        if (cell) {
+          this.selectedCells.push(cell);
+        }
+      });
+      
+      // Restore score state
+      if (progress.scoreState) {
+        this.scoreService.loadState({
+          levelScore: progress.scoreState.levelScore,
+          currentScore: this.scoreService.getState().currentScore,
+          hintsUsed: progress.scoreState.hintsUsed,
+          firstWordFound: progress.foundWords.length > 0,
+          timeStarted: progress.scoreState.timeStarted
+        });
+      }
+      
+      console.log(`Loaded progress: ${progress.foundWords.length} words, ${progress.revealedCells.length} revealed cells`);
+    } catch (error) {
+      console.error('Failed to load saved progress:', error);
+    }
+  }
+  
+  /**
+   * Saves current progress
+   */
+  private saveProgress(): void {
+    // Ensure selectedCells is initialized
+    if (!this.selectedCells) {
+      this.selectedCells = [];
+    }
+    
+    // Get revealed cells that are not part of found words
+    const revealedCells: string[] = [];
+    this.solvedCells.forEach(cellKey => {
+      // Check if this cell is part of a found word
+      let isPartOfFoundWord = false;
+      this.foundWords.forEach(word => {
+        const wordObj = this.placedWords.find(w => w.word === word);
+        if (wordObj) {
+          const cellInWord = wordObj.cells.some(cell => `${cell.q},${cell.r}` === cellKey);
+          if (cellInWord) {
+            isPartOfFoundWord = true;
+          }
+        }
+      });
+      
+      if (!isPartOfFoundWord) {
+        revealedCells.push(cellKey);
+      }
+    });
+    
+    const scoreState = this.scoreService.getState();
+    
+    this.levelProgressService.updateProgress({
+      level: this.currentLevel,
+      foundWords: Array.from(this.foundWords),
+      revealedCells,
+      selectedCells: this.selectedCells.map(cell => `${cell.q},${cell.r}`),
+      scoreState: {
+        levelScore: scoreState.levelScore,
+        hintsUsed: scoreState.hintsUsed,
+        timeStarted: scoreState.timeStarted || Date.now()
+      }
+    });
   }
 }

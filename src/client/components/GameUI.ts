@@ -6,6 +6,7 @@ export class GameUI {
   private container: HTMLElement;
   private levelEl: HTMLElement;
   private wordCountEl: HTMLElement;
+  private coinEl: HTMLElement;
   private settingsBtn: HTMLButtonElement;
   private menuPanel: HTMLElement;
   private shuffleBtn: HTMLButtonElement;
@@ -17,6 +18,7 @@ export class GameUI {
     this.container = this.createUIContainer();
     this.levelEl = this.createLevelIndicator();
     this.wordCountEl = this.createWordCounter();
+    this.coinEl = this.createCoinDisplay();
     this.settingsBtn = this.createSettingsButton();
     this.menuPanel = this.createMenuPanel();
     this.shuffleBtn = this.createShuffleButton();
@@ -47,10 +49,19 @@ export class GameUI {
   private createWordCounter(): HTMLElement {
     const wordCountEl = document.createElement('div');
     wordCountEl.id = 'hw-word-count';
-    wordCountEl.className = 'absolute top-1 left-1/2 -translate-x-1/2 h-6 px-3 rounded-lg text-hw-text-primary backdrop-blur-md border transition-all duration-base text-xs font-bold flex items-center justify-center pointer-events-auto';
-    wordCountEl.style.cssText = 'background: rgba(26, 31, 43, 0.6); border-color: rgba(255, 255, 255, 0.08);';
+    wordCountEl.className = 'absolute top-1 right-1 h-6 px-3 rounded-lg text-hw-text-primary backdrop-blur-md border transition-all duration-base text-xs font-bold flex items-center justify-center pointer-events-auto';
+    wordCountEl.style.cssText = 'background: rgba(26, 31, 43, 0.6); border-color: rgba(255, 255, 255, 0.08); margin-right: 35px;';
     wordCountEl.textContent = '0 / 0';
     return wordCountEl;
+  }
+  
+  private createCoinDisplay(): HTMLElement {
+    const coinEl = document.createElement('div');
+    coinEl.id = 'hw-coins';
+    coinEl.className = 'absolute top-1 left-1/2 -translate-x-1/2 h-6 px-2 rounded-lg text-hw-text-primary backdrop-blur-md border transition-all duration-base text-xs font-bold flex items-center gap-1 justify-center pointer-events-auto';
+    coinEl.style.cssText = 'background: rgba(26, 31, 43, 0.6); border-color: rgba(255, 255, 255, 0.08);';
+    coinEl.innerHTML = '<span style="font-size: 14px;">🪙</span><span>0</span>';
+    return coinEl;
   }
   
   private createSettingsButton(): HTMLButtonElement {
@@ -81,6 +92,13 @@ export class GameUI {
     howToBtn.textContent = '📖 How to Play';
     howToBtn.className = 'block w-full text-left px-3 py-2 text-sm text-hw-text-primary hover:bg-hw-surface-secondary rounded-lg transition-colors mb-2';
     panel.appendChild(howToBtn);
+    
+    // Main Menu button
+    const mainMenuBtn = document.createElement('button');
+    mainMenuBtn.id = 'main-menu';
+    mainMenuBtn.textContent = '🏠 Main Menu';
+    mainMenuBtn.className = 'block w-full text-left px-3 py-2 text-sm text-hw-text-primary hover:bg-hw-surface-secondary rounded-lg transition-colors mb-2';
+    panel.appendChild(mainMenuBtn);
     
     // Divider
     const divider = document.createElement('div');
@@ -115,12 +133,12 @@ export class GameUI {
   private createShuffleButton(): HTMLButtonElement {
     const btn = document.createElement('button');
     btn.id = 'hw-shuffle-btn';
-    btn.className = 'absolute left-1 w-10 h-10 rounded-full text-hw-text-primary backdrop-blur-md border transition-all duration-base flex items-center justify-center pointer-events-auto';
-    btn.style.cssText = 'bottom: 35%; background: rgba(42, 52, 70, 0.8); border-color: rgba(59, 71, 96, 0.3);';
+    btn.className = 'fixed left-2 w-10 h-10 rounded-full text-hw-text-primary backdrop-blur-md border transition-all duration-base flex items-center justify-center pointer-events-auto z-50';
+    btn.style.cssText = 'bottom: 120px; background: rgba(42, 52, 70, 0.8); border-color: rgba(59, 71, 96, 0.3);';
     
     // Just the shuffle emoji
     btn.textContent = '🔀';
-    btn.style.fontSize = '18px';
+    btn.style.fontSize = '16px';
     
     return btn;
   }
@@ -128,12 +146,27 @@ export class GameUI {
   private createRevealButton(): HTMLButtonElement {
     const btn = document.createElement('button');
     btn.id = 'hw-reveal-btn';
-    btn.className = 'absolute left-1 w-10 h-10 rounded-full text-hw-text-primary backdrop-blur-md border transition-all duration-base flex items-center justify-center pointer-events-auto';
-    btn.style.cssText = 'bottom: calc(35% - 50px); background: rgba(42, 52, 70, 0.8); border-color: rgba(59, 71, 96, 0.3);';
+    btn.className = 'fixed left-2 w-10 h-10 rounded-full text-hw-text-primary backdrop-blur-md border transition-all duration-base flex items-center justify-center pointer-events-auto z-50';
+    btn.style.cssText = 'bottom: 180px; background: rgba(42, 52, 70, 0.8); border-color: rgba(59, 71, 96, 0.3); position: fixed;';
     
-    // Lightbulb emoji for hint/reveal
-    btn.textContent = '💡';
-    btn.style.fontSize = '18px';
+    // Container for icon and badge
+    btn.innerHTML = `
+      <span style="font-size: 16px;">💡</span>
+      <span id="hw-reveal-badge" class="hint-badge" style="
+        position: absolute;
+        top: -4px;
+        right: -4px;
+        background: rgba(139, 92, 246, 0.9);
+        color: white;
+        font-size: 10px;
+        font-weight: bold;
+        padding: 2px 4px;
+        border-radius: 8px;
+        min-width: 16px;
+        text-align: center;
+        display: none;
+      ">0</span>
+    `;
     
     return btn;
   }
@@ -141,12 +174,27 @@ export class GameUI {
   private createTargetButton(): HTMLButtonElement {
     const btn = document.createElement('button');
     btn.id = 'hw-target-btn';
-    btn.className = 'absolute right-1 w-10 h-10 rounded-full text-hw-text-primary backdrop-blur-md border transition-all duration-base flex items-center justify-center pointer-events-auto';
-    btn.style.cssText = 'bottom: calc(35% - 50px); background: rgba(42, 52, 70, 0.8); border-color: rgba(59, 71, 96, 0.3);';
+    btn.className = 'fixed right-2 w-10 h-10 rounded-full text-hw-text-primary backdrop-blur-md border transition-all duration-base flex items-center justify-center pointer-events-auto z-50';
+    btn.style.cssText = 'bottom: 180px; background: rgba(42, 52, 70, 0.8); border-color: rgba(59, 71, 96, 0.3); position: fixed;';
     
-    // Target emoji for target hint
-    btn.textContent = '🎯';
-    btn.style.fontSize = '18px';
+    // Container for icon and badge
+    btn.innerHTML = `
+      <span style="font-size: 16px;">🎯</span>
+      <span id="hw-target-badge" class="hint-badge" style="
+        position: absolute;
+        top: -4px;
+        right: -4px;
+        background: rgba(139, 92, 246, 0.9);
+        color: white;
+        font-size: 10px;
+        font-weight: bold;
+        padding: 2px 4px;
+        border-radius: 8px;
+        min-width: 16px;
+        text-align: center;
+        display: none;
+      ">0</span>
+    `;
     
     return btn;
   }
@@ -154,12 +202,12 @@ export class GameUI {
   private createShareButton(): HTMLButtonElement {
     const btn = document.createElement('button');
     btn.id = 'hw-share-btn';
-    btn.className = 'absolute right-1 w-10 h-10 rounded-full text-hw-text-primary backdrop-blur-md border transition-all duration-base flex items-center justify-center pointer-events-auto';
-    btn.style.cssText = 'bottom: 35%; background: rgba(42, 52, 70, 0.8); border-color: rgba(59, 71, 96, 0.3);';
+    btn.className = 'fixed right-2 w-10 h-10 rounded-full text-hw-text-primary backdrop-blur-md border transition-all duration-base flex items-center justify-center pointer-events-auto z-50';
+    btn.style.cssText = 'bottom: 120px; background: rgba(42, 52, 70, 0.8); border-color: rgba(59, 71, 96, 0.3);';
     
     // Share emoji
     btn.textContent = '📤';
-    btn.style.fontSize = '18px';
+    btn.style.fontSize = '16px';
     
     return btn;
   }
@@ -236,6 +284,7 @@ export class GameUI {
   private appendElements(): void {
     this.container.appendChild(this.levelEl);
     this.container.appendChild(this.wordCountEl);
+    this.container.appendChild(this.coinEl);
     this.container.appendChild(this.settingsBtn);
     this.container.appendChild(this.menuPanel);
     this.container.appendChild(this.shuffleBtn);
@@ -305,6 +354,84 @@ export class GameUI {
       callback();
       this.menuPanel.classList.add('hidden');
     });
+  }
+  
+  public onMainMenu(callback: () => void): void {
+    const mainMenuBtn = this.menuPanel.querySelector('#main-menu');
+    mainMenuBtn?.addEventListener('click', () => {
+      callback();
+      this.menuPanel.classList.add('hidden');
+    });
+  }
+  
+  public updateCoins(coins: number): void {
+    const coinSpan = this.coinEl.querySelector('span:last-child');
+    if (coinSpan) {
+      // Format large numbers
+      if (coins >= 1000000) {
+        coinSpan.textContent = `${(coins / 1000000).toFixed(1)}M`;
+      } else if (coins >= 1000) {
+        coinSpan.textContent = `${(coins / 1000).toFixed(1)}K`;
+      } else {
+        coinSpan.textContent = coins.toString();
+      }
+    }
+  }
+  
+  /**
+   * Refresh all UI elements with latest data
+   */
+  public async refreshUI(): Promise<void> {
+    // Import services dynamically to avoid circular dependencies
+    const { CoinStorageService } = await import('../services/CoinStorageService');
+    const { HintStorageService } = await import('../services/HintStorageService');
+    
+    // Reload coins
+    const coinService = CoinStorageService.getInstance();
+    const coinData = await coinService.loadCoins();
+    this.updateCoins(coinData.balance);
+    
+    // Update hint buttons if needed
+    const hintService = HintStorageService.getInstance();
+    const hints = await hintService.loadHints();
+    
+    // Update hint button badges
+    const revealBadge = this.revealBtn.querySelector('.hint-badge');
+    const targetBadge = this.targetBtn.querySelector('.hint-badge');
+    
+    if (revealBadge) {
+      revealBadge.textContent = hints.revealHints.toString();
+    }
+    if (targetBadge) {
+      targetBadge.textContent = hints.targetHints.toString();
+    }
+  }
+  
+  public updateHintBadges(revealCount: number, targetCount: number): void {
+    const revealBadge = document.getElementById('hw-reveal-badge');
+    const targetBadge = document.getElementById('hw-target-badge');
+    
+    if (revealBadge) {
+      if (revealCount > 0) {
+        revealBadge.textContent = revealCount.toString();
+        revealBadge.style.background = 'rgba(139, 92, 246, 0.9)';
+      } else {
+        revealBadge.textContent = '+';
+        revealBadge.style.background = 'rgba(59, 71, 96, 0.8)';
+      }
+      revealBadge.style.display = 'block';
+    }
+    
+    if (targetBadge) {
+      if (targetCount > 0) {
+        targetBadge.textContent = targetCount.toString();
+        targetBadge.style.background = 'rgba(139, 92, 246, 0.9)';
+      } else {
+        targetBadge.textContent = '+';
+        targetBadge.style.background = 'rgba(59, 71, 96, 0.8)';
+      }
+      targetBadge.style.display = 'block';
+    }
   }
   
   public destroy(): void {

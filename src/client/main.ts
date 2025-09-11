@@ -11,6 +11,10 @@ import { blurTransition } from './services/BlurTransitionService';
 import { loadLocalProgress, saveLocalProgress, fetchRemoteProgress, saveRemoteProgress, mergeProgress, Progress as HWProgress } from './services/progress';
 import { GameUI } from './components/GameUI';
 import { ShareService } from './services/ShareService';
+import { WheelOfFortune } from './components/WheelOfFortune';
+import { DailyRewardService } from './services/DailyRewardService';
+import { CoinStorageService } from './services/CoinStorageService';
+import { HintStorageService } from './services/HintStorageService';
 
 console.log('HexaWord Crossword Generator v4.0 - Modular Architecture');
 
@@ -83,6 +87,80 @@ class App {
       }
     } catch {}
     this.showMainMenu();
+    
+    // Check for daily wheel on second launch
+    await this.checkDailyWheel();
+  }
+  
+  /**
+   * Checks and shows daily wheel if applicable
+   */
+  private async checkDailyWheel(): Promise<void> {
+    const dailyService = DailyRewardService.getInstance();
+    
+    // Check if user has spin tokens available
+    const tokens = await dailyService.getSpinTokens();
+    if (tokens <= 0) {
+      return; // No tokens, don't show wheel
+    }
+    
+    // Check if it's the second launch of the day
+    if (!dailyService.isSecondLaunch()) {
+      return;
+    }
+    
+    // Show wheel with token count
+    const wheel = new WheelOfFortune();
+    wheel.setTokens(tokens);
+    wheel.onComplete(async (prize) => {
+      // Claim the reward
+      const success = await dailyService.claimReward(prize);
+      
+      if (success) {
+        // Add a small delay to ensure server has finished updating
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Update UI based on prize type
+        if (prize.type === 'coins' || prize.type === 'jackpot') {
+          // Force reload coin balance (clear cache first)
+          const coinService = CoinStorageService.getInstance();
+          coinService.clearCache();
+          const newData = await coinService.loadCoins();
+          
+          if ((window as any).gameUI) {
+            (window as any).gameUI.updateCoins(newData.balance);
+          }
+          
+          // Also update the game UI if available
+          if (this.gameUI) {
+            this.gameUI.updateCoins(newData.balance);
+          }
+        } else if (prize.type === 'hints') {
+          // Force reload hint inventory
+          const hintService = HintStorageService.getInstance();
+          hintService.clearCache();
+          await hintService.loadHints();
+          
+          if (this.game) {
+            (this.game as any).updateHintDisplay();
+          }
+        } else if (prize.type === 'bundle') {
+          // Bundle includes only hints (x2 reveal + x2 target) - no coins
+          const hintService = HintStorageService.getInstance();
+          hintService.clearCache();
+          await hintService.loadHints();
+          
+          if (this.game) {
+            (this.game as any).updateHintDisplay();
+          }
+        }
+        
+        // Show success message
+        this.showToast(`🎉 ${prize.name} added to your account!`, 'success');
+      }
+    });
+    
+    await wheel.show(canClaim, lastClaimTime);
   }
 
   // Initialize the game UI overlay
@@ -138,10 +216,24 @@ class App {
       this.showHowTo();
     });
     
+    this.gameUI.onMainMenu(async () => {
+      // Save progress before going to main menu
+      if (this.game) {
+        await (this.game as any).levelProgressService?.forceSave();
+      }
+      this.showMainMenu();
+    });
+    
     // Update initial values
     if (this.game) {
       this.gameUI.updateLevel(this.currentLevel);
       // The word count will be updated from the game's render loop
+      
+      // Update hint badges with actual inventory
+      (this.game as any).updateHintDisplay();
+      
+      // Update coin display with actual balance
+      (this.game as any).updateCoinDisplay();
     }
     
     // Expose animation service for reduced motion toggle
@@ -187,6 +279,7 @@ class App {
         <button disabled class="btn-glass opacity-50 cursor-not-allowed py-3">Daily Challenge (soon)</button>
         <button disabled class="btn-glass opacity-50 cursor-not-allowed py-3">Make Your Level (soon)</button>
         <button disabled class="btn-glass opacity-50 cursor-not-allowed py-3">Leaderboard (soon)</button>
+        <button id="hw-test-wheel" class="btn-glass py-3">🎰 Test Wheel (Dev)</button>
       </div>
       <div class="mt-4 pt-4 border-t border-hw-surface-tertiary/20">
         <div class="text-base text-hw-text-secondary mb-3">Settings</div>
@@ -241,6 +334,38 @@ class App {
         duration: 300
       });
       this.showHowTo();
+    };
+    
+    // Test wheel button handler
+    const testWheelBtn = el.querySelector('#hw-test-wheel') as HTMLButtonElement;
+    testWheelBtn.onclick = async () => {
+      const wheel = new WheelOfFortune();
+      wheel.setTokens(999); // Show unlimited tokens for testing
+      wheel.onComplete(async (prize) => {
+        // Grant a test token right before claiming (so server has token to consume)
+        await fetch('/api/daily-reward/grant-test-token', { method: 'POST' });
+        
+        const dailyService = DailyRewardService.getInstance();
+        const success = await dailyService.claimReward(prize);
+        
+        if (success) {
+          // Update UI based on prize
+          if (prize.type === 'coins' || prize.type === 'jackpot') {
+            const coinService = CoinStorageService.getInstance();
+            await coinService.loadCoins();
+          } else if (prize.type === 'hints') {
+            const hintService = HintStorageService.getInstance();
+            await hintService.loadHints();
+          } else if (prize.type === 'bundle') {
+            // Bundle only gives hints now (x2 reveal + x2 target)
+            const hintService = HintStorageService.getInstance();
+            await hintService.loadHints();
+          }
+        } else {
+          console.log('Failed to claim reward - likely no tokens');
+        }
+      });
+      await wheel.show(true);
     };
   }
   
@@ -346,13 +471,34 @@ class App {
     panel.className = 'modal-content panel-hex max-w-xl';
     const clue = this.game?.getClue() || '';
     const words = (this.game?.getPlacedWords() || []).map(w => w.word);
+    
+    // Get score and coin data from the game
+    const scoreData = (this.game as any)?.scoreService?.getState() || { levelScore: 0, currentScore: 0 };
+    const coinService = (this.game as any)?.coinService;
+    const coinState = coinService?.getState() || { levelEarnings: 0 };
+    // Calculate total coins earned this level (base + word rewards)
+    const hintsUsed = scoreData.hintsUsed || 0;
+    const coinReward = coinService ? 
+      coinService.calculateLevelReward(level, words.length, Date.now() - (scoreData.timeStarted || Date.now()), hintsUsed) : 
+      coinState.levelEarnings;
+    
     panel.innerHTML = `
       <div class="text-center mb-3">
         <div class="text-2xl tracking-wide text-hw-text-primary">Level ${level} Complete!</div>
         <div class="text-lg text-clue-gradient mt-2 uppercase">${clue}</div>
       </div>
-      <div class="max-h-56 overflow-auto p-3 rounded-lg border border-hw-surface-tertiary/30 bg-white/5 text-center font-sans text-sm leading-6">
+      <div class="max-h-40 overflow-auto p-3 rounded-lg border border-hw-surface-tertiary/30 bg-white/5 text-center font-sans text-sm leading-6">
         ${words.join(' • ')}
+      </div>
+      <div class="flex justify-center gap-8 my-4">
+        <div class="text-center">
+          <div class="text-xs text-hw-text-secondary uppercase">Score</div>
+          <div class="text-xl font-bold">${scoreData.levelScore.toLocaleString()}</div>
+        </div>
+        <div class="text-center">
+          <div class="text-xs text-hw-text-secondary uppercase">High Score</div>
+          <div class="text-xl font-bold">${scoreData.currentScore.toLocaleString()}</div>
+        </div>
       </div>
       <div class="flex items-center justify-center gap-3 mt-4">
         <button id="hw-menu" class="btn-glass px-4 py-2">Main Menu</button>
@@ -509,6 +655,11 @@ class App {
       inDuration: Math.max(180, Math.round(durIn * 1000)),
       outDuration: Math.max(220, Math.round(durOut * 1000))
     });
+    
+    // If transitioning to game view (main menu is hidden), refresh the UI with latest data
+    if (this.gameUI && this.mainMenuEl && this.mainMenuEl.classList.contains('hidden')) {
+      await this.gameUI.refreshUI();
+    }
   }
 
   private showMainMenu(): void {
@@ -532,10 +683,18 @@ class App {
     ]);
   }
 
-  private hideMainMenu(): void {
+  private async hideMainMenu(): Promise<void> {
     if (!this.mainMenuEl) return;
     this.mainMenuEl.classList.add('hidden');
     this.mainMenuEl.classList.remove('flex');
+    
+    // Refresh GameUI when showing the game after closing main menu
+    if (this.gameUI) {
+      setTimeout(async () => {
+        await this.gameUI!.refreshUI();
+      }, 300); // Small delay to ensure UI is visible
+    }
+    
     // Clear any blur from both container and menu overlay
     blurTransition.applyLayeredBlur([
       { elementId: 'hex-grid-container', level: 'none', delay: 0 },
