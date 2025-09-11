@@ -358,6 +358,7 @@ class App {
         <button disabled class="btn-glass opacity-50 cursor-not-allowed py-3">Make Your Level (soon)</button>
         <button disabled class="btn-glass opacity-50 cursor-not-allowed py-3">Leaderboard (soon)</button>
         <button id="hw-test-wheel" class="btn-glass py-3">🎰 Test Wheel (Dev)</button>
+        <button id="hw-reset" class="btn-glass py-3">🧹 Reset Progress (Dev)</button>
       </div>
       <div class="mt-4 pt-4 border-t border-hw-surface-tertiary/20">
         <div class="text-base text-hw-text-secondary mb-3">Settings</div>
@@ -382,6 +383,7 @@ class App {
     const levelBtn = panel.querySelector('#hw-level') as HTMLButtonElement;
     const motionToggle = panel.querySelector('#hw-motion-toggle') as HTMLInputElement;
     const howBtn = panel.querySelector('#hw-howto') as HTMLButtonElement;
+    const resetBtn = panel.querySelector('#hw-reset') as HTMLButtonElement;
 
     levelBtn.onclick = async () => {
       if (this.menuBusy) return;
@@ -471,6 +473,67 @@ class App {
       });
       await wheel.show(true);
     };
+
+    // Reset Progress (Dev) handler
+    resetBtn.onclick = async () => {
+      if (this.menuBusy) return;
+      const ok = await this.confirmModal('Reset all progress, coins, hints, and level saves? This cannot be undone.', { confirmText: 'Reset', cancelText: 'Cancel' });
+      if (!ok) return;
+      this.menuBusy = true;
+      try {
+        // 1) Reset overall progression to Level 1 (server)
+        await fetch('/api/progress', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ level: 1, completedLevels: [], seed: undefined })
+        });
+
+        // 2) Delete saved per-level progress (fetch list, fallback to first 50)
+        try {
+          const listRes = await fetch('/api/level-progress');
+          if (listRes.ok) {
+            const { levels } = await listRes.json();
+            if (Array.isArray(levels)) {
+              await Promise.all(levels.map((lvl: number) => fetch(`/api/level-progress/${lvl}`, { method: 'DELETE' })));
+            }
+          } else {
+            const tasks: Promise<Response>[] = [];
+            for (let i = 1; i <= 50; i++) tasks.push(fetch(`/api/level-progress/${i}`, { method: 'DELETE' }));
+            await Promise.all(tasks);
+          }
+        } catch {}
+
+        // 3) Reset hints
+        await fetch('/api/hints', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'reset' })
+        });
+
+        // 4) Reset coins to default
+        await fetch('/api/coins', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'set', balance: 100, totalEarned: 100, totalSpent: 0 })
+        });
+
+        // 5) Clear local caches
+        try { localStorage.removeItem('hexaword_progress_v1'); } catch {}
+        try { CoinStorageService.getInstance().clearCache(); } catch {}
+        try { HintStorageService.getInstance().clearCache(); } catch {}
+
+        // 6) Update in-memory state + theme
+        this.currentLevel = 1;
+        this.updateMenuProgress({ level: 1, completedLevels: [], updatedAt: Date.now() } as HWProgress);
+        await this.applyMenuTheme(1);
+        this.showToast('Progress reset. Starting from Level 1.', 'info');
+      } catch (e) {
+        console.error('Reset failed', e);
+        this.showToast('Failed to reset progress', 'error');
+      } finally {
+        this.menuBusy = false;
+      }
+    };
   }
   
   private showHowTo(): void {
@@ -518,14 +581,37 @@ class App {
     });
   }
 
+  // Non-blocking, sandbox-safe confirm modal
+  private confirmModal(message: string, opts?: { confirmText?: string; cancelText?: string }): Promise<boolean> {
+    return new Promise((resolve) => {
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay';
+      const panel = document.createElement('div');
+      panel.className = 'modal-content panel-hex max-w-md';
+      panel.innerHTML = `
+        <div class="text-center mb-3">
+          <div class="text-lg text-hw-text-primary font-bold">Confirm</div>
+        </div>
+        <div class="text-hw-text-secondary mb-4">${message}</n></div>
+        <div class="flex justify-end gap-2">
+          <button id="hw-confirm-cancel" class="btn-glass px-4 py-2">${opts?.cancelText || 'Cancel'}</button>
+          <button id="hw-confirm-ok" class="btn-glass-primary px-4 py-2">${opts?.confirmText || 'Confirm'}</button>
+        </div>
+      `;
+      overlay.appendChild(panel);
+      document.body.appendChild(overlay);
+
+      const cleanup = (value: boolean) => {
+        overlay.remove();
+        resolve(value);
+      };
+      (panel.querySelector('#hw-confirm-cancel') as HTMLButtonElement)?.addEventListener('click', () => cleanup(false));
+      (panel.querySelector('#hw-confirm-ok') as HTMLButtonElement)?.addEventListener('click', () => cleanup(true));
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(false); });
+    });
+  }
+
   private async loadLevelFromServer(level: number): Promise<void> {
-    // If game exists and we're already on this level, just restore the existing game
-    if (this.game && this.currentLevel === level) {
-      // Game already exists and is on the correct level - no need to reload
-      // The saved progress is already loaded
-      return;
-    }
-    
     const d = await fetchGameDataWithFallback(level, (error) => {
       this.showToast(error.message, 'warning');
     });

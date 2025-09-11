@@ -8,7 +8,6 @@ import {
 } from '../../shared/types/api';
 import { LevelSelector } from '../services/LevelSelector';
 import { LevelRepository } from '../services/LevelRepository';
-import { getCuratedForLevel } from '../services/CuratedLevels';
 import { Logger, asyncHandler } from '../middleware/errorHandler';
 
 export const gameRouter = express.Router();
@@ -87,10 +86,23 @@ gameRouter.get<unknown, GameInitResponse | ApiErrorResponse>(
       // Deterministic seed: postId + level (optionally add date for daily cycles)
       const seed = `${postId}:${level}`;
 
-      // Curated progression: map any level N onto a curated set via deterministic shuffle
-      const curated = getCuratedForLevel(level);
-      let words: string[] = curated.words;
-      let derivedClue: string | undefined = curated.clue;
+      // Prefer CSV/JSON repository entries (we use levels.json), fallback to deterministic selection
+      const levelRepo = LevelRepository.getInstance();
+      const csvLevel = levelRepo.getLevel(level);
+
+      let words: string[];
+      let derivedClue: string | undefined;
+      if (csvLevel) {
+        // Use the level's exact words/clue as defined in the data file
+        words = csvLevel.words.map((w) => w.toUpperCase());
+        derivedClue = csvLevel.clue;
+      } else {
+        // Fallback: pick deterministically from the global pool (kept for compatibility)
+        const selector = new LevelSelector();
+        const selection = selector.pickWords(seed, 6);
+        words = selection.words;
+        derivedClue = selection.clue;
+      }
 
       // Validate words
       try {
