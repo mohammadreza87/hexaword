@@ -19,6 +19,7 @@ export class LevelProgressService {
   private static instance: LevelProgressService;
   private currentProgress: LevelProgress | null = null;
   private autoSaveTimer: NodeJS.Timeout | null = null;
+  private savingDisabledUntil: number = 0;
   
   private constructor() {}
   
@@ -39,6 +40,8 @@ export class LevelProgressService {
       if (!response.ok) {
         if (response.status === 404) {
           // No saved progress - this is normal for new levels
+          // Reset any stale in-memory progress to avoid saving old state accidentally
+          this.currentProgress = null;
           return null;
         }
         throw new Error(`Failed to load progress: ${response.status}`);
@@ -52,6 +55,8 @@ export class LevelProgressService {
       if (error instanceof Error && !error.message.includes('404')) {
         console.error('Error loading level progress:', error);
       }
+      // On any fetch error, clear in-memory progress to prevent stale saves
+      this.currentProgress = null;
       return null;
     }
   }
@@ -83,6 +88,9 @@ export class LevelProgressService {
    * Updates and saves progress (debounced)
    */
   public updateProgress(progress: Partial<LevelProgress>): void {
+    // If saving has been temporarily disabled (e.g., after level completion), skip
+    if (Date.now() < this.savingDisabledUntil) return;
+
     if (!this.currentProgress) {
       this.currentProgress = {
         level: 1,
@@ -120,6 +128,14 @@ export class LevelProgressService {
    */
   public async clearProgress(level: number): Promise<boolean> {
     try {
+      // Cancel any pending autosave to avoid race conditions re-saving stale state
+      if (this.autoSaveTimer) {
+        clearTimeout(this.autoSaveTimer);
+        this.autoSaveTimer = null;
+      }
+      // Temporarily disable any new saves for a short window
+      this.savingDisabledUntil = Date.now() + 5000;
+
       const response = await fetch(`/api/level-progress/${level}`, {
         method: 'DELETE'
       });
@@ -150,6 +166,10 @@ export class LevelProgressService {
    * Force save immediately
    */
   public async forceSave(): Promise<boolean> {
+    // Respect temporary disabling of saves
+    if (Date.now() < this.savingDisabledUntil) {
+      return true;
+    }
     if (this.autoSaveTimer) {
       clearTimeout(this.autoSaveTimer);
       this.autoSaveTimer = null;

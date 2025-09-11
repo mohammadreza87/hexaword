@@ -40,10 +40,10 @@ export class HintStorageService {
       if (!response.ok) {
         // Return default for new users
         return {
-          revealHints: 4,
-          targetHints: 4,
-          freeReveals: 4,
-          freeTargets: 4,
+          revealHints: 5,
+          targetHints: 3,
+          freeReveals: 5,
+          freeTargets: 3,
           lastUpdated: Date.now()
         };
       }
@@ -55,10 +55,10 @@ export class HintStorageService {
       console.error('Error loading hints:', error);
       // Return cached or default
       return this.cachedInventory || {
-        revealHints: 4,
-        targetHints: 4,
-        freeReveals: 4,
-        freeTargets: 4,
+        revealHints: 5,
+        targetHints: 3,
+        freeReveals: 5,
+        freeTargets: 3,
         lastUpdated: Date.now()
       };
     }
@@ -93,10 +93,10 @@ export class HintStorageService {
         }
       }
       return this.cachedInventory || {
-        revealHints: 4,
-        targetHints: 4,
-        freeReveals: 4,
-        freeTargets: 4,
+        revealHints: 5,
+        targetHints: 3,
+        freeReveals: 5,
+        freeTargets: 3,
         lastUpdated: Date.now()
       };
     }
@@ -131,10 +131,10 @@ export class HintStorageService {
         }
       }
       return this.cachedInventory || {
-        revealHints: 4,
-        targetHints: 4,
-        freeReveals: 4,
-        freeTargets: 4,
+        revealHints: 5,
+        targetHints: 3,
+        freeReveals: 5,
+        freeTargets: 3,
         lastUpdated: Date.now()
       };
     }
@@ -168,8 +168,8 @@ export class HintStorageService {
       console.error('Error syncing hints:', error);
       return this.cachedInventory || {
         ...inventory,
-        freeReveals: 4,
-        freeTargets: 4,
+        freeReveals: 5,
+        freeTargets: 3,
         lastUpdated: Date.now()
       };
     }

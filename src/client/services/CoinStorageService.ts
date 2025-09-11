@@ -39,8 +39,8 @@ export class CoinStorageService {
       if (!response.ok) {
         // Return default for new users
         return {
-          balance: 100,
-          totalEarned: 100,
+          balance: 200,
+          totalEarned: 200,
           totalSpent: 0,
           lastUpdated: Date.now()
         };
@@ -53,8 +53,8 @@ export class CoinStorageService {
       console.error('Error loading coins:', error);
       // Return cached or default
       return this.cachedData || {
-        balance: 100,
-        totalEarned: 100,
+        balance: 200,
+        totalEarned: 200,
         totalSpent: 0,
         lastUpdated: Date.now()
       };

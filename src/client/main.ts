@@ -15,6 +15,8 @@ import { WheelOfFortune } from './components/WheelOfFortune';
 import { DailyRewardService } from './services/DailyRewardService';
 import { CoinStorageService } from './services/CoinStorageService';
 import { HintStorageService } from './services/HintStorageService';
+import { ColorPaletteService } from '../web-view/services/ColorPaletteService';
+import { getPaletteForLevel } from '../web-view/config/ColorPalettes';
 
 console.log('HexaWord Crossword Generator v4.0 - Modular Architecture');
 
@@ -28,6 +30,8 @@ class App {
   private mainMenuEl: HTMLDivElement | null = null;
   private fadeEl: HTMLDivElement | null = null;
   private shareService: ShareService;
+  private colorPaletteService = ColorPaletteService.getInstance();
+  private menuBusy = false;
   
   constructor() {
     this.shareService = ShareService.getInstance();
@@ -60,22 +64,10 @@ class App {
   
   private async startGame(): Promise<void> {
     console.log('Starting HexaWord game...');
-    // Apply dark theme background
-    try {
-      const bg = '#0F1115';
-      document.documentElement.style.setProperty('background-color', bg, 'important');
-      document.body.style.setProperty('background-color', bg, 'important');
-      document.body.style.setProperty('background', bg, 'important');
-      const container = document.getElementById('hex-grid-container');
-      if (container) {
-        (container as HTMLElement).style.setProperty('background-color', bg, 'important');
-        (container as HTMLElement).style.setProperty('background', bg, 'important');
-      }
-    } catch {}
     
     // Show Main Menu (do not create game until Play)
     this.ensureMainMenu();
-    // Hydrate progress (remote + local) for Continue button
+    // Hydrate progress (remote + local) for Continue button and theme
     try {
       const localP = loadLocalProgress();
       const remoteP = await fetchRemoteProgress();
@@ -84,12 +76,88 @@ class App {
         saveLocalProgress(merged);
         this.currentLevel = Math.max(1, merged.level);
         this.updateMenuProgress(merged);
+        // Apply theme colors based on current level immediately for the menu
+        await this.applyMenuTheme(this.currentLevel);
+      } else {
+        // Default theme for level 1 if no progress found
+        await this.applyMenuTheme(1);
       }
     } catch {}
     this.showMainMenu();
     
     // Check for daily wheel on second launch
     await this.checkDailyWheel();
+  }
+
+  // Apply palette/theme for the menu using the player's current level
+  private async applyMenuTheme(level: number): Promise<void> {
+    try {
+      await this.colorPaletteService.setLevel(level);
+      const scheme = await this.colorPaletteService.getCurrentScheme();
+      // Update top-level backgrounds to match theme
+      document.documentElement.style.setProperty('background-color', scheme.background, 'important');
+      document.body.style.setProperty('background-color', scheme.background, 'important');
+      document.body.style.setProperty('background', scheme.background, 'important');
+      const container = document.getElementById('hex-grid-container');
+      if (container) {
+        (container as HTMLElement).style.setProperty('background-color', scheme.background, 'important');
+        (container as HTMLElement).style.setProperty('background', scheme.background, 'important');
+      }
+      
+      // Apply clue-like effects to the HEXA WORDS title
+      this.applyTitleEffects(level).catch(() => {});
+    } catch (e) {
+      // Fallback to previous behavior if palette fails
+      const bg = '#0F1115';
+      document.documentElement.style.setProperty('background-color', bg, 'important');
+      document.body.style.setProperty('background-color', bg, 'important');
+      document.body.style.setProperty('background', bg, 'important');
+    }
+  }
+  
+  /**
+   * Apply clue-like gradient and glow effects to the HEXA WORDS title
+   */
+  private async applyTitleEffects(level: number): Promise<void> {
+    const titleEl = document.getElementById('hexaword-title');
+    if (!titleEl) return;
+    
+    // Get theme colors based on level - same as clue
+    const palette = getPaletteForLevel(level);
+    const accentColor = palette.colors[0];  // Primary accent color
+    const secondaryColor = palette.colors[1];  // Secondary color for gradient
+    
+    // Create gradient background
+    titleEl.style.background = `linear-gradient(90deg, ${accentColor}, ${secondaryColor}, ${accentColor})`;
+    titleEl.style.backgroundSize = '200% 100%';
+    titleEl.style.webkitBackgroundClip = 'text';
+    titleEl.style.webkitTextFillColor = 'transparent';
+    titleEl.style.backgroundClip = 'text';
+    
+    // Add animation for gradient shift
+    titleEl.style.animation = 'gradientShift 3s ease infinite';
+    
+    // Add multiple glow layers using filter
+    titleEl.style.filter = `
+      drop-shadow(0 0 20px ${accentColor}33)
+      drop-shadow(0 0 10px ${accentColor}66)
+      drop-shadow(0 0 5px ${accentColor}99)
+      drop-shadow(0 1px 2px rgba(0,0,0,0.6))
+    `;
+    
+    // Add the gradient animation if not already present
+    if (!document.getElementById('hexaword-gradient-animation')) {
+      const style = document.createElement('style');
+      style.id = 'hexaword-gradient-animation';
+      style.textContent = `
+        @keyframes gradientShift {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+      `;
+      document.head.appendChild(style);
+    }
   }
   
   /**
@@ -108,13 +176,16 @@ class App {
     if (!dailyService.isSecondLaunch()) {
       return;
     }
+
+    // Check cooldown state to configure the wheel display
+    const { canClaim, lastClaimTime } = await dailyService.canClaimDaily();
     
     // Show wheel with token count
     const wheel = new WheelOfFortune();
     wheel.setTokens(tokens);
-    wheel.onComplete(async (prize) => {
+    wheel.onComplete(async (prize, spinId) => {
       // Claim the reward
-      const success = await dailyService.claimReward(prize);
+      const success = await dailyService.claimReward(prize, spinId);
       
       if (success) {
         // Add a small delay to ensure server has finished updating
@@ -159,7 +230,7 @@ class App {
         this.showToast(`🎉 ${prize.name} added to your account!`, 'success');
       }
     });
-    
+    // Show with proper cooldown handling
     await wheel.show(canClaim, lastClaimTime);
   }
 
@@ -217,9 +288,11 @@ class App {
     });
     
     this.gameUI.onMainMenu(async () => {
-      // Save progress before going to main menu
-      if (this.game) {
-        await (this.game as any).levelProgressService?.forceSave();
+      // Save progress before going to main menu using game's helper
+      if (this.game && (this.game as any).saveProgressNow) {
+        try {
+          await (this.game as any).saveProgressNow();
+        } catch {}
       }
       this.showMainMenu();
     });
@@ -271,7 +344,12 @@ class App {
     panel.className = 'modal-content max-w-lg panel-hex';
     panel.innerHTML = `
       <div class="text-center mb-4">
-        <div class="text-3xl tracking-wide text-gradient">HexaWord</div>
+        <div id="hexaword-title" class="text-3xl tracking-wide" style="
+          font-weight: 900;
+          font-family: 'Inter', Arial, sans-serif;
+          text-transform: uppercase;
+          position: relative;
+        ">HEXA WORDS</div>
         <div class="text-sm text-hw-text-secondary mt-1">Main Menu</div>
       </div>
       <div class="flex flex-col gap-3 my-4">
@@ -306,6 +384,26 @@ class App {
     const howBtn = panel.querySelector('#hw-howto') as HTMLButtonElement;
 
     levelBtn.onclick = async () => {
+      if (this.menuBusy) return;
+      this.menuBusy = true;
+      // Immediately disable all interactive controls in the menu to prevent double clicks
+      try {
+        const disableAll = () => {
+          // Disable all buttons within the panel
+          panel.querySelectorAll('button').forEach((b) => {
+            const btn = b as HTMLButtonElement;
+            btn.disabled = true;
+            btn.style.pointerEvents = 'none';
+            btn.classList.add('opacity-50', 'cursor-not-allowed');
+          });
+          // Disable toggle
+          const mt = panel.querySelector('#hw-motion-toggle') as HTMLInputElement | null;
+          if (mt) {
+            mt.disabled = true;
+          }
+        };
+        disableAll();
+      } catch {}
       // Apply layered blur for depth effect during transition
       blurTransition.applyLayeredBlur([
         { elementId: 'hw-main-menu', level: 'xl', delay: 0 },
@@ -315,6 +413,7 @@ class App {
       await this.fadeTransition(async () => {
         await this.loadLevelFromServer(this.currentLevel);
         this.hideMainMenu();
+        this.menuBusy = false; // clear busy once menu is hidden
       });
     };
     // Initialize toggle from stored prefs
@@ -339,14 +438,17 @@ class App {
     // Test wheel button handler
     const testWheelBtn = el.querySelector('#hw-test-wheel') as HTMLButtonElement;
     testWheelBtn.onclick = async () => {
+      if (this.menuBusy) return;
+      // Keep menu responsive for test wheel, but prevent double opens
+      this.menuBusy = true;
       const wheel = new WheelOfFortune();
       wheel.setTokens(999); // Show unlimited tokens for testing
-      wheel.onComplete(async (prize) => {
+      wheel.onComplete(async (prize, spinId) => {
         // Grant a test token right before claiming (so server has token to consume)
         await fetch('/api/daily-reward/grant-test-token', { method: 'POST' });
         
         const dailyService = DailyRewardService.getInstance();
-        const success = await dailyService.claimReward(prize);
+        const success = await dailyService.claimReward(prize, spinId);
         
         if (success) {
           // Update UI based on prize
@@ -364,6 +466,8 @@ class App {
         } else {
           console.log('Failed to claim reward - likely no tokens');
         }
+        // Re-enable menu after wheel completes
+        this.menuBusy = false;
       });
       await wheel.show(true);
     };
@@ -415,6 +519,13 @@ class App {
   }
 
   private async loadLevelFromServer(level: number): Promise<void> {
+    // If game exists and we're already on this level, just restore the existing game
+    if (this.game && this.currentLevel === level) {
+      // Game already exists and is on the correct level - no need to reload
+      // The saved progress is already loaded
+      return;
+    }
+    
     const d = await fetchGameDataWithFallback(level, (error) => {
       this.showToast(error.message, 'warning');
     });
@@ -665,8 +776,36 @@ class App {
   private showMainMenu(): void {
     this.ensureMainMenu();
     if (!this.mainMenuEl) return;
+    
+    // Re-enable all menu buttons and controls
+    const panel = this.mainMenuEl.querySelector('.panel-hex');
+    if (panel) {
+      // Re-enable all buttons
+      panel.querySelectorAll('button').forEach((btn) => {
+        btn.disabled = false;
+        btn.style.pointerEvents = '';
+        btn.classList.remove('opacity-50', 'cursor-not-allowed');
+      });
+      
+      // Re-enable the motion toggle
+      const motionToggle = panel.querySelector('#hw-motion-toggle') as HTMLInputElement | null;
+      if (motionToggle) {
+        motionToggle.disabled = false;
+      }
+    }
+    
+    // Clear the busy flag
+    this.menuBusy = false;
+    
+    // Apply theme for current level so menu colors are correct
+    this.applyMenuTheme(this.currentLevel).catch(() => void 0);
     this.mainMenuEl.classList.remove('hidden');
     this.mainMenuEl.classList.add('flex');
+    
+    // Apply title effects after menu is visible
+    setTimeout(() => {
+      this.applyTitleEffects(this.currentLevel).catch(() => {});
+    }, 50);
     // Refresh from local progress to ensure latest level is reflected
     try {
       const p = loadLocalProgress();

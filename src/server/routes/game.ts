@@ -8,6 +8,7 @@ import {
 } from '../../shared/types/api';
 import { LevelSelector } from '../services/LevelSelector';
 import { LevelRepository } from '../services/LevelRepository';
+import { getCuratedForLevel } from '../services/CuratedLevels';
 import { Logger, asyncHandler } from '../middleware/errorHandler';
 
 export const gameRouter = express.Router();
@@ -86,34 +87,10 @@ gameRouter.get<unknown, GameInitResponse | ApiErrorResponse>(
       // Deterministic seed: postId + level (optionally add date for daily cycles)
       const seed = `${postId}:${level}`;
 
-      // Try to source words from CSV row for this level; if missing, fallback to seeded picker
-      const levelRepo = LevelRepository.getInstance();
-      const csvLevel = levelRepo.getLevel(level);
-
-      let words: string[];
-      let derivedClue: string | undefined;
-      if (csvLevel) {
-        // Respect CSV flow: use its word count (capped at 6)
-        const count = Math.min(6, csvLevel.numWords || csvLevel.words.length);
-        // Deterministically shuffle the row's words with the seed and take first count
-        const selector = new LevelSelector();
-        const rowPick = selector.pickWords(seed, count, new Set());
-        // But constrain to the row's word list only
-        const rowSet = new Set(csvLevel.words);
-        words = rowPick.words.filter(w => rowSet.has(w)).slice(0, count);
-        // If for some reason filtering made it short, top up deterministically from row words
-        if (words.length < count) {
-          const topUp = csvLevel.words.filter(w => !words.includes(w)).slice(0, count - words.length);
-          words = words.concat(topUp);
-        }
-        derivedClue = csvLevel.clue;
-      } else {
-        // Fallback: pick exactly 6 deterministically from the global pool
-        const selector = new LevelSelector();
-        const selection = selector.pickWords(seed, 6);
-        words = selection.words;
-        derivedClue = selection.clue;
-      }
+      // Curated progression: map any level N onto a curated set via deterministic shuffle
+      const curated = getCuratedForLevel(level);
+      let words: string[] = curated.words;
+      let derivedClue: string | undefined = curated.clue;
 
       // Validate words
       try {

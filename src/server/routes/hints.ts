@@ -24,10 +24,10 @@ router.get('/api/hints', async (req: Request, res: Response) => {
     if (!data) {
       // New user - give them free hints
       const initialData: HintData = {
-        revealHints: 4,
-        targetHints: 4,
-        freeReveals: 4,
-        freeTargets: 4,
+        revealHints: 5,
+        targetHints: 3,
+        freeReveals: 5,
+        freeTargets: 3,
         lastUpdated: Date.now()
       };
       
@@ -57,10 +57,10 @@ router.post('/api/hints', async (req: Request, res: Response) => {
     
     if (!currentData) {
       hints = {
-        revealHints: 4,
-        targetHints: 4,
-        freeReveals: 4,
-        freeTargets: 4,
+        revealHints: 5,
+        targetHints: 3,
+        freeReveals: 5,
+        freeTargets: 3,
         lastUpdated: Date.now()
       };
     } else {
@@ -98,10 +98,10 @@ router.post('/api/hints', async (req: Request, res: Response) => {
       case 'reset':
         // Reset to initial state
         hints = {
-          revealHints: 4,
-          targetHints: 4,
-          freeReveals: 4,
-          freeTargets: 4,
+          revealHints: 5,
+          targetHints: 3,
+          freeReveals: 5,
+          freeTargets: 3,
           lastUpdated: Date.now()
         };
         break;

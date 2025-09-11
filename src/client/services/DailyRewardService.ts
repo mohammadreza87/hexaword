@@ -12,6 +12,11 @@ export interface DailyRewardData {
   lastTokenGrant: number;
 }
 
+export interface SpinStartResponse {
+  spinId: string;
+  prizeId: string;
+}
+
 export class DailyRewardService {
   private static instance: DailyRewardService;
   
@@ -112,14 +117,26 @@ export class DailyRewardService {
   }
   
   /**
+   * Starts a server-authoritative spin and reserves a prize
+   */
+  public async startSpin(): Promise<SpinStartResponse> {
+    const res = await fetch('/api/daily-reward/spin', { method: 'POST' });
+    if (!res.ok) {
+      const msg = await res.text().catch(() => 'Failed to start spin');
+      throw new Error(msg || 'Failed to start spin');
+    }
+    return res.json();
+  }
+
+  /**
    * Claims the daily reward
    */
-  public async claimReward(prize: WheelPrize): Promise<boolean> {
+  public async claimReward(prize: WheelPrize, spinId?: string): Promise<boolean> {
     try {
       const response = await fetch('/api/daily-reward/claim', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prize })
+        body: JSON.stringify(spinId ? { spinId } : { prize })
       });
       
       if (!response.ok) {

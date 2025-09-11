@@ -1335,6 +1335,22 @@ export class HexaWordGame {
       ui.updateHintBadges(inventory.revealHints, inventory.targetHints);
     }
   }
+
+  /**
+   * Public method to immediately persist progress to the server.
+   * Ensures current in-memory state is captured before leaving the game.
+   */
+  public async saveProgressNow(): Promise<boolean> {
+    try {
+      // Capture the latest state into LevelProgressService
+      this.saveProgress();
+      // Flush debounce and persist
+      return await this.levelProgressService.forceSave();
+    } catch (e) {
+      console.warn('saveProgressNow failed:', e);
+      return false;
+    }
+  }
   
   /**
    * Shows a temporary bonus notification (deprecated - now shown in complete panel)
@@ -2126,8 +2142,14 @@ export class HexaWordGame {
     // Reinitialize generator with new seed/words
     this.generator.updateConfig({ seed: this.config.seed, words: data.words });
     await this.generateCrossword(data.words);
+    // Attempt to restore saved progress for this level
+    await this.loadSavedProgress();
     this.render();
-    await this.playLevelIntro();
+    // Only play intro if there is no saved progress to restore
+    const hasProgress = this.foundWords.size > 0 || this.solvedCells.size > 0;
+    if (!hasProgress) {
+      await this.playLevelIntro();
+    }
   }
 
   /**

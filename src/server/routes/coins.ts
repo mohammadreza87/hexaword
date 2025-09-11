@@ -33,10 +33,10 @@ router.get('/api/coins', async (_req, res) => {
     const raw = await redis.get(key);
     
     if (!raw) {
-      // New user starts with 100 coins
+      // New user starts with 200 coins
       const initialData: CoinData = {
-        balance: 100,
-        totalEarned: 100,
+        balance: 200,
+        totalEarned: 200,
         totalSpent: 0,
         lastUpdated: Date.now()
       };
@@ -65,8 +65,8 @@ router.post('/api/coins', async (req, res) => {
     // Get current data
     const currentRaw = await redis.get(key);
     let currentData: CoinData = currentRaw ? JSON.parse(currentRaw) : {
-      balance: 100,
-      totalEarned: 100,
+      balance: 200,
+      totalEarned: 200,
       totalSpent: 0,
       lastUpdated: Date.now()
     };
@@ -119,8 +119,8 @@ router.post('/api/coins/check', async (req, res) => {
     
     const raw = await redis.get(key);
     const coinData: CoinData = raw ? JSON.parse(raw) : {
-      balance: 100,
-      totalEarned: 100,
+      balance: 200,
+      totalEarned: 200,
       totalSpent: 0,
       lastUpdated: Date.now()
     };

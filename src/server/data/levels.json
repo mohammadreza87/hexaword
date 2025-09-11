@@ -4,11 +4,11 @@
     "numLetters": 1,
     "numWords": 3,
     "difficulty": 980,
-    "clue": "NUTS",
+    "clue": "BEACH DAY",
     "words": [
-      "ALMOND",
-      "CASHEW",
-      "PEANUT"
+      "SUN",
+      "SAND",
+      "WAVE"
     ]
   },
   {
@@ -16,63 +16,59 @@
     "numLetters": 2,
     "numWords": 3,
     "difficulty": 730,
-    "clue": "COMPASS",
+    "clue": "SOFA CHILL",
     "words": [
-      "EAST",
-      "NORTH",
-      "SOUTH"
+      "RUG",
+      "LAMP",
+      "PILLOW"
     ]
   },
   {
     "level": 3,
     "numLetters": 3,
-    "numWords": 4,
+    "numWords": 3,
     "difficulty": 630,
-    "clue": "MADE FROM DAIRY",
+    "clue": "BREAKFAST QUICK",
     "words": [
-      "MILK",
-      "CREAM",
-      "BUTTER",
-      "CHEESE"
+      "TEA",
+      "TOAST",
+      "JAM"
     ]
   },
   {
     "level": 4,
     "numLetters": 4,
-    "numWords": 4,
+    "numWords": 3,
     "difficulty": 620,
-    "clue": "CAN BE WASTED",
+    "clue": "DOG WALK",
     "words": [
-      "TIME",
-      "MONEY",
-      "BREATH",
-      "TALENT"
+      "LEASH",
+      "TREAT",
+      "BARK"
     ]
   },
   {
     "level": 5,
     "numLetters": 5,
-    "numWords": 4,
+    "numWords": 3,
     "difficulty": 780,
-    "clue": "FALLS FROM THE SKY",
+    "clue": "RAINY KIT",
     "words": [
-      "HAIL",
-      "RAIN",
-      "SNOW",
-      "SLEET"
+      "COAT",
+      "BOOT",
+      "MUD"
     ]
   },
   {
     "level": 6,
     "numLetters": 6,
-    "numWords": 4,
+    "numWords": 3,
     "difficulty": 915,
-    "clue": "BEASTS OF BURDEN",
+    "clue": "GAME NIGHT",
     "words": [
-      "MULE",
-      "CAMEL",
-      "HORSE",
-      "DONKEY"
+      "DICE",
+      "CARD",
+      "TURN"
     ]
   },
   {
@@ -80,12 +76,12 @@
     "numLetters": 7,
     "numWords": 4,
     "difficulty": 855,
-    "clue": "HAS BUTTONS",
+    "clue": "COFFEE RUN",
     "words": [
-      "PANTS",
-      "SHIRT",
-      "REMOTE",
-      "ELEVATOR"
+      "MUG",
+      "LATTE",
+      "FOAM",
+      "BEANS"
     ]
   },
   {
@@ -93,183 +89,168 @@
     "numLetters": 8,
     "numWords": 4,
     "difficulty": 695,
-    "clue": "CAN BE BROKEN",
+    "clue": "CITY HOP",
     "words": [
-      "RULE",
-      "HEART",
-      "RECORD",
-      "WINDOW"
+      "MAP",
+      "METRO",
+      "TAXI",
+      "NOISE"
     ]
   },
   {
     "level": 9,
     "numLetters": 9,
-    "numWords": 5,
+    "numWords": 4,
     "difficulty": 695,
-    "clue": "MUSEUM",
+    "clue": "SCHOOL STUFF",
     "words": [
-      "ART",
-      "BONES",
-      "STATUE",
-      "EXHIBIT",
-      "ARTIFACT"
+      "BOOK",
+      "PENCIL",
+      "NOTES",
+      "LUNCH"
     ]
   },
   {
     "level": 10,
     "numLetters": 10,
-    "numWords": 5,
+    "numWords": 4,
     "difficulty": 695,
-    "clue": "AROMA",
+    "clue": "HOME GARDEN",
     "words": [
-      "BACON",
-      "COFFEE",
-      "INCENSE",
-      "PERFUME",
-      "VANILLA"
+      "SEED",
+      "SOIL",
+      "WATER",
+      "FLOWER"
     ]
   },
   {
     "level": 11,
     "numLetters": 11,
-    "numWords": 5,
+    "numWords": 4,
     "difficulty": 810,
-    "clue": "YUMMY",
+    "clue": "WINTER WARDROBE",
     "words": [
-      "PIE",
-      "CAKE",
-      "CANDY",
-      "COOKIE",
-      "COBBLER"
+      "HAT",
+      "SCARF",
+      "GLOVE",
+      "SLED"
     ]
   },
   {
     "level": 12,
     "numLetters": 12,
-    "numWords": 5,
+    "numWords": 4,
     "difficulty": 905,
-    "clue": "IT STINGS",
+    "clue": "MUSIC VIBES",
     "words": [
-      "BEE",
-      "SLAP",
-      "LEMON",
-      "INSULT",
-      "BREAKUP"
+      "BEAT",
+      "MELODY",
+      "DRUM",
+      "STAGE"
     ]
   },
   {
     "level": 13,
     "numLetters": 13,
-    "numWords": 5,
+    "numWords": 4,
     "difficulty": 945,
-    "clue": "CANDLE FRAGRANCES",
+    "clue": "PARK DAY",
     "words": [
-      "CEDAR",
-      "CIDER",
-      "GINGER",
-      "ORANGE",
-      "PUMPKIN"
+      "PATH",
+      "TREES",
+      "LAKE",
+      "BENCH"
     ]
   },
   {
     "level": 14,
     "numLetters": 14,
-    "numWords": 5,
+    "numWords": 4,
     "difficulty": 865,
-    "clue": "THINGS TO SAVE",
+    "clue": "MOVIE NIGHT",
     "words": [
-      "TIME",
-      "LIVES",
-      "MONEY",
-      "PHOTO",
-      "KEEPSAKE"
+      "POPCORN",
+      "SCREEN",
+      "SCENE",
+      "TICKET"
     ]
   },
   {
     "level": 15,
     "numLetters": 15,
-    "numWords": 5,
+    "numWords": 4,
     "difficulty": 750,
-    "clue": "MARCHING BAND",
+    "clue": "SPACE GEEK",
     "words": [
-      "DRUM",
-      "HORN",
-      "TRUMPET",
-      "UNIFORM",
-      "CLARINET"
+      "MOON",
+      "STAR",
+      "ROCKET",
+      "PLANET"
     ]
   },
   {
     "level": 16,
     "numLetters": 16,
-    "numWords": 5,
+    "numWords": 4,
     "difficulty": 780,
-    "clue": "TRANSPARENT OR TRANSLUCENT",
+    "clue": "MINI TRIP",
     "words": [
-      "FOIL",
-      "GLASS",
-      "WATER",
-      "SCREEN",
-      "PELLICLE"
+      "PLANE",
+      "HOTEL",
+      "BAG",
+      "MAP"
     ]
   },
   {
     "level": 17,
     "numLetters": 17,
-    "numWords": 5,
+    "numWords": 4,
     "difficulty": 715,
-    "clue": "WORDS CONTAINING ‘TAN’",
+    "clue": "SPORTS HYPE",
     "words": [
-      "TANK",
-      "TANDEM",
-      "TARTAN",
-      "PURITAN",
-      "DEBUTANT"
+      "GOAL",
+      "SCORE",
+      "COACH",
+      "WHISTLE"
     ]
   },
   {
     "level": 18,
     "numLetters": 18,
-    "numWords": 6,
+    "numWords": 4,
     "difficulty": 585,
-    "clue": "HAS KEYS",
+    "clue": "BAKERY RUN",
     "words": [
-      "CAR",
-      "MAP",
-      "JAIL",
-      "LOCK",
-      "HOUSE",
-      "PIANO"
+      "OVEN",
+      "DOUGH",
+      "CRUST",
+      "PIE"
     ]
   },
   {
     "level": 19,
     "numLetters": 19,
-    "numWords": 6,
+    "numWords": 4,
     "difficulty": 625,
-    "clue": "COMES IN PAIRS",
+    "clue": "DESK SETUP",
     "words": [
-      "EYE",
-      "SHOE",
-      "SOCK",
-      "TWIN",
-      "GLOVE",
-      "PANTS"
+      "MOUSE",
+      "CABLE",
+      "SCREEN",
+      "FILES"
     ]
   },
   {
     "level": 20,
     "numLetters": 20,
-    "numWords": 6,
+    "numWords": 4,
     "difficulty": 625,
-    "clue": "BLUE",
+    "clue": "CAMP VIBES",
     "words": [
-      "EYE",
-      "SKY",
-      "BIRD",
-      "BERRY",
-      "JEANS",
-      "OCEAN"
+      "TENT",
+      "FIRE",
+      "SMORE",
+      "GUITAR"
     ]
   },
   {

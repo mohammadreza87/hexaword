@@ -17,6 +17,8 @@ export interface WheelSpinResult {
   onClaim: () => Promise<void>;
 }
 
+import { DailyRewardService } from '../services/DailyRewardService';
+
 export class WheelOfFortune {
   private container: HTMLElement | null = null;
   private canvas: HTMLCanvasElement | null = null;
@@ -26,17 +28,19 @@ export class WheelOfFortune {
   private spinVelocity: number = 0;
   private targetRotation: number = 0;
   private startRotation: number = 0;
-  private onSpinComplete: ((prize: WheelPrize) => void) | null = null;
+  private onSpinComplete: ((prize: WheelPrize, spinId?: string) => void) | null = null;
+  private reservedSpinId: string | null = null;
+  private reservedPrizeId: string | null = null;
   private tokens: number = 0;
   
   private readonly prizes: WheelPrize[] = [
-    { id: 'coins_50', type: 'coins', name: '50', icon: '🪙', value: 50, color: '#FFD700', weight: 25 },
-    { id: 'coins_100', type: 'coins', name: '100', icon: '🪙', value: 100, color: '#FFA500', weight: 20 },
-    { id: 'coins_250', type: 'coins', name: '250', icon: '🪙', value: 250, color: '#FF8C00', weight: 10 },
-    { id: 'hints_2', type: 'hints', name: 'x2', icon: '💡', value: 2, color: '#9B59B6', weight: 15 },
-    { id: 'hints_1_target', type: 'hints', name: 'x1', icon: '🎯', value: 1, color: '#8E44AD', weight: 15 },
-    { id: 'bundle_small', type: 'bundle', name: 'x2+x2', icon: '💡🎯', value: 1, color: '#3498DB', weight: 10 },
-    { id: 'coins_500', type: 'coins', name: '500', icon: '💰', value: 500, color: '#FFD700', weight: 4 },
+    { id: 'coins_50', type: 'coins', name: '50', icon: '🪙', value: 50, color: '#FFD700', weight: 30 },
+    { id: 'coins_100', type: 'coins', name: '100', icon: '🪙', value: 100, color: '#FFA500', weight: 25 },
+    { id: 'hints_reveal_2', type: 'hints', name: 'x2', icon: '💡', value: 2, color: '#9B59B6', weight: 15 },
+    { id: 'coins_250', type: 'coins', name: '250', icon: '🪙', value: 250, color: '#FF8C00', weight: 12 },
+    { id: 'hints_target_2', type: 'hints', name: 'x2', icon: '🎯', value: 2, color: '#8E44AD', weight: 8 },
+    { id: 'bundle_premium', type: 'bundle', name: 'x3+x2', icon: '💎', value: 1, color: '#3498DB', weight: 6 },
+    { id: 'coins_500', type: 'coins', name: '500', icon: '💰', value: 500, color: '#FFD700', weight: 3 },
     { id: 'jackpot', type: 'jackpot', name: '1000', icon: '🎰', value: 1000, color: '#E74C3C', weight: 1 }
   ];
   
@@ -332,16 +336,13 @@ export class WheelOfFortune {
   /**
    * Spins the wheel
    */
-  private spin(): void {
+  private async spin(): Promise<void> {
     if (this.isSpinning) return;
     
     // Only check tokens if not in test mode (999 = test mode)
     if (this.tokens !== 999 && this.tokens <= 0) return; // No tokens, can't spin
     
-    // Consume a token (unless in test mode)
-    if (this.tokens !== 999) {
-      this.tokens--;
-    }
+    // Do not eagerly consume token on client; server decrements on claim
     
     const spinBtn = document.getElementById('wheel-spin-btn') as HTMLButtonElement;
     if (spinBtn) {
@@ -350,9 +351,23 @@ export class WheelOfFortune {
     }
     
     this.isSpinning = true;
-    
-    // Calculate winning prize (weighted random)
-    const prize = this.selectPrize();
+
+    // Try to reserve a server-authoritative prize
+    try {
+      const svc = DailyRewardService.getInstance();
+      const spin = await svc.startSpin();
+      this.reservedSpinId = spin.spinId;
+      this.reservedPrizeId = spin.prizeId;
+    } catch (e) {
+      // Fallback to client side
+      this.reservedSpinId = null;
+      this.reservedPrizeId = null;
+    }
+
+    // Select prize (prefer server-provided)
+    const prize = this.reservedPrizeId
+      ? (this.prizes.find(p => p.id === this.reservedPrizeId!) || this.selectPrize())
+      : this.selectPrize();
     const prizeIndex = this.prizes.indexOf(prize);
     
     // Calculate target rotation
@@ -433,45 +448,47 @@ export class WheelOfFortune {
       this.currentRotation = this.targetRotation % (Math.PI * 2);
       if (this.currentRotation < 0) this.currentRotation += Math.PI * 2;
       this.drawWheel();
-      
-      // Find which slice is actually at the top
+
+      // Determine which slice contains the top pointer angle
       const sliceAngle = (Math.PI * 2) / this.prizes.length;
       const topAngle = 3 * Math.PI / 2; // Top position (270 degrees)
-      
+
+      const angleDiff = (a: number, b: number) => {
+        let d = a - b;
+        while (d > Math.PI) d -= Math.PI * 2;
+        while (d <= -Math.PI) d += Math.PI * 2;
+        return d;
+      };
+
       let actualPrizeIndex = -1;
-      let minDiff = Math.PI * 2;
-      
+      // Prefer containment by arc; fallback to closest center for safety
       for (let i = 0; i < this.prizes.length; i++) {
-        // Calculate the center angle of this slice
-        let sliceCenter = (i * sliceAngle + this.currentRotation + sliceAngle / 2);
-        // Normalize to 0-2π
-        while (sliceCenter < 0) sliceCenter += Math.PI * 2;
-        while (sliceCenter >= Math.PI * 2) sliceCenter -= Math.PI * 2;
-        
-        // Calculate minimum angular distance to top (handling wrap-around)
-        let diff = Math.abs(sliceCenter - topAngle);
-        if (diff > Math.PI) {
-          diff = Math.PI * 2 - diff;
-        }
-        
-        // Find the slice with center closest to top
-        if (diff < minDiff) {
-          minDiff = diff;
+        const start = (i * sliceAngle + this.currentRotation);
+        const center = (start + sliceAngle / 2) % (Math.PI * 2);
+        const half = sliceAngle / 2;
+        const diff = Math.abs(angleDiff(topAngle, center));
+        if (diff <= half + 1e-6) {
           actualPrizeIndex = i;
+          break;
         }
       }
-      
-      if (actualPrizeIndex !== this.prizes.indexOf(prize)) {
-        // Use the actual prize that's at the top visually
-        // This ensures players get what they see
-        const actualPrize = this.prizes[actualPrizeIndex];
-        this.onSpinComplete?.(actualPrize);
-        this.showPrize(actualPrize);
-      } else {
-        // Perfect match - use the targeted prize
-        this.onSpinComplete?.(prize);
-        this.showPrize(prize);
+      if (actualPrizeIndex < 0) {
+        // Fallback: closest center
+        let min = Math.PI * 2;
+        for (let i = 0; i < this.prizes.length; i++) {
+          const start = (i * sliceAngle + this.currentRotation);
+          const center = (start + sliceAngle / 2) % (Math.PI * 2);
+          const diff = Math.abs(angleDiff(topAngle, center));
+          if (diff < min) { min = diff; actualPrizeIndex = i; }
+        }
       }
+
+      const visualPrize = this.prizes[Math.max(0, actualPrizeIndex)];
+      if (actualPrizeIndex !== this.prizes.indexOf(prize)) {
+        console.warn('Spinner mismatch detected. Granting visual prize instead.');
+      }
+      // Show prize popup; actual granting happens on Claim
+      this.showPrize(visualPrize);
       return;
     }
     
@@ -563,8 +580,15 @@ export class WheelOfFortune {
     document.head.appendChild(style);
     
     // Handle claim
-    const claimBtn = document.getElementById('claim-prize-btn');
+    const claimBtn = document.getElementById('claim-prize-btn') as HTMLButtonElement | null;
+    let claimed = false;
     claimBtn?.addEventListener('click', async () => {
+      if (claimed) return;
+      claimed = true;
+      if (claimBtn) {
+        claimBtn.disabled = true;
+        claimBtn.style.opacity = '0.6';
+      }
       await this.claimPrize(prize);
       prizeDisplay.remove();
       style.remove();
@@ -578,7 +602,7 @@ export class WheelOfFortune {
   private async claimPrize(prize: WheelPrize): Promise<void> {
     // This will be handled by the parent component
     if (this.onSpinComplete) {
-      this.onSpinComplete(prize);
+      this.onSpinComplete(prize, this.reservedSpinId || undefined);
     }
   }
   
@@ -608,7 +632,7 @@ export class WheelOfFortune {
   /**
    * Sets the spin complete callback
    */
-  public onComplete(callback: (prize: WheelPrize) => void): void {
+  public onComplete(callback: (prize: WheelPrize, spinId?: string) => void): void {
     this.onSpinComplete = callback;
   }
   

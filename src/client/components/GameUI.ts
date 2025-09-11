@@ -2,6 +2,8 @@
  * GameUI - Manages the UI overlay for the game
  * Handles all UI elements that sit above the game canvas
  */
+import { CoinStorageService } from '../services/CoinStorageService';
+import { HintStorageService } from '../services/HintStorageService';
 export class GameUI {
   private container: HTMLElement;
   private levelEl: HTMLElement;
@@ -382,10 +384,7 @@ export class GameUI {
    * Refresh all UI elements with latest data
    */
   public async refreshUI(): Promise<void> {
-    // Import services dynamically to avoid circular dependencies
-    const { CoinStorageService } = await import('../services/CoinStorageService');
-    const { HintStorageService } = await import('../services/HintStorageService');
-    
+    // Use statically imported services for consistency
     // Reload coins
     const coinService = CoinStorageService.getInstance();
     const coinData = await coinService.loadCoins();
