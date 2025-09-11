@@ -134,6 +134,10 @@ class App {
       }
     });
     
+    this.gameUI.onHowToPlay(() => {
+      this.showHowTo();
+    });
+    
     // Update initial values
     if (this.game) {
       this.gameUI.updateLevel(this.currentLevel);
@@ -185,11 +189,18 @@ class App {
         <button disabled class="btn-glass opacity-50 cursor-not-allowed py-3">Leaderboard (soon)</button>
       </div>
       <div class="mt-4 pt-4 border-t border-hw-surface-tertiary/20">
-        <div class="text-base text-hw-text-secondary mb-2">Settings</div>
-        <div class="flex gap-2 flex-wrap">
-          <button id="hw-howto" class="btn-glass text-sm">How to Play</button>
-          <button id="hw-motion" class="btn-glass text-sm">Reduced Motion: Off</button>
+        <div class="text-base text-hw-text-secondary mb-3">Settings</div>
+        <div class="toggle-option">
+          <label class="toggle-option-label">
+            <span class="toggle-option-icon">🎬</span>
+            <span>Reduce Motion</span>
+          </label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="hw-motion-toggle">
+            <span class="toggle-slider"></span>
+          </label>
         </div>
+        <button id="hw-howto" class="btn-glass w-full mt-2 text-sm">📖 How to Play</button>
       </div>
     `;
     el.appendChild(panel);
@@ -198,7 +209,7 @@ class App {
 
     // Wire buttons
     const levelBtn = panel.querySelector('#hw-level') as HTMLButtonElement;
-    const motionBtn = panel.querySelector('#hw-motion') as HTMLButtonElement;
+    const motionToggle = panel.querySelector('#hw-motion-toggle') as HTMLInputElement;
     const howBtn = panel.querySelector('#hw-howto') as HTMLButtonElement;
 
     levelBtn.onclick = async () => {
@@ -213,15 +224,15 @@ class App {
         this.hideMainMenu();
       });
     };
-    // Initialize button labels from stored prefs
-    motionBtn.textContent = `Reduced Motion: ${localStorage.getItem('hexaword_reduce_motion') === 'true' ? 'On' : 'Off'}`;
-    motionBtn.onclick = () => {
-      const current = localStorage.getItem('hexaword_reduce_motion') === 'true';
-      const next = !current;
-      localStorage.setItem('hexaword_reduce_motion', String(next));
-      motionBtn.textContent = `Reduced Motion: ${next ? 'On' : 'Off'}`;
+    // Initialize toggle from stored prefs
+    const currentMotionPref = localStorage.getItem('hexaword_reduce_motion') === 'true';
+    motionToggle.checked = currentMotionPref;
+    
+    motionToggle.onchange = () => {
+      const isEnabled = motionToggle.checked;
+      localStorage.setItem('hexaword_reduce_motion', String(isEnabled));
       const svc = (window as any).hwAnimSvc as any;
-      if (svc?.setReducedMotion) svc.setReducedMotion(next);
+      if (svc?.setReducedMotion) svc.setReducedMotion(isEnabled);
     };
     howBtn.onclick = async () => {
       // Focus effect: blur everything except the how-to modal
@@ -298,12 +309,20 @@ class App {
             try {
               this.setupUI();
               this.initializeGameUI();
+              // Track initial activity when game starts
+              this.trackUserActivity(level);
             } finally {
               resolve();
             }
           },
+          onWordFound: () => {
+            // Track progress whenever a word is found
+            this.trackUserActivity(level);
+          },
           onLevelComplete: async (lvl) => {
             this.showLevelCompleteOverlay(lvl);
+            // Track final progress
+            this.trackUserActivity(lvl);
           },
           onError: (error) => {
             console.error('Game error:', error);
@@ -439,6 +458,46 @@ class App {
     document.body.appendChild(el);
     this.fadeEl = el;
     return el;
+  }
+
+  // Track user activity for daily reminders
+  private async trackUserActivity(level: number): Promise<void> {
+    try {
+      // Get game progress if available
+      let solvedWords: string[] = [];
+      let solvedCells: string[] = [];
+      let totalWords = 6;
+      
+      if (this.game) {
+        // Get the actual game state
+        const foundWords = (this.game as any).foundWords;
+        const placedWords = (this.game as any).placedWords;
+        const solvedCellsSet = (this.game as any).solvedCells;
+        
+        if (foundWords) {
+          solvedWords = Array.from(foundWords);
+        }
+        if (solvedCellsSet) {
+          solvedCells = Array.from(solvedCellsSet);
+        }
+        if (placedWords) {
+          totalWords = placedWords.length;
+        }
+      }
+      
+      await fetch('/api/track-activity', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          level,
+          solvedWords,
+          solvedCells,
+          totalWords
+        })
+      });
+    } catch (error) {
+      console.log('Failed to track activity:', error);
+    }
   }
 
   // Screen transition using progressive blur service

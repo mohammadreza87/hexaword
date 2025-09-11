@@ -68,19 +68,46 @@ export class GameUI {
     panel.className = 'absolute top-8 right-1 hidden min-w-[200px] p-2 rounded-xl backdrop-blur-lg border shadow-2xl font-display pointer-events-auto';
     panel.style.cssText = 'background: rgba(26, 31, 43, 0.9); border-color: rgba(255, 255, 255, 0.08);';
     
-    // Menu items
-    const items = [
-      { label: 'Restart Level', id: 'restart-level' },
-      { label: 'Reduce Motion', id: 'toggle-motion' }
-    ];
+    // Restart button
+    const restartBtn = document.createElement('button');
+    restartBtn.id = 'restart-level';
+    restartBtn.textContent = '🔄 Restart Level';
+    restartBtn.className = 'block w-full text-left px-3 py-2 text-sm text-hw-text-primary hover:bg-hw-surface-secondary rounded-lg transition-colors mb-2';
+    panel.appendChild(restartBtn);
     
-    items.forEach(item => {
-      const btn = document.createElement('button');
-      btn.id = item.id;
-      btn.textContent = item.label;
-      btn.className = 'block w-full text-left px-3 py-2 text-sm text-hw-text-primary hover:bg-hw-surface-secondary rounded-lg transition-colors';
-      panel.appendChild(btn);
-    });
+    // How to Play button
+    const howToBtn = document.createElement('button');
+    howToBtn.id = 'how-to-play';
+    howToBtn.textContent = '📖 How to Play';
+    howToBtn.className = 'block w-full text-left px-3 py-2 text-sm text-hw-text-primary hover:bg-hw-surface-secondary rounded-lg transition-colors mb-2';
+    panel.appendChild(howToBtn);
+    
+    // Divider
+    const divider = document.createElement('div');
+    divider.className = 'border-t border-hw-surface-tertiary/20 my-2';
+    panel.appendChild(divider);
+    
+    // Reduce Motion toggle
+    const motionDiv = document.createElement('div');
+    motionDiv.className = 'toggle-option';
+    motionDiv.style.cssText = 'margin: 0; background: transparent; padding: 8px 12px;';
+    motionDiv.innerHTML = `
+      <label class="toggle-option-label" style="font-size: 13px;">
+        <span class="toggle-option-icon" style="font-size: 16px;">🎬</span>
+        <span>Reduce Motion</span>
+      </label>
+      <label class="toggle-switch" style="transform: scale(0.85);">
+        <input type="checkbox" id="in-game-motion-toggle">
+        <span class="toggle-slider"></span>
+      </label>
+    `;
+    panel.appendChild(motionDiv);
+    
+    // Initialize toggle state
+    const toggle = motionDiv.querySelector('#in-game-motion-toggle') as HTMLInputElement;
+    if (toggle) {
+      toggle.checked = localStorage.getItem('hexaword_reduce_motion') === 'true';
+    }
     
     return panel;
   }
@@ -242,13 +269,9 @@ export class GameUI {
   }
   
   public onToggleMotion(callback: () => void): void {
-    const motionBtn = this.menuPanel.querySelector('#toggle-motion');
-    motionBtn?.addEventListener('click', () => {
+    const motionToggle = this.menuPanel.querySelector('#in-game-motion-toggle') as HTMLInputElement;
+    motionToggle?.addEventListener('change', () => {
       callback();
-      const current = localStorage.getItem('hexaword_reduce_motion') === 'true';
-      if (motionBtn) {
-        motionBtn.textContent = `Reduce Motion: ${!current ? 'On' : 'Off'}`;
-      }
     });
   }
   
@@ -273,6 +296,14 @@ export class GameUI {
   public onShare(callback: () => void): void {
     this.shareBtn.addEventListener('click', () => {
       callback();
+    });
+  }
+  
+  public onHowToPlay(callback: () => void): void {
+    const howToBtn = this.menuPanel.querySelector('#how-to-play');
+    howToBtn?.addEventListener('click', () => {
+      callback();
+      this.menuPanel.classList.add('hidden');
     });
   }
   

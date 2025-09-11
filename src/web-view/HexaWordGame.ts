@@ -18,6 +18,7 @@ export interface GameConfig {
   theme?: 'dark' | 'light';
   onReady?: () => void;
   onError?: (error: Error) => void;
+  onWordFound?: (word: string) => void;
   onLevelComplete?: (level: number) => void;
 }
 
@@ -711,6 +712,10 @@ export class HexaWordGame {
     // Found a new word!
     this.foundWords.add(word.word);
     
+    // Call the onWordFound callback if provided
+    if (this.config.onWordFound) {
+      this.config.onWordFound(word.word);
+    }
     // Get layout for animation positions
     const rect = this.canvas.getBoundingClientRect();
     const layout = this.calculateLayout(rect.width, rect.height);
@@ -1271,7 +1276,7 @@ export class HexaWordGame {
       border: 1px solid rgba(255, 255, 255, 0.1);
       pointer-events: none;
     `;
-    instruction.textContent = 'Tap a letter to reveal';
+    instruction.textContent = 'Tap an empty cell to reveal letter';
     
     // Hide all UI elements except the target button
     const gameUI = document.getElementById('game-ui-overlay');

@@ -17,6 +17,7 @@ import colormindRouter from "./routes/colormind";
 import { requestLogger, errorHandler, Logger, asyncHandler } from "./middleware/errorHandler";
 import progressRouter from "./routes/progress";
 import shareRouter from "./routes/share";
+import schedulerRouter from "./routes/scheduler";
 
 const app = express();
 const logger = Logger.getInstance();
@@ -144,6 +145,7 @@ app.use(gameRouter);
 app.use(colormindRouter);
 app.use(progressRouter);
 app.use(shareRouter);
+app.use(schedulerRouter);
 
 // Error handler middleware (must be last)
 app.use(errorHandler);
