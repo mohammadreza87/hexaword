@@ -129,6 +129,128 @@
     50% { background-position: 100% 50%; }
   }
   
+  /* Beautiful input field with glassmorphism */
+  .input {
+    @apply w-full px-4 py-3 rounded-lg backdrop-blur-md border 
+           text-hw-text-primary placeholder:font-normal
+           transition-all duration-base
+           focus:outline-none focus:ring-2 
+           focus:border-hw-accent-primary;
+    background: rgba(42, 52, 70, 0.4);
+    border-color: rgba(255, 255, 255, 0.08);
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    font-size: 15px;
+  }
+  
+  .input::placeholder {
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 13px;
+    font-weight: 400;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+  }
+  
+  .input:hover {
+    background: rgba(42, 52, 70, 0.5);
+  }
+  
+  .input:focus {
+    background: rgba(42, 52, 70, 0.6);
+    border-color: rgba(31, 182, 255, 0.5);
+    box-shadow: 0 0 0 3px rgba(31, 182, 255, 0.1),
+                0 4px 12px rgba(31, 182, 255, 0.15);
+  }
+  
+  /* Word input with special styling */
+  .input-word {
+    @apply w-full px-4 py-3 rounded-lg backdrop-blur-md border 
+           text-hw-text-primary font-mono text-center
+           transition-all duration-base
+           focus:outline-none focus:ring-2 
+           focus:border-hw-accent-primary;
+    background: rgba(42, 52, 70, 0.4);
+    border-color: rgba(255, 255, 255, 0.08);
+    position: relative;
+    text-transform: uppercase;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+  }
+  
+  .input-word::placeholder {
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 12px;
+    font-weight: 400;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+  
+  .input-word:hover {
+    background: rgba(42, 52, 70, 0.5);
+  }
+  
+  .input-word:focus {
+    background: rgba(42, 52, 70, 0.6);
+    border-color: rgba(31, 182, 255, 0.5);
+    box-shadow: 0 0 0 3px rgba(31, 182, 255, 0.1),
+                0 4px 12px rgba(31, 182, 255, 0.15);
+  }
+  
+  /* Add word button styling */
+  .btn-add-word {
+    @apply btn-glass;
+    @apply flex items-center justify-center gap-2;
+    padding: 12px;
+    background: rgba(31, 182, 255, 0.1);
+    border-color: rgba(31, 182, 255, 0.2);
+    color: rgba(31, 182, 255, 0.9);
+    font-weight: 500;
+  }
+  
+  .btn-add-word:hover {
+    background: rgba(31, 182, 255, 0.2);
+    border-color: rgba(31, 182, 255, 0.4);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(31, 182, 255, 0.2);
+  }
+  
+  .btn-add-word:active {
+    transform: translateY(0);
+  }
+  
+  /* Utility class for glassmorphic scrollbars */
+  .scrollbar-glass {
+    /* Styles are defined in style.css */
+  }
+  
+  /* Scrollable container with fade indicators */
+  .scroll-fade {
+    @apply relative;
+  }
+  
+  .scroll-fade::before,
+  .scroll-fade::after {
+    @apply absolute left-0 right-2 h-4 pointer-events-none z-10 opacity-0 transition-opacity duration-300;
+    content: '';
+  }
+  
+  .scroll-fade::before {
+    @apply top-0;
+    background: linear-gradient(to bottom, rgba(42, 52, 70, 0.8), transparent);
+  }
+  
+  .scroll-fade::after {
+    @apply bottom-0;
+    background: linear-gradient(to top, rgba(42, 52, 70, 0.8), transparent);
+  }
+  
+  .scroll-fade.has-scroll::before,
+  .scroll-fade.has-scroll::after {
+    @apply opacity-100;
+  }
+  
   /* Toast notifications */
   .toast {
     @apply fixed bottom-4 left-1/2 -translate-x-1/2 z-notification

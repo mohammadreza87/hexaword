@@ -353,7 +353,7 @@ class App {
       <div class="flex flex-col gap-3 my-4">
         <button id="hw-level" class="btn-glass-primary py-3 text-lg">Level 1</button>
         <button disabled class="btn-glass opacity-50 cursor-not-allowed py-3">Daily Challenge (soon)</button>
-        <button disabled class="btn-glass opacity-50 cursor-not-allowed py-3">Make Your Level (soon)</button>
+        <button id="hw-create" class="btn-glass py-3">➕ Create Level</button>
         <button disabled class="btn-glass opacity-50 cursor-not-allowed py-3">Leaderboard (soon)</button>
         <button id="hw-test-wheel" class="btn-glass py-3">🎰 Test Wheel (Dev)</button>
         <button id="hw-reset" class="btn-glass py-3">🧹 Reset Progress (Dev)</button>
@@ -381,6 +381,7 @@ class App {
     const levelBtn = panel.querySelector('#hw-level') as HTMLButtonElement;
     const motionToggle = panel.querySelector('#hw-motion-toggle') as HTMLInputElement;
     const howBtn = panel.querySelector('#hw-howto') as HTMLButtonElement;
+    const createBtn = panel.querySelector('#hw-create') as HTMLButtonElement;
     const resetBtn = panel.querySelector('#hw-reset') as HTMLButtonElement;
 
     levelBtn.onclick = async () => {
@@ -433,6 +434,28 @@ class App {
         duration: 300
       });
       this.showHowTo();
+    };
+
+    // Create Level flow
+    createBtn.onclick = async () => {
+      if (this.menuBusy) return;
+      this.menuBusy = true;
+      try {
+        const { LevelCreator } = await import('./features/LevelCreator');
+        const creator = new LevelCreator();
+        const result = await creator.show();
+        if (result?.playNowId) {
+          // Load created level using user-levels init endpoint
+          await blurTransition.transitionWithBlur(async () => {
+            await this.playUserLevel(result.playNowId);
+            this.hideMainMenu();
+          }, { blurIntensity: 'lg', inDuration: 200, outDuration: 250 });
+        }
+      } catch (e) {
+        this.showToast('Failed to open level creator', 'error');
+      } finally {
+        this.menuBusy = false;
+      }
     };
     
     // Test wheel button handler
@@ -1013,6 +1036,35 @@ class App {
       toast.style.animation = 'slideUp 0.3s ease-out reverse';
       setTimeout(() => toast.remove(), 300);
     }, 3000);
+  }
+
+  // Load and play a specific user-created level by id
+  private async playUserLevel(id: string): Promise<void> {
+    try {
+      const res = await fetch(`/api/user-levels/${encodeURIComponent(id)}/init`);
+      if (!res.ok) throw new Error('Failed to init user level');
+      const d = await res.json();
+      const words: string[] = d.words?.slice?.(0, Math.min(6, d.words.length)) ?? [];
+      if (!this.game) {
+        await new Promise<void>((resolve, reject) => {
+          this.game = new HexaWordGame({
+            containerId: 'hex-grid-container',
+            words,
+            clue: d.clue || 'CUSTOM',
+            seed: d.seed,
+            gridRadius: 10,
+            level: 1,
+            theme: 'dark',
+            onReady: () => { try { this.setupUI(); this.initializeGameUI(); } finally { resolve(); } },
+            onError: (err) => { console.error(err); reject(err); }
+          });
+        });
+        return;
+      }
+      await this.game.loadLevel({ words, seed: d.seed, clue: d.clue, level: 1 });
+    } catch (e) {
+      this.showToast('Failed to load user level', 'error');
+    }
   }
   
   /**

@@ -187,3 +187,93 @@
 .toggle-option-icon {
   font-size: 18px;
 }
+
+/* Animation for error messages */
+@keyframes shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  10%, 30%, 50%, 70%, 90% {
+    transform: translateX(-2px);
+  }
+  20%, 40%, 60%, 80% {
+    transform: translateX(2px);
+  }
+}
+
+/* Fade in animation */
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Subtle scrollbar styling matching the design */
+.modal-content::-webkit-scrollbar,
+#lc-words::-webkit-scrollbar,
+.scrollbar-glass::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.modal-content::-webkit-scrollbar-track,
+#lc-words::-webkit-scrollbar-track,
+.scrollbar-glass::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 3px;
+}
+
+.modal-content::-webkit-scrollbar-thumb,
+#lc-words::-webkit-scrollbar-thumb,
+.scrollbar-glass::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  transition: background 0.2s ease;
+}
+
+.modal-content::-webkit-scrollbar-thumb:hover,
+#lc-words::-webkit-scrollbar-thumb:hover,
+.scrollbar-glass::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.modal-content::-webkit-scrollbar-thumb:active,
+#lc-words::-webkit-scrollbar-thumb:active,
+.scrollbar-glass::-webkit-scrollbar-thumb:active {
+  background: rgba(31, 182, 255, 0.4);
+}
+
+/* Corner where scrollbars meet */
+.modal-content::-webkit-scrollbar-corner,
+#lc-words::-webkit-scrollbar-corner,
+.scrollbar-glass::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox scrollbar - subtle style */
+.modal-content,
+#lc-words,
+.scrollbar-glass {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+/* Add smooth scroll behavior */
+.modal-content,
+#lc-words {
+  scroll-behavior: smooth;
+}
+
+/* Subtle fade effect for scrollable containers */
+#lc-words {
+  position: relative;
+}

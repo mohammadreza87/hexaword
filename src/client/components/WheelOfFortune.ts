@@ -484,9 +484,6 @@ export class WheelOfFortune {
       }
 
       const visualPrize = this.prizes[Math.max(0, actualPrizeIndex)];
-      if (actualPrizeIndex !== this.prizes.indexOf(prize)) {
-        console.warn('Spinner mismatch detected. Granting visual prize instead.');
-      }
       // Show prize popup; actual granting happens on Claim
       this.showPrize(visualPrize);
       return;
