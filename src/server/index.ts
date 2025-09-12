@@ -25,6 +25,7 @@ import dailyRewardRouter from "./routes/dailyReward";
 import userLevelsRouter from "./routes/userLevels";
 import leaderboardRouter from "./routes/leaderboard";
 import creatorMigrationRouter from "./routes/creatorMigration";
+import dailyChallengeRouter from "./routes/dailyChallenge";
 
 const app = express();
 const logger = Logger.getInstance();
@@ -160,6 +161,7 @@ app.use(dailyRewardRouter);
 app.use(userLevelsRouter);
 app.use(leaderboardRouter);
 app.use(creatorMigrationRouter);
+app.use(dailyChallengeRouter);
 
 // Error handler middleware (must be last)
 app.use(errorHandler);

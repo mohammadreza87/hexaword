@@ -21,6 +21,13 @@ interface CreatorEntry {
   score: number; // Combined score for ranking
 }
 
+interface DailyChallengeEntry {
+  rank: number;
+  username: string;
+  time: number;
+  displayTime: string;
+}
+
 interface LeaderboardData {
   global: LeaderboardEntry[];
   weekly: LeaderboardEntry[];
@@ -29,6 +36,7 @@ interface LeaderboardData {
   creatorsByPlays: CreatorEntry[];
   creatorsByUpvotes: CreatorEntry[];
   creatorsByShares: CreatorEntry[];
+  dailyChallenge?: DailyChallengeEntry[];
   userRank?: {
     global: number;
     weekly: number;
@@ -37,13 +45,14 @@ interface LeaderboardData {
     creatorPlays?: number;
     creatorUpvotes?: number;
     creatorShares?: number;
+    dailyChallenge?: number;
   };
 }
 
 export class Leaderboard {
   private overlay!: HTMLDivElement;
   private panel!: HTMLDivElement;
-  private currentMainTab: 'levels' | 'creators' = 'levels';
+  private currentMainTab: 'levels' | 'creators' | 'dailychallenge' = 'levels';
   private currentLevelSubTab: 'global' | 'weekly' | 'daily' = 'global';
   private currentCreatorSubTab: 'overall' | 'plays' | 'upvotes' | 'shares' = 'overall';
   private data: LeaderboardData | null = null;
@@ -91,12 +100,16 @@ export class Leaderboard {
       
       <!-- Main Tabs -->
       <div class="flex border-b-2 border-hw-surface-tertiary/50 bg-gradient-to-b from-hw-surface-primary to-hw-surface-secondary">
-        <button data-main-tab="levels" class="lb-main-tab flex-1 px-4 py-3 text-sm font-semibold transition-all relative">
+        <button data-main-tab="levels" class="lb-main-tab flex-1 px-3 py-3 text-sm font-semibold transition-all relative">
           <span class="relative z-10">🎮 Levels</span>
           <div class="lb-main-tab-indicator absolute bottom-0 left-0 right-0 h-0.5 bg-purple-500 transform transition-transform"></div>
         </button>
-        <button data-main-tab="creators" class="lb-main-tab flex-1 px-4 py-3 text-sm font-semibold transition-all relative">
-          <span class="relative z-10">🎨 Level Creators</span>
+        <button data-main-tab="creators" class="lb-main-tab flex-1 px-3 py-3 text-sm font-semibold transition-all relative">
+          <span class="relative z-10">🎨 Creators</span>
+          <div class="lb-main-tab-indicator absolute bottom-0 left-0 right-0 h-0.5 bg-purple-500 transform scale-x-0 transition-transform"></div>
+        </button>
+        <button data-main-tab="dailychallenge" class="lb-main-tab flex-1 px-3 py-3 text-sm font-semibold transition-all relative">
+          <span class="relative z-10">🏆 Daily</span>
           <div class="lb-main-tab-indicator absolute bottom-0 left-0 right-0 h-0.5 bg-purple-500 transform scale-x-0 transition-transform"></div>
         </button>
       </div>
@@ -184,7 +197,7 @@ export class Leaderboard {
     const mainTabs = this.panel.querySelectorAll('.lb-main-tab');
     mainTabs.forEach(tab => {
       tab.addEventListener('click', () => {
-        const tabName = (tab as HTMLElement).dataset.mainTab as 'levels' | 'creators';
+        const tabName = (tab as HTMLElement).dataset.mainTab as 'levels' | 'creators' | 'dailychallenge';
         if (tabName && tabName !== this.currentMainTab) {
           this.currentMainTab = tabName;
           this.updateTabStyles();
@@ -273,6 +286,10 @@ export class Leaderboard {
           }
         }
       });
+    } else if (this.currentMainTab === 'dailychallenge') {
+      // Hide both sub tab containers for daily challenge
+      levelSubTabsContainer.classList.add('hidden');
+      creatorSubTabsContainer.classList.add('hidden');
     } else {
       levelSubTabsContainer.classList.remove('hidden');
       creatorSubTabsContainer.classList.add('hidden');
@@ -302,10 +319,22 @@ export class Leaderboard {
 
   private async loadLeaderboardData(): Promise<void> {
     try {
-      const response = await fetch('/api/leaderboard');
+      const [leaderboardResponse, dailyChallengeResponse] = await Promise.all([
+        fetch('/api/leaderboard'),
+        fetch('/api/daily-challenge/leaderboard')
+      ]);
       
-      if (response.ok) {
-        this.data = await response.json();
+      if (leaderboardResponse.ok) {
+        this.data = await leaderboardResponse.json();
+        
+        // Add daily challenge data if available
+        if (dailyChallengeResponse.ok) {
+          const dcData = await dailyChallengeResponse.json();
+          this.data.dailyChallenge = dcData.leaderboard;
+          if (this.data.userRank) {
+            this.data.userRank.dailyChallenge = dcData.userRank;
+          }
+        }
         
         // If creators list is empty, try to migrate existing levels
         if (!this.data.creators || this.data.creators.length === 0) {
@@ -314,7 +343,11 @@ export class Leaderboard {
           // Reload data after migration
           const retryResponse = await fetch('/api/leaderboard');
           if (retryResponse.ok) {
-            this.data = await retryResponse.json();
+            const retryData = await retryResponse.json();
+            this.data.creators = retryData.creators;
+            this.data.creatorsByPlays = retryData.creatorsByPlays;
+            this.data.creatorsByUpvotes = retryData.creatorsByUpvotes;
+            this.data.creatorsByShares = retryData.creatorsByShares;
           }
         }
         
@@ -363,6 +396,8 @@ export class Leaderboard {
     
     if (this.currentMainTab === 'creators') {
       this.renderCreatorLeaderboard();
+    } else if (this.currentMainTab === 'dailychallenge') {
+      this.renderDailyChallengeLeaderboard();
     } else {
       this.renderLevelLeaderboard();
     }
@@ -535,6 +570,95 @@ export class Leaderboard {
           <div class="text-right">
             <div class="text-lg font-bold ${isTopThree ? 'text-purple-400' : 'text-hw-text-primary'}">${entry.score.toLocaleString()}</div>
             <div class="text-xs text-hw-text-secondary">${scoreLabel}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  private renderDailyChallengeLeaderboard(): void {
+    const listContainer = this.panel.querySelector('#lb-list') as HTMLDivElement;
+    const emptyEl = this.panel.querySelector('#lb-empty') as HTMLDivElement;
+    const userStatsEl = this.panel.querySelector('#lb-user-stats') as HTMLDivElement;
+    
+    const entries = this.data!.dailyChallenge;
+    
+    if (!entries || entries.length === 0) {
+      listContainer.innerHTML = '';
+      emptyEl.classList.remove('hidden');
+      userStatsEl.classList.add('hidden');
+      return;
+    }
+    
+    emptyEl.classList.add('hidden');
+    
+    // Update user stats if available
+    if (this.data!.userRank?.dailyChallenge) {
+      userStatsEl.classList.remove('hidden');
+      const userRankEl = userStatsEl.querySelector('#lb-user-rank');
+      if (userRankEl) {
+        userRankEl.textContent = `#${this.data!.userRank.dailyChallenge}`;
+      }
+      // Update score display to show time
+      const userScoreEl = userStatsEl.querySelector('#lb-user-score');
+      const userScoreLabelEl = userStatsEl.querySelector('#lb-user-score')?.nextElementSibling;
+      if (userScoreEl && entries.find(e => e.rank === this.data!.userRank!.dailyChallenge)) {
+        const userEntry = entries.find(e => e.rank === this.data!.userRank!.dailyChallenge);
+        if (userEntry) {
+          userScoreEl.textContent = userEntry.displayTime;
+          if (userScoreLabelEl) {
+            userScoreLabelEl.textContent = 'completion time';
+          }
+        }
+      }
+    } else {
+      userStatsEl.classList.add('hidden');
+    }
+    
+    // Get today's date for the header
+    const today = new Date().toLocaleDateString('en-US', { 
+      weekday: 'long', 
+      month: 'long', 
+      day: 'numeric', 
+      year: 'numeric' 
+    });
+    
+    // Add a date header
+    const dateHeader = `
+      <div class="mb-3 p-2 bg-gradient-to-r from-purple-600/20 to-purple-800/20 rounded-lg text-center">
+        <div class="text-sm font-semibold text-purple-400">Today's Challenge</div>
+        <div class="text-xs text-hw-text-secondary">${today}</div>
+      </div>
+    `;
+    
+    // Render entries
+    listContainer.innerHTML = dateHeader + entries.map((entry) => {
+      const isTopThree = entry.rank <= 3;
+      const medal = entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : entry.rank === 3 ? '🥉' : '';
+      
+      // Check if this is the current user
+      const isCurrentUser = this.data!.userRank?.dailyChallenge === entry.rank;
+      
+      return `
+        <div class="flex items-center gap-3 p-3 rounded-lg ${isCurrentUser ? 'bg-purple-500/20 border border-purple-500/30' : 'bg-hw-surface-secondary/50 hover:bg-hw-surface-secondary/70'} transition-all ${isTopThree && !isCurrentUser ? 'border border-purple-500/20' : ''}">
+          <div class="w-10 text-center">
+            ${medal || `<span class="text-hw-text-secondary text-sm font-medium">#${entry.rank}</span>`}
+          </div>
+          
+          <div class="flex-1 flex items-center gap-3">
+            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-700 flex items-center justify-center text-white text-xs font-bold">
+              ${entry.username.charAt(0).toUpperCase()}
+            </div>
+            <div class="text-sm font-medium text-hw-text-primary">
+              ${this.escapeHtml(entry.username)}${isCurrentUser ? ' (You)' : ''}
+            </div>
+          </div>
+          
+          <div class="text-right">
+            <div class="text-lg font-bold ${isTopThree ? 'text-purple-400' : 'text-hw-text-primary'}">
+              ${entry.displayTime}
+            </div>
+            <div class="text-xs text-hw-text-secondary">completion time</div>
           </div>
         </div>
       `;

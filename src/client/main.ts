@@ -362,7 +362,10 @@ class App {
       </div>
       <div class="flex flex-col gap-2 my-3">
         <button id="hw-level" class="btn-glass-primary py-2 text-sm">Level 1</button>
-        <button disabled class="btn-glass opacity-50 cursor-not-allowed py-2 text-sm">Daily Challenge (soon)</button>
+        <button id="hw-daily-challenge" class="btn-glass py-2 text-sm relative">
+          <span>🏆 Daily Challenge</span>
+          <span id="dc-streak-badge" class="hidden absolute -top-1 -right-1 bg-orange-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold"></span>
+        </button>
         <button id="hw-create" class="btn-glass py-2 text-sm">📝 My Levels</button>
         <button id="hw-leaderboard" class="btn-glass py-2 text-sm">🏆 Leaderboard</button>
         <button id="hw-test-wheel" class="btn-glass py-2 text-sm">🎰 Test Wheel (Dev)</button>
@@ -440,6 +443,29 @@ class App {
         this.menuBusy = false;
       }
     };
+    
+    // Daily Challenge button handler
+    const dailyChallengeBtn = el.querySelector('#hw-daily-challenge') as HTMLButtonElement;
+    dailyChallengeBtn.onclick = async () => {
+      if (this.menuBusy) return;
+      
+      try {
+        const { DailyChallenge } = await import('./features/DailyChallenge');
+        const dailyChallenge = new DailyChallenge();
+        const result = await dailyChallenge.show();
+        
+        if (result?.action === 'play' && result.challengeData) {
+          // Start the daily challenge game
+          await this.startDailyChallenge(result.challengeData);
+        }
+      } catch (error) {
+        console.error('Failed to show daily challenge:', error);
+        this.showToast('Failed to load daily challenge', 'error');
+      }
+    };
+    
+    // Check for active streak and show badge
+    this.updateStreakBadge();
     
     // Leaderboard button handler
     const leaderboardBtn = el.querySelector('#hw-leaderboard') as HTMLButtonElement;
@@ -1329,6 +1355,247 @@ class App {
       loadingOverlay.hide();
       this.showToast('Failed to load user level', 'error');
     }
+  }
+  
+  /**
+   * Update streak badge on daily challenge button
+   */
+  private async updateStreakBadge(): Promise<void> {
+    try {
+      const response = await fetch('/api/daily-challenge');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.userStreak && data.userStreak.currentStreak > 0) {
+          const badge = document.querySelector('#dc-streak-badge') as HTMLElement;
+          if (badge) {
+            badge.textContent = `${data.userStreak.currentStreak}🔥`;
+            badge.classList.remove('hidden');
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch streak:', error);
+    }
+  }
+  
+  /**
+   * Start daily challenge game
+   */
+  private async startDailyChallenge(challengeData: any): Promise<void> {
+    const startTime = Date.now();
+    let hintsUsed = 0;
+    
+    // Track hint usage
+    const originalGame = this.game;
+    
+    await this.fadeTransition(async () => {
+      if (!this.game) {
+        await new Promise<void>((resolve, reject) => {
+          this.game = new HexaWordGame({
+            containerId: 'hex-grid-container',
+            words: challengeData.words,
+            clue: challengeData.clue,
+            seed: challengeData.seed,
+            gridRadius: 10,
+            level: 1,
+            theme: 'dark',
+            isDailyChallenge: true,
+            onReady: () => {
+              try {
+                this.setupUI();
+                this.initializeGameUI();
+              } finally {
+                resolve();
+              }
+            },
+            onError: (err) => {
+              console.error(err);
+              reject(err);
+            },
+            onLevelComplete: async () => {
+              const completionTime = Math.round((Date.now() - startTime) / 1000);
+              await this.completeDailyChallenge(completionTime, hintsUsed);
+            },
+            onHintUsed: () => {
+              hintsUsed++;
+            }
+          });
+        });
+      } else {
+        await this.game.loadLevel({
+          words: challengeData.words,
+          seed: challengeData.seed,
+          clue: challengeData.clue,
+          level: 1
+        });
+        
+        // Set up completion handler
+        (this.game as any).config.isDailyChallenge = true;
+        (this.game as any).config.onLevelComplete = async () => {
+          const completionTime = Math.round((Date.now() - startTime) / 1000);
+          await this.completeDailyChallenge(completionTime, hintsUsed);
+        };
+      }
+      
+      this.hideMainMenu();
+    });
+  }
+  
+  /**
+   * Complete daily challenge and submit results
+   */
+  private async completeDailyChallenge(completionTime: number, hintsUsed: number): Promise<void> {
+    loadingOverlay.show('Submitting results...');
+    
+    try {
+      const response = await fetch('/api/daily-challenge/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ completionTime, hintsUsed })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        loadingOverlay.hide();
+        
+        // Show completion screen
+        await this.showDailyChallengeComplete(data);
+      } else {
+        loadingOverlay.hide();
+        const error = await response.json();
+        if (error.error === 'Already completed today\'s challenge') {
+          this.showToast('Already completed today\'s challenge', 'warning');
+        } else {
+          this.showToast('Failed to submit results', 'error');
+        }
+      }
+    } catch (error) {
+      loadingOverlay.hide();
+      console.error('Failed to complete daily challenge:', error);
+      this.showToast('Failed to submit results', 'error');
+    }
+  }
+  
+  /**
+   * Show daily challenge completion screen
+   */
+  private async showDailyChallengeComplete(data: any): Promise<void> {
+    const overlay = document.createElement('div');
+    overlay.className = 'fixed inset-0 bg-black/50 backdrop-blur-sm z-[10000] flex items-center justify-center';
+    
+    const panel = document.createElement('div');
+    panel.className = 'bg-gradient-to-br from-hw-surface-primary to-hw-surface-secondary rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6';
+    panel.style.transform = 'scale(0.85)';
+    
+    const { completion, streak, coins, streakBonus, stats } = data;
+    
+    panel.innerHTML = `
+      <div class="text-center mb-4">
+        <div class="text-3xl mb-2">🎆</div>
+        <h2 class="text-2xl font-bold text-hw-text-primary">Daily Challenge Complete!</h2>
+      </div>
+      
+      <div class="space-y-3">
+        <!-- Time and Hints -->
+        <div class="bg-hw-surface-tertiary/30 rounded-lg p-3">
+          <div class="flex justify-between items-center">
+            <span class="text-sm text-hw-text-secondary">Time</span>
+            <span class="text-lg font-bold text-hw-text-primary">${this.formatTime(completion.completionTime)}</span>
+          </div>
+          <div class="flex justify-between items-center mt-2">
+            <span class="text-sm text-hw-text-secondary">Hints Used</span>
+            <span class="text-lg font-bold text-hw-text-primary">${completion.hintsUsed}</span>
+          </div>
+        </div>
+        
+        <!-- Streak Info -->
+        ${streak ? `
+          <div class="bg-gradient-to-r from-orange-500/20 to-red-500/20 rounded-lg p-3">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="text-2xl">🔥</span>
+                <div>
+                  <div class="text-sm font-semibold text-orange-400">${streak.currentStreak} Day Streak!</div>
+                  ${streakBonus > 0 ? `<div class="text-xs text-hw-text-secondary">Bonus: +${streakBonus} coins</div>` : ''}
+                </div>
+              </div>
+            </div>
+          </div>
+        ` : ''}
+        
+        <!-- Rewards -->
+        <div class="bg-gradient-to-r from-yellow-500/20 to-amber-500/20 rounded-lg p-3">
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-hw-text-secondary">Total Coins Earned</span>
+            <span class="text-xl font-bold text-yellow-400">🪙 ${coins}</span>
+          </div>
+        </div>
+        
+        <!-- Global Stats -->
+        <div class="text-center text-xs text-hw-text-secondary mt-3">
+          ${stats.fastestTime && completion.completionTime === stats.fastestTime ? 
+            '<div class="text-purple-400 font-bold mb-1">🏆 NEW RECORD! You have the fastest time!</div>' : 
+            `<div>Fastest: ${this.formatTime(stats.fastestTime)} by ${stats.fastestPlayer}</div>`
+          }
+          <div>${stats.totalPlayers} players completed today</div>
+        </div>
+      </div>
+      
+      <div class="flex gap-2 mt-6">
+        <button id="dc-share" class="flex-1 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-semibold py-2.5 rounded-lg transition-all">
+          Share Results
+        </button>
+        <button id="dc-done" class="flex-1 bg-hw-surface-tertiary/50 hover:bg-hw-surface-tertiary/70 text-hw-text-primary font-semibold py-2.5 rounded-lg transition-colors">
+          Done
+        </button>
+      </div>
+    `;
+    
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+    
+    // Button handlers
+    const shareBtn = panel.querySelector('#dc-share');
+    if (shareBtn) {
+      shareBtn.addEventListener('click', () => {
+        this.shareDailyChallengeResults(completion, streak);
+      });
+    }
+    
+    const doneBtn = panel.querySelector('#dc-done');
+    if (doneBtn) {
+      doneBtn.addEventListener('click', () => {
+        overlay.remove();
+        this.showMainMenu();
+      });
+    }
+  }
+  
+  /**
+   * Share daily challenge results
+   */
+  private shareDailyChallengeResults(completion: any, streak: any): void {
+    const time = this.formatTime(completion.completionTime);
+    const hints = completion.hintsUsed;
+    const streakText = streak ? `🔥 ${streak.currentStreak} day streak` : '';
+    
+    const text = `Hexaword Daily Challenge #${new Date().toISOString().split('T')[0]}\n⏱️ ${time} | 💡 ${hints} hints\n${streakText}\n\nPlay at hexaword.reddit.com`;
+    
+    // Copy to clipboard
+    navigator.clipboard.writeText(text).then(() => {
+      this.showToast('Results copied to clipboard!', 'info');
+    }).catch(() => {
+      this.showToast('Failed to copy results', 'error');
+    });
+  }
+  
+  /**
+   * Format time helper
+   */
+  private formatTime(seconds: number): string {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   }
   
   /**
