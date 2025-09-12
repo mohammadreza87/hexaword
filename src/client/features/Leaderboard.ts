@@ -74,6 +74,173 @@ export class Leaderboard {
       }
     });
   }
+  
+  async fetchData(): Promise<LeaderboardData> {
+    const response = await fetch('/api/leaderboard');
+    if (!response.ok) {
+      throw new Error('Failed to load leaderboard');
+    }
+    const data = await response.json();
+    
+    // Also fetch daily challenge leaderboard
+    try {
+      const dcResponse = await fetch('/api/daily-challenge/leaderboard');
+      if (dcResponse.ok) {
+        const dcData = await dcResponse.json();
+        data.dailyChallenge = dcData.leaderboard;
+        if (data.userRank && dcData.userRank) {
+          data.userRank.dailyChallenge = dcData.userRank;
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load daily challenge leaderboard:', error);
+    }
+    
+    return data;
+  }
+  
+  renderContent(data: LeaderboardData): string {
+    this.data = data;
+    
+    // Set up event delegation for tab switching after content is rendered
+    setTimeout(() => {
+      const container = document.getElementById('leaderboard-content');
+      if (container) {
+        // Remove any existing listeners
+        const oldButtons = container.querySelectorAll('[data-leaderboard-tab]');
+        oldButtons.forEach(btn => {
+          const newBtn = btn.cloneNode(true);
+          btn.parentNode?.replaceChild(newBtn, btn);
+        });
+        
+        // Add new listener with delegation
+        container.addEventListener('click', (e) => {
+          const target = e.target as HTMLElement;
+          const button = target.closest('[data-leaderboard-tab]') as HTMLElement;
+          if (button) {
+            const tabName = button.dataset.leaderboardTab;
+            if (tabName) {
+              this.switchTab(tabName as 'levels' | 'creators' | 'daily');
+            }
+          }
+        });
+      }
+    }, 0);
+    
+    // Build the leaderboard content HTML (without inline onclick handlers)
+    return `
+      <div class="max-w-4xl mx-auto">
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-purple-600 to-purple-800 px-6 py-4 rounded-t-2xl">
+          <h2 class="text-2xl font-bold text-white">🏆 Leaderboard</h2>
+          <p class="text-purple-200 text-sm mt-1">Compete with players worldwide</p>
+        </div>
+        
+        <!-- Tab Navigation -->
+        <div class="bg-hw-surface-secondary/50 border-b border-hw-surface-tertiary">
+          <div class="flex">
+            <button data-leaderboard-tab="levels" class="flex-1 py-3 text-sm font-semibold ${this.currentMainTab === 'levels' ? 'text-hw-accent-primary border-b-2 border-hw-accent-primary' : 'text-hw-text-secondary'}">
+              Levels
+            </button>
+            <button data-leaderboard-tab="creators" class="flex-1 py-3 text-sm font-semibold ${this.currentMainTab === 'creators' ? 'text-hw-accent-primary border-b-2 border-hw-accent-primary' : 'text-hw-text-secondary'}">
+              Creators
+            </button>
+            <button data-leaderboard-tab="daily" class="flex-1 py-3 text-sm font-semibold ${this.currentMainTab === 'dailychallenge' ? 'text-hw-accent-primary border-b-2 border-hw-accent-primary' : 'text-hw-text-secondary'}">
+              Daily Challenge
+            </button>
+          </div>
+        </div>
+        
+        <!-- Content Area -->
+        <div class="bg-hw-surface-primary/50 p-4 rounded-b-2xl">
+          ${this.renderTabContent()}
+        </div>
+      </div>
+    `;
+  }
+  
+  private switchTab(tabName: 'levels' | 'creators' | 'daily'): void {
+    // Update the current tab based on the name
+    if (tabName === 'levels') {
+      this.currentMainTab = 'levels';
+    } else if (tabName === 'creators') {
+      this.currentMainTab = 'creators';
+    } else if (tabName === 'daily') {
+      this.currentMainTab = 'dailychallenge';
+    }
+    
+    // Re-render the content
+    const container = document.getElementById('leaderboard-content');
+    if (container && this.data) {
+      container.innerHTML = this.renderContent(this.data);
+    }
+  }
+  
+  private renderTabContent(): string {
+    if (!this.data) return '<div class="text-center py-8 text-hw-text-secondary">Loading...</div>';
+    
+    if (this.currentMainTab === 'levels') {
+      return this.renderLevelsTab();
+    } else if (this.currentMainTab === 'creators') {
+      return this.renderCreatorsTab();
+    } else if (this.currentMainTab === 'dailychallenge') {
+      return this.renderDailyTab();
+    }
+    return '';
+  }
+  
+  private renderLevelsTab(): string {
+    const entries = this.currentLevelSubTab === 'global' ? this.data?.global :
+                   this.currentLevelSubTab === 'weekly' ? this.data?.weekly :
+                   this.data?.daily;
+    
+    return `
+      <div class="space-y-2">
+        ${entries?.map(entry => `
+          <div class="flex items-center gap-3 p-3 rounded-lg bg-hw-surface-secondary/30">
+            <div class="w-8 text-center font-bold text-hw-text-secondary">#${entry.rank}</div>
+            <div class="flex-1 font-medium text-hw-text-primary">${entry.username}</div>
+            <div class="text-sm font-bold text-hw-accent-primary">${entry.score.toLocaleString()}</div>
+          </div>
+        `).join('') || '<div class="text-center py-8 text-hw-text-secondary">No entries yet</div>'}
+      </div>
+    `;
+  }
+  
+  private renderCreatorsTab(): string {
+    const entries = this.currentCreatorSubTab === 'overall' ? this.data?.creators :
+                   this.currentCreatorSubTab === 'plays' ? this.data?.creatorsByPlays :
+                   this.currentCreatorSubTab === 'upvotes' ? this.data?.creatorsByUpvotes :
+                   this.data?.creatorsByShares;
+    
+    return `
+      <div class="space-y-2">
+        ${entries?.map(entry => `
+          <div class="flex items-center gap-3 p-3 rounded-lg bg-hw-surface-secondary/30">
+            <div class="w-8 text-center font-bold text-hw-text-secondary">#${entry.rank}</div>
+            <div class="flex-1 font-medium text-hw-text-primary">${entry.username}</div>
+            <div class="text-sm font-bold text-hw-accent-primary">${entry.score.toLocaleString()}</div>
+          </div>
+        `).join('') || '<div class="text-center py-8 text-hw-text-secondary">No entries yet</div>'}
+      </div>
+    `;
+  }
+  
+  private renderDailyTab(): string {
+    const entries = this.data?.dailyChallenge;
+    
+    return `
+      <div class="space-y-2">
+        ${entries?.map(entry => `
+          <div class="flex items-center gap-3 p-3 rounded-lg bg-hw-surface-secondary/30">
+            <div class="w-8 text-center font-bold text-hw-text-secondary">#${entry.rank}</div>
+            <div class="flex-1 font-medium text-hw-text-primary">${entry.username}</div>
+            <div class="text-sm font-bold text-hw-accent-primary">${entry.displayTime}</div>
+          </div>
+        `).join('') || '<div class="text-center py-8 text-hw-text-secondary">No entries yet</div>'}
+      </div>
+    `;
+  }
 
   private buildUI(): void {
     this.overlay = document.createElement('div');
@@ -338,7 +505,7 @@ export class Leaderboard {
         
         // If creators list is empty, try to migrate existing levels
         if (!this.data.creators || this.data.creators.length === 0) {
-          console.log('No creators found, attempting migration...');
+          // console.log('No creators found, attempting migration...');
           await this.migrateCreatorStats();
           // Reload data after migration
           const retryResponse = await fetch('/api/leaderboard');
@@ -371,7 +538,7 @@ export class Leaderboard {
       
       if (response.ok) {
         const result = await response.json();
-        console.log('Migration complete:', result);
+        // console.log('Migration complete:', result);
       } else {
         console.error('Migration failed:', response.status);
       }

@@ -90,10 +90,12 @@ export class CrosswordGenerator {
         - seededTiebreak(this.config.seed || 'default', b.word);
     });
     
-    console.log('Word match scores:', wordObjs.map(w => ({ 
-      word: w.word, 
-      matches: w.totalMatches 
-    })));
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Word match scores:', wordObjs.map(w => ({
+        word: w.word,
+        matches: w.totalMatches
+      })));
+    }
     
     return wordObjs;
   }

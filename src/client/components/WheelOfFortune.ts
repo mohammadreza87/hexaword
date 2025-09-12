@@ -74,16 +74,27 @@ export class WheelOfFortune {
     
     // Update spin button with token count
     const spinBtn = document.getElementById('wheel-spin-btn') as HTMLButtonElement;
+    const bottomSpinBtn = document.getElementById('wheel-spin-btn-bottom') as HTMLButtonElement;
     if (spinBtn) {
-      if (this.tokens === 999) {
-        // Test mode - unlimited spins
-        spinBtn.innerHTML = `SPIN<br><span style="font-size: 10px">TEST</span>`;
-      } else if (this.tokens > 0) {
+      if (this.tokens > 0) {
         spinBtn.innerHTML = `SPIN<br><span style="font-size: 10px">${this.tokens} left</span>`;
+        spinBtn.disabled = false;
+        spinBtn.style.opacity = '1';
       } else {
         spinBtn.disabled = true;
         spinBtn.style.opacity = '0.5';
         spinBtn.innerHTML = 'No Tokens';
+      }
+    }
+    if (bottomSpinBtn) {
+      if (this.tokens > 0) {
+        bottomSpinBtn.innerHTML = `🎰 SPIN (${this.tokens} tokens)`;
+        bottomSpinBtn.disabled = false;
+        bottomSpinBtn.style.opacity = '1';
+      } else {
+        bottomSpinBtn.disabled = true;
+        bottomSpinBtn.style.opacity = '0.5';
+        bottomSpinBtn.innerHTML = '🎰 No Tokens Available';
       }
     }
     
@@ -220,6 +231,32 @@ export class WheelOfFortune {
     
     content.appendChild(wheelContainer);
     
+    // Bottom spin button for better UX
+    const bottomSpinBtn = document.createElement('button');
+    bottomSpinBtn.id = 'wheel-spin-btn-bottom';
+    bottomSpinBtn.style.cssText = `
+      padding: 12px 32px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border: none;
+      color: #fff;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+      margin-top: 8px;
+    `;
+    bottomSpinBtn.innerHTML = '🎰 SPIN';
+    bottomSpinBtn.addEventListener('click', () => this.spin());
+    bottomSpinBtn.addEventListener('mouseenter', () => {
+      bottomSpinBtn.style.transform = 'scale(1.05)';
+    });
+    bottomSpinBtn.addEventListener('mouseleave', () => {
+      bottomSpinBtn.style.transform = 'scale(1)';
+    });
+    content.appendChild(bottomSpinBtn);
+    
     // Close button
     const closeBtn = document.createElement('button');
     closeBtn.style.cssText = `
@@ -315,12 +352,12 @@ export class WheelOfFortune {
       ctx.fillStyle = '#fff';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(prize.icon, radius * 0.55, -10);
+      ctx.fillText(prize.icon, radius * 0.72, -10);
       
       // Text (number/multiplier) - larger for better quality
       ctx.font = 'bold 24px sans-serif';
       ctx.fillStyle = '#fff';
-      ctx.fillText(prize.name, radius * 0.55, 24);
+      ctx.fillText(prize.name, radius * 0.72, 24);
       
       ctx.restore();
     });
@@ -339,15 +376,20 @@ export class WheelOfFortune {
   private async spin(): Promise<void> {
     if (this.isSpinning) return;
     
-    // Only check tokens if not in test mode (999 = test mode)
-    if (this.tokens !== 999 && this.tokens <= 0) return; // No tokens, can't spin
+    // Check if we have tokens
+    if (this.tokens <= 0) return; // No tokens, can't spin
     
     // Do not eagerly consume token on client; server decrements on claim
     
     const spinBtn = document.getElementById('wheel-spin-btn') as HTMLButtonElement;
+    const bottomSpinBtn = document.getElementById('wheel-spin-btn-bottom') as HTMLButtonElement;
     if (spinBtn) {
       spinBtn.disabled = true;
       spinBtn.style.opacity = '0.5';
+    }
+    if (bottomSpinBtn) {
+      bottomSpinBtn.disabled = true;
+      bottomSpinBtn.style.opacity = '0.5';
     }
     
     this.isSpinning = true;

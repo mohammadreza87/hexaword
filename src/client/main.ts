@@ -19,7 +19,7 @@ import { HintStorageService } from './services/HintStorageService';
 import { ColorPaletteService } from '../web-view/services/ColorPaletteService';
 import { getPaletteForLevel } from '../web-view/config/ColorPalettes';
 
-console.log('HexaWord Crossword Generator v4.0 - Modular Architecture');
+// HexaWord Crossword Generator v4.0 - Modular Architecture
 
 /**
  * Main entry point for the HexaWord game
@@ -46,7 +46,28 @@ class App {
     const levelBtn = el.querySelector('#hw-level') as HTMLButtonElement | null;
     if (levelBtn) {
       const lvl = Math.max(1, p?.level ?? this.currentLevel ?? 1);
-      levelBtn.textContent = `Level ${lvl}`;
+      const levelText = levelBtn.querySelector('.text-xs');
+      if (levelText) {
+        levelText.textContent = `Level ${lvl}`;
+      }
+    }
+  }
+  
+  private async updateMenuCoinDisplay(): Promise<void> {
+    const el = document.getElementById('hw-main-menu');
+    if (!el) return;
+    const coinAmount = el.querySelector('#menu-coin-amount');
+    if (coinAmount) {
+      try {
+        const response = await fetch('/api/coins');
+        if (response.ok) {
+          const data = await response.json();
+          coinAmount.textContent = (data.balance || 0).toLocaleString();
+        }
+      } catch (error) {
+        console.error('Failed to fetch coin balance:', error);
+        coinAmount.textContent = '0';
+      }
     }
   }
   
@@ -64,7 +85,7 @@ class App {
   }
   
   private async startGame(): Promise<void> {
-    console.log('Starting HexaWord game...');
+    // Starting HexaWord game...
     
     // Show Main Menu (do not create game until Play)
     this.ensureMainMenu();
@@ -173,7 +194,7 @@ class App {
       return; // No tokens, don't show wheel
     }
     
-    // Check if it's the second launch of the day
+    // Only show on second launch if we have tokens
     if (!dailyService.isSecondLaunch()) {
       return;
     }
@@ -337,50 +358,96 @@ class App {
     if (this.mainMenuEl) return;
     const el = document.createElement('div');
     el.id = 'hw-main-menu';
-    el.className = 'modal-overlay hidden';
+    el.className = 'fixed inset-0 bg-gradient-to-br from-hw-surface-primary to-hw-surface-secondary hidden z-50';
     
-    const panel = document.createElement('div');
-    panel.className = 'modal-content max-w-md panel-hex relative';
-    panel.style.transform = 'scale(0.85)';
-    
-    // Add settings button in top-right corner
-    const settingsBtn = document.createElement('button');
-    settingsBtn.id = 'hw-settings-btn';
-    settingsBtn.className = 'absolute top-3 right-3 text-hw-text-secondary hover:text-hw-text-primary transition-colors p-1';
-    settingsBtn.innerHTML = '<span style="font-size: 18px;">⚙️</span>';
-    panel.appendChild(settingsBtn);
-    
-    panel.innerHTML += `
-      <div class="text-center mb-3">
-        <div id="hexaword-title" class="text-2xl tracking-wide" style="
-          font-weight: 900;
-          font-family: 'Inter', Arial, sans-serif;
-          text-transform: uppercase;
-          position: relative;
-        ">HEXA WORDS</div>
-        <div class="text-xs text-hw-text-secondary mt-1">Main Menu</div>
-      </div>
-      <div class="flex flex-col gap-2 my-3">
-        <button id="hw-level" class="btn-glass-primary py-2 text-sm">Level 1</button>
-        <button id="hw-daily-challenge" class="btn-glass py-2 text-sm relative">
-          <span>🏆 Daily Challenge</span>
-          <span id="dc-streak-badge" class="hidden absolute -top-1 -right-1 bg-orange-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold"></span>
+    el.innerHTML = `
+      <!-- Top Bar -->
+      <div class="absolute top-0 left-0 right-0 flex justify-between items-center p-4">
+        <!-- Coins Display (left) -->
+        <div class="flex items-center gap-2 bg-black/20 backdrop-blur-sm rounded-full px-3 py-1.5">
+          <span class="text-lg">🪙</span>
+          <span id="menu-coin-amount" class="text-hw-text-primary font-bold">0</span>
+        </div>
+        
+        <!-- Settings Button (right) -->
+        <button id="hw-settings-btn" class="bg-black/20 backdrop-blur-sm rounded-full p-2 hover:bg-black/30 transition-colors">
+          <span class="text-xl">⚙️</span>
         </button>
-        <button id="hw-create" class="btn-glass py-2 text-sm">📝 My Levels</button>
-        <button id="hw-leaderboard" class="btn-glass py-2 text-sm">🏆 Leaderboard</button>
-        <button id="hw-test-wheel" class="btn-glass py-2 text-sm">🎰 Test Wheel (Dev)</button>
-        <button id="hw-reset" class="btn-glass py-2 text-sm">🧹 Reset Progress (Dev)</button>
+      </div>
+      
+      <!-- Main Content Area -->
+      <div class="relative h-full">
+        <!-- Title - Close to top HUD -->
+        <div class="absolute top-20 left-0 right-0 text-center">
+          <div id="hexaword-title" class="text-4xl font-black tracking-wide uppercase font-['Inter'] bg-gradient-to-br from-amber-500 to-red-500 bg-clip-text text-transparent">HEXA WORDS</div>
+        </div>
+        
+        <!-- Daily and My Levels - Centered vertically in middle -->
+        <div class="absolute top-1/2 left-0 right-0 -translate-y-1/2 px-4">
+          <div class="flex justify-between w-full max-w-sm mx-auto px-2 sm:px-4">
+            <!-- My Levels (left) -->
+            <button id="hw-create" class="bg-gradient-to-br from-purple-600 to-purple-700 backdrop-blur-sm rounded-xl w-24 h-24 flex flex-col items-center justify-center hover:scale-105 transition-transform shadow-lg border border-purple-500/30">
+              <div class="text-2xl mb-1">📝</div>
+              <div class="text-xs text-white font-semibold uppercase tracking-wide">My Levels</div>
+            </button>
+            
+            <!-- Daily Challenge (right) -->
+            <button id="hw-daily-challenge" class="bg-gradient-to-br from-amber-500 to-orange-500 backdrop-blur-sm rounded-xl w-24 h-24 flex flex-col items-center justify-center hover:scale-105 transition-transform shadow-lg border border-amber-400/30 relative">
+              <div class="text-2xl mb-1">☀️</div>
+              <div class="text-xs text-white font-semibold uppercase tracking-wide">Daily</div>
+              <span id="dc-streak-badge" class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold"></span>
+            </button>
+          </div>
+        </div>
+        
+        <!-- Play Button - Bottom position -->
+        <div class="absolute bottom-24 left-0 right-0 px-4">
+          <div class="flex justify-center">
+            <button id="hw-level" class="bg-gradient-to-br from-green-500 to-green-600 backdrop-blur-sm rounded-xl w-24 h-24 flex flex-col items-center justify-center hover:scale-105 transition-transform shadow-xl border border-green-400/30">
+              <div class="text-2xl mb-1">▶️</div>
+              <div class="text-xs text-white font-bold uppercase tracking-wide">PLAY</div>
+              <div class="text-[10px] text-green-100 opacity-90">Level 1</div>
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Bottom Navigation Tabs -->
+      <div class="absolute bottom-0 left-0 right-0 bg-black/30 backdrop-blur-md border-t border-white/10">
+        <div class="flex">
+          <!-- Shop Tab (disabled) -->
+          <button class="flex-1 flex flex-col items-center justify-center py-3 gap-1 opacity-30 cursor-not-allowed pointer-events-none bg-black/20" disabled tabindex="-1">
+            <span class="text-xl opacity-60">🛍️</span>
+            <span class="text-xs text-gray-600">Shop</span>
+          </button>
+          
+          <!-- Home Tab (active) - with theme color highlight -->
+          <button id="hw-home-tab" class="flex-1 flex flex-col items-center justify-center py-3 gap-1 bg-hw-accent-primary/10 border-t-2 border-hw-accent-primary relative">
+            <span class="text-xl">🏠</span>
+            <span class="text-xs text-hw-accent-primary font-semibold">Home</span>
+            <!-- Active indicator -->
+            <div class="absolute inset-x-0 bottom-0 h-0.5 bg-hw-accent-primary"></div>
+          </button>
+          
+          <!-- Leaderboard Tab -->
+          <button id="hw-leaderboard" class="flex-1 flex flex-col items-center justify-center py-3 gap-1 hover:bg-white/5 transition-colors">
+            <span class="text-xl">🏆</span>
+            <span class="text-xs text-hw-text-secondary hover:text-hw-text-primary">Leaderboard</span>
+          </button>
+        </div>
       </div>
     `;
-    el.appendChild(panel);
+    
     document.body.appendChild(el);
     this.mainMenuEl = el;
+    
+    // Update coin display
+    this.updateMenuCoinDisplay();
 
     // Wire buttons
-    const levelBtn = panel.querySelector('#hw-level') as HTMLButtonElement;
-    const settingsButton = panel.querySelector('#hw-settings-btn') as HTMLButtonElement;
-    const createBtn = panel.querySelector('#hw-create') as HTMLButtonElement;
-    const resetBtn = panel.querySelector('#hw-reset') as HTMLButtonElement;
+    const levelBtn = el.querySelector('#hw-level') as HTMLButtonElement;
+    const settingsButton = el.querySelector('#hw-settings-btn') as HTMLButtonElement;
+    const createBtn = el.querySelector('#hw-create') as HTMLButtonElement;
 
     levelBtn.onclick = async () => {
       if (this.menuBusy) return;
@@ -388,18 +455,13 @@ class App {
       // Immediately disable all interactive controls in the menu to prevent double clicks
       try {
         const disableAll = () => {
-          // Disable all buttons within the panel
-          panel.querySelectorAll('button').forEach((b) => {
+          // Disable all buttons within the menu
+          el.querySelectorAll('button').forEach((b) => {
             const btn = b as HTMLButtonElement;
             btn.disabled = true;
             btn.style.pointerEvents = 'none';
             btn.classList.add('opacity-50', 'cursor-not-allowed');
           });
-          // Disable toggle
-          const mt = panel.querySelector('#hw-motion-toggle') as HTMLInputElement | null;
-          if (mt) {
-            mt.disabled = true;
-          }
         };
         disableAll();
       } catch {}
@@ -421,27 +483,10 @@ class App {
       this.showSettingsPanel();
     };
 
-    // My Levels flow (shows list and create button)
+    // My Levels flow (shows inline like leaderboard)
     createBtn.onclick = async () => {
       if (this.menuBusy) return;
-      this.menuBusy = true;
-      try {
-        const { LevelManager } = await import('./features/LevelManager');
-        const manager = new LevelManager();
-        const result = await manager.show();
-        
-        if (result?.action === 'play' && result.levelId) {
-          // Load and play the selected level
-          await blurTransition.transitionWithBlur(async () => {
-            await this.playUserLevel(result.levelId);
-            this.hideMainMenu();
-          }, { blurIntensity: 'lg', inDuration: 200, outDuration: 250 });
-        }
-      } catch (e) {
-        this.showToast('Failed to open level manager', 'error');
-      } finally {
-        this.menuBusy = false;
-      }
+      await this.showMyLevelsView();
     };
     
     // Daily Challenge button handler
@@ -471,16 +516,14 @@ class App {
     const leaderboardBtn = el.querySelector('#hw-leaderboard') as HTMLButtonElement;
     leaderboardBtn.onclick = async () => {
       if (this.menuBusy) return;
-      
-      try {
-        const { Leaderboard } = await import('./features/Leaderboard');
-        const leaderboard = new Leaderboard();
-        await leaderboard.show();
-      } catch (error) {
-        console.error('Failed to show leaderboard:', error);
-        this.showToast('Failed to load leaderboard', 'error');
-      }
+      await this.showLeaderboardView();
     };
+    
+    // Home tab handler - use addEventListener to prevent overwriting
+    const homeTab = el.querySelector('#hw-home-tab') as HTMLButtonElement;
+    homeTab.addEventListener('click', () => {
+      this.activateTab('home');
+    });
     
     // Listen for play-user-level events from LevelManager
     window.addEventListener('play-user-level', async (event: Event) => {
@@ -493,115 +536,782 @@ class App {
         }, { blurIntensity: 'lg', inDuration: 200, outDuration: 250 });
       }
     });
+  }
+  
+  private async showMyLevelsView(): Promise<void> {
+    // Remove any existing views
+    const existingView = document.getElementById('my-levels-view');
+    if (existingView) existingView.remove();
     
-    // Test wheel button handler
-    const testWheelBtn = el.querySelector('#hw-test-wheel') as HTMLButtonElement;
-    testWheelBtn.onclick = async () => {
-      if (this.menuBusy) return;
-      // Keep menu responsive for test wheel, but prevent double opens
-      this.menuBusy = true;
-      const wheel = new WheelOfFortune();
-      wheel.setTokens(999); // Show unlimited tokens for testing
-      wheel.onComplete(async (prize, spinId) => {
-        // Grant a test token right before claiming (so server has token to consume)
-        await fetch('/api/daily-reward/grant-test-token', { method: 'POST' });
+    // Create My Levels container that fits between HUD and tabs
+    const myLevelsContainer = document.createElement('div');
+    myLevelsContainer.id = 'my-levels-view';
+    myLevelsContainer.className = 'absolute inset-0 z-10 pointer-events-none';
+    
+    // Build full My Levels UI inline (not modal)
+    myLevelsContainer.innerHTML = `
+      <div class="absolute inset-0 top-16 bottom-16 bg-gradient-to-br from-hw-surface-primary to-hw-surface-secondary overflow-hidden pointer-events-auto">
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-purple-600 to-purple-800 px-6 py-3">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-xl font-bold text-white">📝 My Levels</h2>
+              <p class="text-purple-200 text-xs mt-0.5">Create and manage your custom levels</p>
+            </div>
+            <button id="ml-back" class="text-white/80 hover:text-white transition-colors">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M15 10H4M10 15l-6-6 6-6"/>
+              </svg>
+            </button>
+          </div>
+        </div>
         
-        const dailyService = DailyRewardService.getInstance();
-        const success = await dailyService.claimReward(prize, spinId);
+        <!-- Create Button -->
+        <div class="bg-black/30 backdrop-blur-sm border-b border-white/10 p-3">
+          <button id="ml-create" class="w-full bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-semibold py-2.5 rounded-lg transition-all transform hover:scale-105 flex items-center justify-center gap-2 text-sm">
+            <span class="text-lg">+</span>
+            <span>Create New Level</span>
+          </button>
+        </div>
         
-        if (success) {
-          // Update UI based on prize
-          if (prize.type === 'coins' || prize.type === 'jackpot') {
-            const coinService = CoinStorageService.getInstance();
-            await coinService.loadCoins();
-          } else if (prize.type === 'hints') {
-            const hintService = HintStorageService.getInstance();
-            await hintService.loadHints();
-            if (this.game && (this.game as any).syncHintInventory) {
-              await (this.game as any).syncHintInventory();
-            }
-          } else if (prize.type === 'bundle') {
-            // Bundle only gives hints now (x2 reveal + x2 target)
-            const hintService = HintStorageService.getInstance();
-            await hintService.loadHints();
-            if (this.game && (this.game as any).syncHintInventory) {
-              await (this.game as any).syncHintInventory();
-            }
-          }
-        } else {
-          console.log('Failed to claim reward - likely no tokens');
-        }
-        // Re-enable menu after wheel completes
-        this.menuBusy = false;
+        <!-- Content Area -->
+        <div class="overflow-y-auto" style="height: calc(100% - 160px);">
+          <div id="ml-list" class="p-4 space-y-3">
+            <!-- Loading state -->
+            <div class="flex items-center justify-center py-10">
+              <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500"></div>
+              <div class="text-xs text-hw-text-secondary ml-2">Loading your levels...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    // Add to main menu
+    const mainMenu = document.getElementById('hw-main-menu');
+    if (!mainMenu) return;
+    
+    // Hide main content
+    const mainContent = mainMenu.querySelector('.flex.flex-col.items-center.justify-center.h-full');
+    if (mainContent) {
+      (mainContent as HTMLElement).style.display = 'none';
+    }
+    
+    mainMenu.appendChild(myLevelsContainer);
+    
+    // Setup My Levels functionality
+    await this.setupInlineMyLevels();
+    
+    // Setup back button
+    const backBtn = myLevelsContainer.querySelector('#ml-back');
+    if (backBtn) {
+      backBtn.addEventListener('click', () => {
+        this.activateTab('home');
       });
-      await wheel.show(true);
-    };
-
-    // Reset Progress (Dev) handler
-    resetBtn.onclick = async () => {
-      if (this.menuBusy) return;
-      const ok = await this.confirmModal('Reset all progress, coins, hints, and level saves? This cannot be undone.', { confirmText: 'Reset', cancelText: 'Cancel' });
-      if (!ok) return;
-      this.menuBusy = true;
-      try {
-        // 1) Reset overall progression to Level 1 (server)
-        await fetch('/api/progress', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ level: 1, completedLevels: [], seed: undefined })
-        });
-
-        // 2) Delete saved per-level progress (fetch list, fallback to first 50)
-        try {
-          const listRes = await fetch('/api/level-progress');
-          if (listRes.ok) {
-            // Check if response is JSON before parsing
-            const contentType = listRes.headers.get('content-type');
-            if (!contentType || !contentType.includes('application/json')) {
-              throw new Error('Server returned non-JSON response');
-            }
-            const { levels } = await listRes.json();
-            if (Array.isArray(levels)) {
-              await Promise.all(levels.map((lvl: number) => fetch(`/api/level-progress/${lvl}`, { method: 'DELETE' })));
-            }
-          } else {
-            const tasks: Promise<Response>[] = [];
-            for (let i = 1; i <= 50; i++) tasks.push(fetch(`/api/level-progress/${i}`, { method: 'DELETE' }));
-            await Promise.all(tasks);
-          }
-        } catch {}
-
-        // 3) Reset hints
-        await fetch('/api/hints', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'reset' })
-        });
-
-        // 4) Reset coins to default
-        await fetch('/api/coins', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'set', balance: 100, totalEarned: 100, totalSpent: 0 })
-        });
-
-        // 5) Clear local caches
-        try { localStorage.removeItem('hexaword_progress_v1'); } catch {}
-        try { CoinStorageService.getInstance().clearCache(); } catch {}
-        try { HintStorageService.getInstance().clearCache(); } catch {}
-
-        // 6) Update in-memory state + theme
-        this.currentLevel = 1;
-        this.updateMenuProgress({ level: 1, completedLevels: [], updatedAt: Date.now() } as HWProgress);
-        await this.applyMenuTheme(1);
-        this.showToast('Progress reset. Starting from Level 1.', 'info');
-      } catch (e) {
-        console.error('Reset failed', e);
-        this.showToast('Failed to reset progress', 'error');
-      } finally {
-        this.menuBusy = false;
+    }
+  }
+  
+  private async setupInlineMyLevels(): Promise<void> {
+    try {
+      // Import LevelManager to get the data handling
+      const { LevelManager } = await import('./features/LevelManager');
+      
+      // Fetch user levels
+      const response = await fetch('/api/user-levels/mine', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      let levels: any[] = [];
+      if (response.ok) {
+        const data = await response.json();
+        levels = data.levels || [];
       }
-    };
+      
+      // Render levels
+      const listContainer = document.getElementById('ml-list');
+      if (!listContainer) return;
+      
+      if (levels.length === 0) {
+        listContainer.innerHTML = `
+          <div class="text-center py-10">
+            <div class="text-4xl mb-3 opacity-30">🎮</div>
+            <div class="text-base text-hw-text-primary mb-1.5">No levels yet</div>
+            <div class="text-xs text-hw-text-secondary">Create your first custom level to get started!</div>
+          </div>
+        `;
+      } else {
+        listContainer.innerHTML = levels.map(level => `
+          <div class="level-card p-3 rounded-lg bg-hw-surface-tertiary/30 hover:bg-hw-surface-tertiary/50 border border-white/10 hover:border-purple-500/30 transition-all duration-200 cursor-pointer group" data-level-id="${level.id}">
+            <div class="flex items-start justify-between">
+              <div class="flex-1">
+                <div class="flex items-center gap-1.5 mb-1.5">
+                  ${level.name ? `<div class="font-bold text-sm text-white">${level.name}</div>` : ''}
+                  <div class="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300">
+                    ${level.words.length} words
+                  </div>
+                </div>
+                <div class="text-xs text-purple-200 mb-1.5">${level.clue}</div>
+                <div class="flex flex-wrap gap-1 mb-2">
+                  ${level.words.map((word: string) => `
+                    <span class="px-1.5 py-0.5 rounded bg-black/20 text-white text-[10px] font-mono uppercase">
+                      ${word}
+                    </span>
+                  `).join('')}
+                </div>
+                <div class="flex items-center justify-between mt-2 text-[10px] text-gray-400">
+                  <span class="flex items-center gap-0.5">
+                    <span class="text-xs">🎮</span>
+                    <span>${level.playCount || 0}</span>
+                  </span>
+                  <span class="flex items-center gap-0.5">
+                    <span class="text-xs">👍</span>
+                    <span>${level.upvotes || 0}</span>
+                  </span>
+                  <span class="flex items-center gap-0.5">
+                    <span class="text-xs">👎</span>
+                    <span>${level.downvotes || 0}</span>
+                  </span>
+                  <span class="flex items-center gap-0.5">
+                    <span class="text-xs">📤</span>
+                    <span>${level.shares || 0}</span>
+                  </span>
+                </div>
+                <div class="text-[10px] text-gray-500 mt-1.5">
+                  Created ${this.formatRelativeTime(level.createdAt)}
+                </div>
+              </div>
+              <div class="flex flex-col gap-1.5 ml-2">
+                <button class="ml-play-btn px-3 py-1.5 rounded-lg bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold text-xs transition-all transform hover:scale-105" data-level-id="${level.id}">
+                  Play
+                </button>
+                <button class="ml-share-btn px-3 py-1.5 rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold text-xs transition-all transform hover:scale-105 flex items-center justify-center gap-1" data-level-id="${level.id}" data-level-name="${level.name || 'Custom Level'}" data-level-clue="${level.clue}">
+                  <span class="text-xs">📤</span>
+                  <span>Share</span>
+                </button>
+                <button class="ml-delete-btn px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors text-xs opacity-0 group-hover:opacity-100" data-level-id="${level.id}">
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        `).join('');
+        
+        // Setup play buttons
+        listContainer.querySelectorAll('.ml-play-btn').forEach(btn => {
+          btn.addEventListener('click', async (e) => {
+            const levelId = (e.currentTarget as HTMLElement).dataset.levelId;
+            if (levelId) {
+              await blurTransition.transitionWithBlur(async () => {
+                await this.playUserLevel(levelId);
+                this.hideMainMenu();
+              }, { blurIntensity: 'lg', inDuration: 200, outDuration: 250 });
+            }
+          });
+        });
+        
+        // Setup share buttons
+        listContainer.querySelectorAll('.ml-share-btn').forEach(btn => {
+          btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const levelId = (e.currentTarget as HTMLElement).dataset.levelId;
+            const levelName = (e.currentTarget as HTMLElement).dataset.levelName || 'Custom Level';
+            const levelClue = (e.currentTarget as HTMLElement).dataset.levelClue || '';
+            
+            if (levelId) {
+              await this.shareLevelInline(levelId, levelName, levelClue);
+            }
+          });
+        });
+        
+        // Setup delete buttons
+        listContainer.querySelectorAll('.ml-delete-btn').forEach(btn => {
+          btn.addEventListener('click', async (e) => {
+            const levelId = (e.currentTarget as HTMLElement).dataset.levelId;
+            if (levelId && confirm('Are you sure you want to delete this level?')) {
+              try {
+                const response = await fetch(`/api/user-levels/${levelId}`, {
+                  method: 'DELETE',
+                  headers: {
+                    'Content-Type': 'application/json'
+                  }
+                });
+                
+                if (response.ok) {
+                  // Refresh the view
+                  await this.setupInlineMyLevels();
+                  this.showToast('Level deleted successfully', 'success');
+                } else {
+                  this.showToast('Failed to delete level', 'error');
+                }
+              } catch (error) {
+                console.error('Error deleting level:', error);
+                this.showToast('Failed to delete level', 'error');
+              }
+            }
+          });
+        });
+      }
+      
+      // Setup create button
+      const createBtn = document.getElementById('ml-create');
+      if (createBtn) {
+        createBtn.addEventListener('click', async () => {
+          try {
+            console.log('Create button clicked, importing LevelCreator...');
+            const { LevelCreator } = await import('./features/LevelCreator');
+            console.log('Creating LevelCreator instance...');
+            const creator = new LevelCreator();
+            console.log('Showing LevelCreator...');
+            const result = await creator.show();
+            console.log('LevelCreator result:', result);
+            
+            if (result?.action === 'save') {
+              // Refresh the levels list
+              await this.setupInlineMyLevels();
+              this.showToast('Level created successfully!', 'success');
+            }
+          } catch (error) {
+            console.error('Error creating level:', error);
+            this.showToast('Failed to open level creator', 'error');
+          }
+        });
+      }
+      
+    } catch (error) {
+      console.error('Failed to setup My Levels:', error);
+      const listContainer = document.getElementById('ml-list');
+      if (listContainer) {
+        listContainer.innerHTML = `
+          <div class="text-center py-10">
+            <div class="text-red-500 text-sm mb-1.5">Failed to load levels</div>
+            <div class="text-hw-text-secondary text-xs">Please try again later</div>
+          </div>
+        `;
+      }
+    }
+  }
+  
+  private formatRelativeTime(dateString: string): string {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    
+    if (minutes < 1) return 'just now';
+    if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+    if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+    if (days < 30) return `${days} day${days === 1 ? '' : 's'} ago`;
+    return date.toLocaleDateString();
+  }
+  
+  private async shareLevelInline(levelId: string, levelName: string, levelClue: string): Promise<void> {
+    // Generate the shareable URL for the level
+    const baseUrl = window.location.origin;
+    const shareUrl = `${baseUrl}?level=${encodeURIComponent(levelId)}`;
+    
+    // Create the Reddit share content
+    const title = `Check out my HexaWords puzzle: "${levelName}"`;
+    
+    // Show share dialog
+    const dialog = document.createElement('div');
+    dialog.className = 'fixed inset-0 flex items-center justify-center z-[10001]';
+    dialog.innerHTML = `
+      <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" id="share-backdrop"></div>
+      <div class="relative bg-hw-surface-primary border border-hw-surface-tertiary/30 rounded-lg p-6 max-w-md mx-4">
+        <h3 class="text-lg font-bold text-hw-text-primary mb-4">Share Your Level</h3>
+        
+        <div class="space-y-3">
+          <!-- Share to Reddit -->
+          <button id="share-reddit" class="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-semibold transition-all transform hover:scale-105 flex items-center justify-center gap-2">
+            <span class="text-xl">🔗</span>
+            <span>Share to Reddit</span>
+          </button>
+          
+          <!-- Copy Link -->
+          <button id="share-copy" class="w-full px-4 py-3 rounded-lg bg-hw-surface-secondary hover:bg-hw-surface-tertiary text-hw-text-primary font-semibold transition-colors flex items-center justify-center gap-2">
+            <span class="text-xl">📋</span>
+            <span>Copy Link</span>
+          </button>
+          
+          <!-- Share URL Display -->
+          <div class="p-3 rounded-lg bg-black/20 border border-white/10">
+            <div class="text-xs text-hw-text-secondary mb-1">Share URL:</div>
+            <div class="text-sm text-hw-text-primary font-mono break-all">${shareUrl}</div>
+          </div>
+        </div>
+        
+        <div class="flex justify-end mt-6">
+          <button id="share-close" class="px-4 py-2 rounded-lg bg-hw-surface-secondary text-hw-text-primary hover:bg-hw-surface-tertiary transition-colors">
+            Close
+          </button>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(dialog);
+    
+    // Handle Reddit share
+    dialog.querySelector('#share-reddit')?.addEventListener('click', async () => {
+      // Track the share
+      try {
+        await fetch(`/api/user-levels/${encodeURIComponent(levelId)}/share`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+      } catch (error) {
+        console.error('Failed to track share:', error);
+      }
+      
+      // Reddit submission URL
+      const redditUrl = `https://www.reddit.com/submit?url=${encodeURIComponent(shareUrl)}&title=${encodeURIComponent(title)}`;
+      window.open(redditUrl, '_blank', 'width=600,height=600');
+      
+      this.showToast('Opening Reddit to share your level!', 'success');
+    });
+    
+    // Handle copy link
+    dialog.querySelector('#share-copy')?.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        this.showToast('Link copied to clipboard!', 'success');
+      } catch (err) {
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = shareUrl;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        this.showToast('Link copied to clipboard!', 'success');
+      }
+    });
+    
+    // Handle close
+    const closeDialog = () => dialog.remove();
+    dialog.querySelector('#share-close')?.addEventListener('click', closeDialog);
+    dialog.querySelector('#share-backdrop')?.addEventListener('click', closeDialog);
+  }
+
+  private async showLeaderboardView(): Promise<void> {
+    // Remove any existing leaderboard view first
+    const existingView = document.getElementById('leaderboard-view');
+    if (existingView) existingView.remove();
+    
+    // Create leaderboard container that fits between HUD and tabs
+    const leaderboardContainer = document.createElement('div');
+    leaderboardContainer.id = 'leaderboard-view';
+    leaderboardContainer.className = 'absolute inset-0 z-10 pointer-events-none';
+    
+    // Build full leaderboard UI inline (not modal)
+    leaderboardContainer.innerHTML = `
+      <div class="absolute inset-0 top-16 bottom-16 bg-gradient-to-br from-hw-surface-primary to-hw-surface-secondary overflow-hidden pointer-events-auto">
+        <!-- Header -->
+        <div class="bg-gradient-to-r from-purple-600 to-purple-800 px-6 py-4">
+          <h2 class="text-2xl font-bold text-white">🏆 Leaderboard</h2>
+          <p class="text-purple-200 text-sm mt-1">Compete with players worldwide</p>
+        </div>
+        
+        <!-- Main Tabs -->
+        <div class="flex border-b-2 border-hw-surface-tertiary/50 bg-gradient-to-b from-hw-surface-primary to-hw-surface-secondary">
+          <button data-main-tab="levels" class="lb-main-tab flex-1 px-3 py-3 text-sm font-semibold transition-all relative text-purple-400">
+            <span class="relative z-10">🎮 Levels</span>
+            <div class="lb-main-tab-indicator absolute bottom-0 left-0 right-0 h-0.5 bg-purple-500"></div>
+          </button>
+          <button data-main-tab="creators" class="lb-main-tab flex-1 px-3 py-3 text-sm font-semibold transition-all relative text-hw-text-secondary">
+            <span class="relative z-10">🎨 Creators</span>
+            <div class="lb-main-tab-indicator absolute bottom-0 left-0 right-0 h-0.5 bg-purple-500 scale-x-0"></div>
+          </button>
+          <button data-main-tab="dailychallenge" class="lb-main-tab flex-1 px-3 py-3 text-sm font-semibold transition-all relative text-hw-text-secondary">
+            <span class="relative z-10">🏆 Daily</span>
+            <div class="lb-main-tab-indicator absolute bottom-0 left-0 right-0 h-0.5 bg-purple-500 scale-x-0"></div>
+          </button>
+        </div>
+        
+        <!-- Sub Tabs Container with different background -->
+        <div class="bg-black/30 backdrop-blur-sm border-b border-white/10">
+          <!-- Sub Tabs (for Levels) -->
+          <div id="lb-level-sub-tabs" class="flex justify-around px-2">
+            <button data-level-sub-tab="global" class="lb-level-sub-tab flex-1 max-w-[120px] py-2 text-xs font-medium transition-all relative text-purple-400 bg-white/5">
+              <span class="relative z-10 flex items-center justify-center gap-1">
+                <span class="text-sm">🌍</span>
+                <span class="hidden sm:inline">Global</span>
+              </span>
+              <div class="lb-level-sub-tab-indicator absolute bottom-0 left-2 right-2 h-0.5 bg-purple-400 transition-transform"></div>
+            </button>
+            <button data-level-sub-tab="weekly" class="lb-level-sub-tab flex-1 max-w-[120px] py-2 text-xs font-medium transition-all relative text-hw-text-secondary hover:bg-white/5">
+              <span class="relative z-10 flex items-center justify-center gap-1">
+                <span class="text-sm">📅</span>
+                <span class="hidden sm:inline">Weekly</span>
+              </span>
+              <div class="lb-level-sub-tab-indicator absolute bottom-0 left-2 right-2 h-0.5 bg-purple-400 transition-transform scale-x-0"></div>
+            </button>
+            <button data-level-sub-tab="daily" class="lb-level-sub-tab flex-1 max-w-[120px] py-2 text-xs font-medium transition-all relative text-hw-text-secondary hover:bg-white/5">
+              <span class="relative z-10 flex items-center justify-center gap-1">
+                <span class="text-sm">☀️</span>
+                <span class="hidden sm:inline">Daily</span>
+              </span>
+              <div class="lb-level-sub-tab-indicator absolute bottom-0 left-2 right-2 h-0.5 bg-purple-400 transition-transform scale-x-0"></div>
+            </button>
+          </div>
+          
+          <!-- Sub Tabs (for Creators) - hidden initially -->
+          <div id="lb-creator-sub-tabs" class="hidden flex justify-around px-2">
+            <button data-creator-sub-tab="overall" class="lb-creator-sub-tab flex-1 max-w-[100px] py-2 text-xs font-medium transition-all relative text-purple-400 bg-white/5">
+              <span class="relative z-10 flex items-center justify-center gap-1">
+                <span class="text-sm">⭐</span>
+                <span class="hidden lg:inline">Overall</span>
+              </span>
+              <div class="lb-creator-sub-tab-indicator absolute bottom-0 left-2 right-2 h-0.5 bg-purple-400 transition-transform"></div>
+            </button>
+            <button data-creator-sub-tab="plays" class="lb-creator-sub-tab flex-1 max-w-[100px] py-2 text-xs font-medium transition-all relative text-hw-text-secondary hover:bg-white/5">
+              <span class="relative z-10 flex items-center justify-center gap-1">
+                <span class="text-sm">🎮</span>
+                <span class="hidden lg:inline">Plays</span>
+              </span>
+              <div class="lb-creator-sub-tab-indicator absolute bottom-0 left-2 right-2 h-0.5 bg-purple-400 transition-transform scale-x-0"></div>
+            </button>
+            <button data-creator-sub-tab="upvotes" class="lb-creator-sub-tab flex-1 max-w-[100px] py-2 text-xs font-medium transition-all relative text-hw-text-secondary hover:bg-white/5">
+              <span class="relative z-10 flex items-center justify-center gap-1">
+                <span class="text-sm">👍</span>
+                <span class="hidden lg:inline">Liked</span>
+              </span>
+              <div class="lb-creator-sub-tab-indicator absolute bottom-0 left-2 right-2 h-0.5 bg-purple-400 transition-transform scale-x-0"></div>
+            </button>
+            <button data-creator-sub-tab="shares" class="lb-creator-sub-tab flex-1 max-w-[100px] py-2 text-xs font-medium transition-all relative text-hw-text-secondary hover:bg-white/5">
+              <span class="relative z-10 flex items-center justify-center gap-1">
+                <span class="text-sm">📤</span>
+                <span class="hidden lg:inline">Shared</span>
+              </span>
+              <div class="lb-creator-sub-tab-indicator absolute bottom-0 left-2 right-2 h-0.5 bg-purple-400 transition-transform scale-x-0"></div>
+            </button>
+          </div>
+        </div>
+        
+        <!-- Content Area -->
+        <div class="overflow-y-auto" style="height: calc(100% - 180px);">
+          <div id="lb-list" class="p-4 space-y-2">
+            <!-- Loading state -->
+            <div class="flex items-center justify-center py-12">
+              <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-purple-500"></div>
+              <div class="text-sm text-hw-text-secondary ml-3">Loading rankings...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    // Add to main menu
+    const mainMenu = document.getElementById('hw-main-menu');
+    if (!mainMenu) return;
+    
+    // Hide main content, show leaderboard
+    const mainContent = mainMenu.querySelector('.flex.flex-col.items-center.justify-center.h-full');
+    if (mainContent) {
+      (mainContent as HTMLElement).style.display = 'none';
+    }
+    
+    mainMenu.appendChild(leaderboardContainer);
+    
+    // Update tab activation
+    this.activateTab('leaderboard');
+    
+    // Setup inline leaderboard functionality
+    await this.setupInlineLeaderboard();
+  }
+  
+  private async setupInlineLeaderboard(): Promise<void> {
+    try {
+      // Import and create leaderboard instance
+      const { Leaderboard } = await import('./features/Leaderboard');
+      const leaderboard = new Leaderboard();
+      
+      // Load data
+      const data = await leaderboard.fetchData();
+      
+      // Store current tab states
+      let currentMainTab: 'levels' | 'creators' | 'dailychallenge' = 'levels';
+      let currentLevelSubTab: 'global' | 'weekly' | 'daily' = 'global';
+      let currentCreatorSubTab: 'overall' | 'plays' | 'upvotes' | 'shares' = 'overall';
+      
+      // Function to render leaderboard content
+      const renderLeaderboard = () => {
+        const listContainer = document.getElementById('lb-list');
+        if (!listContainer) return;
+        
+        let entries: any[] = [];
+        
+        if (currentMainTab === 'levels') {
+          entries = currentLevelSubTab === 'global' ? data.global :
+                   currentLevelSubTab === 'weekly' ? data.weekly :
+                   data.daily;
+        } else if (currentMainTab === 'creators') {
+          entries = currentCreatorSubTab === 'overall' ? data.creators :
+                   currentCreatorSubTab === 'plays' ? data.creatorsByPlays :
+                   currentCreatorSubTab === 'upvotes' ? data.creatorsByUpvotes :
+                   data.creatorsByShares || [];
+        } else if (currentMainTab === 'dailychallenge') {
+          entries = data.dailyChallenge || [];
+        }
+        
+        if (!entries || entries.length === 0) {
+          listContainer.innerHTML = `
+            <div class="text-center py-12">
+              <div class="text-4xl mb-3 opacity-30">🏆</div>
+              <div class="text-sm text-hw-text-primary">No rankings yet</div>
+              <div class="text-xs text-hw-text-secondary mt-1">Be the first to claim the top spot!</div>
+            </div>
+          `;
+          return;
+        }
+        
+        // Render entries based on type
+        if (currentMainTab === 'dailychallenge') {
+          // Daily challenge entries
+          listContainer.innerHTML = entries.map((entry: any) => {
+            const isTopThree = entry.rank <= 3;
+            const medal = entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : entry.rank === 3 ? '🥉' : '';
+            
+            return `
+              <div class="flex items-center gap-3 p-3 rounded-lg bg-hw-surface-secondary/50 hover:bg-hw-surface-secondary/70 transition-all ${isTopThree ? 'border border-purple-500/30' : ''}">
+                <div class="w-10 text-center">
+                  ${medal || `<span class="text-hw-text-secondary text-sm font-medium">#${entry.rank}</span>`}
+                </div>
+                <div class="flex-1 font-medium text-hw-text-primary">${entry.username}</div>
+                <div class="text-lg font-bold ${isTopThree ? 'text-purple-400' : 'text-hw-text-primary'}">${entry.displayTime}</div>
+              </div>
+            `;
+          }).join('');
+        } else if (currentMainTab === 'creators') {
+          // Creator entries
+          listContainer.innerHTML = entries.map((entry: any) => {
+            const isTopThree = entry.rank <= 3;
+            const medal = entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : entry.rank === 3 ? '🥉' : '';
+            
+            return `
+              <div class="flex items-center gap-3 p-3 rounded-lg bg-hw-surface-secondary/50 hover:bg-hw-surface-secondary/70 transition-all ${isTopThree ? 'border border-purple-500/30' : ''}">
+                <div class="w-10 text-center">
+                  ${medal || `<span class="text-hw-text-secondary text-sm font-medium">#${entry.rank}</span>`}
+                </div>
+                <div class="flex-1">
+                  <div class="font-medium text-hw-text-primary">${entry.username}</div>
+                  <div class="text-xs text-hw-text-secondary">📝 ${entry.levelCount} levels · 🎮 ${entry.totalPlays} plays</div>
+                </div>
+                <div class="text-right">
+                  <div class="text-lg font-bold ${isTopThree ? 'text-purple-400' : 'text-hw-text-primary'}">${entry.score.toLocaleString()}</div>
+                  <div class="text-xs text-hw-text-secondary">creator score</div>
+                </div>
+              </div>
+            `;
+          }).join('');
+        } else {
+          // Level entries
+          listContainer.innerHTML = entries.map((entry: any) => {
+            const isTopThree = entry.rank <= 3;
+            const medal = entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : entry.rank === 3 ? '🥉' : '';
+            
+            return `
+              <div class="flex items-center gap-3 p-3 rounded-lg bg-hw-surface-secondary/50 hover:bg-hw-surface-secondary/70 transition-all ${isTopThree ? 'border border-purple-500/30' : ''}">
+                <div class="w-10 text-center">
+                  ${medal || `<span class="text-hw-text-secondary text-sm font-medium">#${entry.rank}</span>`}
+                </div>
+                <div class="flex-1">
+                  <div class="font-medium text-hw-text-primary">${entry.username}</div>
+                  <div class="text-xs text-hw-text-secondary">Level ${entry.level} · 🪙 ${entry.coins}</div>
+                </div>
+                <div class="text-right">
+                  <div class="text-lg font-bold ${isTopThree ? 'text-purple-400' : 'text-hw-text-primary'}">${entry.score.toLocaleString()}</div>
+                  <div class="text-xs text-hw-text-secondary">points</div>
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+      };
+      
+      // Setup main tab handlers
+      const mainTabs = document.querySelectorAll('.lb-main-tab');
+      mainTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          const tabName = (tab as HTMLElement).dataset.mainTab as 'levels' | 'creators' | 'dailychallenge';
+          if (tabName && tabName !== currentMainTab) {
+            currentMainTab = tabName;
+            
+            // Update tab styles
+            mainTabs.forEach(t => {
+              const indicator = t.querySelector('.lb-main-tab-indicator') as HTMLElement;
+              if ((t as HTMLElement).dataset.mainTab === tabName) {
+                t.classList.add('text-purple-400');
+                t.classList.remove('text-hw-text-secondary');
+                if (indicator) indicator.style.transform = 'scaleX(1)';
+              } else {
+                t.classList.remove('text-purple-400');
+                t.classList.add('text-hw-text-secondary');
+                if (indicator) indicator.style.transform = 'scaleX(0)';
+              }
+            });
+            
+            // Show/hide sub tabs
+            const levelSubTabs = document.getElementById('lb-level-sub-tabs');
+            const creatorSubTabs = document.getElementById('lb-creator-sub-tabs');
+            
+            if (tabName === 'creators') {
+              levelSubTabs?.classList.add('hidden');
+              creatorSubTabs?.classList.remove('hidden');
+            } else if (tabName === 'dailychallenge') {
+              levelSubTabs?.classList.add('hidden');
+              creatorSubTabs?.classList.add('hidden');
+            } else {
+              levelSubTabs?.classList.remove('hidden');
+              creatorSubTabs?.classList.add('hidden');
+            }
+            
+            renderLeaderboard();
+          }
+        });
+      });
+      
+      // Setup level sub tab handlers
+      const levelSubTabs = document.querySelectorAll('.lb-level-sub-tab');
+      levelSubTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          const tabName = (tab as HTMLElement).dataset.levelSubTab as 'global' | 'weekly' | 'daily';
+          if (tabName && tabName !== currentLevelSubTab) {
+            currentLevelSubTab = tabName;
+            
+            // Update tab styles
+            levelSubTabs.forEach(t => {
+              const indicator = t.querySelector('.lb-level-sub-tab-indicator') as HTMLElement;
+              if ((t as HTMLElement).dataset.levelSubTab === tabName) {
+                t.classList.add('text-purple-400', 'bg-white/5');
+                t.classList.remove('text-hw-text-secondary', 'hover:bg-white/5');
+                if (indicator) indicator.style.transform = 'scaleX(1)';
+              } else {
+                t.classList.remove('text-purple-400', 'bg-white/5');
+                t.classList.add('text-hw-text-secondary', 'hover:bg-white/5');
+                if (indicator) indicator.style.transform = 'scaleX(0)';
+              }
+            });
+            
+            renderLeaderboard();
+          }
+        });
+      });
+      
+      // Setup creator sub tab handlers
+      const creatorSubTabs = document.querySelectorAll('.lb-creator-sub-tab');
+      creatorSubTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          const tabName = (tab as HTMLElement).dataset.creatorSubTab as 'overall' | 'plays' | 'upvotes' | 'shares';
+          if (tabName && tabName !== currentCreatorSubTab) {
+            currentCreatorSubTab = tabName;
+            
+            // Update tab styles
+            creatorSubTabs.forEach(t => {
+              const indicator = t.querySelector('.lb-creator-sub-tab-indicator') as HTMLElement;
+              if ((t as HTMLElement).dataset.creatorSubTab === tabName) {
+                t.classList.add('text-purple-400', 'bg-white/5');
+                t.classList.remove('text-hw-text-secondary', 'hover:bg-white/5');
+                if (indicator) indicator.style.transform = 'scaleX(1)';
+              } else {
+                t.classList.remove('text-purple-400', 'bg-white/5');
+                t.classList.add('text-hw-text-secondary', 'hover:bg-white/5');
+                if (indicator) indicator.style.transform = 'scaleX(0)';
+              }
+            });
+            
+            renderLeaderboard();
+          }
+        });
+      });
+      
+      // Initial render
+      renderLeaderboard();
+      
+    } catch (error) {
+      console.error('Failed to setup inline leaderboard:', error);
+      const listContainer = document.getElementById('lb-list');
+      if (listContainer) {
+        listContainer.innerHTML = `
+          <div class="text-center py-12">
+            <div class="text-red-500 text-lg mb-2">Failed to load leaderboard</div>
+            <div class="text-hw-text-secondary text-sm">Please try again later</div>
+          </div>
+        `;
+      }
+    }
+  }
+  
+  private activateTab(tabName: 'home' | 'leaderboard'): void {
+    const mainMenu = document.getElementById('hw-main-menu');
+    if (!mainMenu) return;
+    
+    // Reset all tabs
+    const homeTab = mainMenu.querySelector('#hw-home-tab') as HTMLElement;
+    const leaderboardTab = mainMenu.querySelector('#hw-leaderboard') as HTMLElement;
+    
+    // Remove existing active indicators
+    homeTab?.querySelector('.absolute.inset-x-0.bottom-0')?.remove();
+    leaderboardTab?.querySelector('.absolute.inset-x-0.bottom-0')?.remove();
+    
+    if (tabName === 'home') {
+      // Show main content
+      const mainContent = mainMenu.querySelector('.flex.flex-col.items-center.justify-center.h-full') as HTMLElement;
+      if (mainContent) mainContent.style.display = '';
+      
+      // Remove any inline views
+      const leaderboardView = document.getElementById('leaderboard-view');
+      if (leaderboardView) leaderboardView.remove();
+      
+      const myLevelsView = document.getElementById('my-levels-view');
+      if (myLevelsView) myLevelsView.remove();
+      
+      // Update tab styles
+      if (homeTab) {
+        homeTab.className = 'flex-1 flex flex-col items-center justify-center py-3 gap-1 bg-hw-accent-primary/10 border-t-2 border-hw-accent-primary relative';
+        // Add active indicator
+        const indicator = document.createElement('div');
+        indicator.className = 'absolute inset-x-0 bottom-0 h-0.5 bg-hw-accent-primary';
+        homeTab.appendChild(indicator);
+        // Update text color
+        const textSpan = homeTab.querySelector('span:last-child');
+        if (textSpan) {
+          textSpan.className = 'text-xs text-hw-accent-primary font-semibold';
+        }
+      }
+      if (leaderboardTab) {
+        leaderboardTab.className = 'flex-1 flex flex-col items-center justify-center py-3 gap-1 hover:bg-white/5 transition-colors';
+        const textSpan = leaderboardTab.querySelector('span:last-child');
+        if (textSpan) {
+          textSpan.className = 'text-xs text-hw-text-secondary hover:text-hw-text-primary';
+        }
+      }
+    } else if (tabName === 'leaderboard') {
+      // Update tab styles
+      if (leaderboardTab) {
+        leaderboardTab.className = 'flex-1 flex flex-col items-center justify-center py-3 gap-1 bg-hw-accent-primary/10 border-t-2 border-hw-accent-primary relative';
+        // Add active indicator
+        const indicator = document.createElement('div');
+        indicator.className = 'absolute inset-x-0 bottom-0 h-0.5 bg-hw-accent-primary';
+        leaderboardTab.appendChild(indicator);
+        // Update text color
+        const textSpan = leaderboardTab.querySelector('span:last-child');
+        if (textSpan) {
+          textSpan.className = 'text-xs text-hw-accent-primary font-semibold';
+        }
+      }
+      if (homeTab) {
+        homeTab.className = 'flex-1 flex flex-col items-center justify-center py-3 gap-1 hover:bg-white/5 transition-colors';
+        const textSpan = homeTab.querySelector('span:last-child');
+        if (textSpan) {
+          textSpan.className = 'text-xs text-hw-text-secondary hover:text-hw-text-primary';
+        }
+      }
+    }
   }
   
   private showHowTo(): void {
@@ -732,7 +1442,7 @@ class App {
     const { UserLevelCompletion } = await import('../web-view/components/UserLevelCompletion');
     
     const config = (this.game as any).config;
-    const scoreData = (this.game as any)?.scoreService?.getState() || { levelScore: 0 };
+    const scoreData = (this.game as any)?.scoreService?.getState() || { levelScore: 0, currentScore: 0 };
     const coinService = (this.game as any)?.coinService;
     const coinStorageService = (this.game as any)?.coinStorageService;
     
@@ -754,8 +1464,8 @@ class App {
     // Get current coin balance for leaderboard
     const totalCoins = coinStorageService?.getCachedBalance() || 0;
     
-    // Update leaderboard for user level completion
-    this.updateLeaderboard(scoreData.levelScore || 0, 1, totalCoins);
+    // Update leaderboard for user level completion - use currentScore (total accumulated score)
+    this.updateLeaderboard(scoreData.currentScore || scoreData.levelScore || 0, 1, totalCoins);
     
     const completion = new UserLevelCompletion({
       levelName: config.levelName,
@@ -773,7 +1483,7 @@ class App {
           });
           if (response.ok) {
             const data = await response.json();
-            console.log('Upvoted level:', config.levelId, data);
+            // Upvoted level successfully
           }
         } catch (error) {
           console.error('Failed to upvote:', error);
@@ -788,7 +1498,7 @@ class App {
           });
           if (response.ok) {
             const data = await response.json();
-            console.log('Downvoted level:', config.levelId, data);
+            // Downvoted level successfully
           }
         } catch (error) {
           console.error('Failed to downvote:', error);
@@ -803,7 +1513,7 @@ class App {
           });
           if (response.ok) {
             const data = await response.json();
-            console.log('Shared level:', config.levelId, data);
+            // Shared level successfully
           }
           
           // Open share dialog (this would be platform-specific)
@@ -974,7 +1684,7 @@ class App {
     // IMPORTANT: Actually add the coin reward to the server!
     if (coinReward > 0 && coinStorageService) {
       coinStorageService.addCoins(coinReward).then(() => {
-        console.log(`Added ${coinReward} coins for completing level ${level}`);
+        // Added coin reward for completing level
         // Update the display
         if ((window as any).gameUI) {
           (window as any).gameUI.updateCoins(totalCoinsAfterReward);
@@ -1168,7 +1878,7 @@ class App {
         })
       });
     } catch (error) {
-      console.log('Failed to track activity:', error);
+      // Failed to track activity
     }
   }
 
@@ -1193,21 +1903,11 @@ class App {
     if (!this.mainMenuEl) return;
     
     // Re-enable all menu buttons and controls
-    const panel = this.mainMenuEl.querySelector('.panel-hex');
-    if (panel) {
-      // Re-enable all buttons
-      panel.querySelectorAll('button').forEach((btn) => {
-        btn.disabled = false;
-        btn.style.pointerEvents = '';
-        btn.classList.remove('opacity-50', 'cursor-not-allowed');
-      });
-      
-      // Re-enable the motion toggle
-      const motionToggle = panel.querySelector('#hw-motion-toggle') as HTMLInputElement | null;
-      if (motionToggle) {
-        motionToggle.disabled = false;
-      }
-    }
+    this.mainMenuEl.querySelectorAll('button').forEach((btn) => {
+      btn.disabled = false;
+      btn.style.pointerEvents = '';
+      btn.classList.remove('opacity-50', 'cursor-not-allowed');
+    });
     
     // Clear the busy flag
     this.menuBusy = false;
@@ -1215,21 +1915,26 @@ class App {
     // Apply theme for current level so menu colors are correct
     this.applyMenuTheme(this.currentLevel).catch(() => void 0);
     this.mainMenuEl.classList.remove('hidden');
-    this.mainMenuEl.classList.add('flex');
     
     // Apply title effects after menu is visible
     setTimeout(() => {
       this.applyTitleEffects(this.currentLevel).catch(() => {});
     }, 50);
+    
     // Refresh from local progress to ensure latest level is reflected
     try {
       const p = loadLocalProgress();
       if (p?.level) this.currentLevel = Math.max(this.currentLevel, p.level);
     } catch {}
+    
     // Refresh button labels to reflect current level
     try {
       this.updateMenuProgress({ level: this.currentLevel, completedLevels: [], updatedAt: Date.now() } as HWProgress);
     } catch {}
+    
+    // Update coin display
+    this.updateMenuCoinDisplay();
+    
     // Ensure no residual blur remains on menu or game container
     blurTransition.applyLayeredBlur([
       { elementId: 'hw-main-menu', level: 'none', delay: 0 },
@@ -1240,7 +1945,6 @@ class App {
   private async hideMainMenu(): Promise<void> {
     if (!this.mainMenuEl) return;
     this.mainMenuEl.classList.add('hidden');
-    this.mainMenuEl.classList.remove('flex');
     
     // Refresh GameUI when showing the game after closing main menu
     if (this.gameUI) {
@@ -1382,6 +2086,9 @@ class App {
    * Start daily challenge game
    */
   private async startDailyChallenge(challengeData: any): Promise<void> {
+    // Show loading indicator
+    loadingOverlay.show('Loading daily challenge...');
+    
     const startTime = Date.now();
     let hintsUsed = 0;
     
@@ -1404,12 +2111,15 @@ class App {
               try {
                 this.setupUI();
                 this.initializeGameUI();
+                // Hide loading overlay once game is ready
+                loadingOverlay.hide();
               } finally {
                 resolve();
               }
             },
             onError: (err) => {
               console.error(err);
+              loadingOverlay.hide();
               reject(err);
             },
             onLevelComplete: async () => {

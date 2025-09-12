@@ -34,16 +34,16 @@ export class ShareDialog {
       // Share buttons
       const shareRedditBtn = this.panel.querySelector('#sd-share-reddit') as HTMLButtonElement;
       if (shareRedditBtn) {
-        shareRedditBtn.onclick = () => {
-          this.shareToReddit();
+        shareRedditBtn.onclick = async () => {
+          await this.shareToReddit();
           // Don't close the dialog, let user continue sharing
         };
       }
 
       const shareTwitterBtn = this.panel.querySelector('#sd-share-twitter') as HTMLButtonElement;
       if (shareTwitterBtn) {
-        shareTwitterBtn.onclick = () => {
-          this.shareToTwitter();
+        shareTwitterBtn.onclick = async () => {
+          await this.shareToTwitter();
         };
       }
 
@@ -163,19 +163,32 @@ export class ShareDialog {
     this.overlay.appendChild(this.panel);
   }
 
-  private shareToReddit(): void {
+  private async shareToReddit(): Promise<void> {
     const title = `I created a HexaWord puzzle: "${this.clue}"`;
-    const text = `Check out my custom HexaWord puzzle! Can you solve it?\n\nClue: ${this.clue}\n\nPlay it here: ${this.getShareUrl()}`;
+    const shareUrl = this.getShareUrl();
     
-    // Reddit share URL
-    const redditUrl = `https://www.reddit.com/submit?title=${encodeURIComponent(title)}&text=${encodeURIComponent(text)}`;
+    // Track the share
+    await this.trackShare();
+    
+    // Reddit share URL - using the simpler format that works better
+    const redditUrl = `https://www.reddit.com/submit?url=${encodeURIComponent(shareUrl)}&title=${encodeURIComponent(title)}`;
     window.open(redditUrl, '_blank', 'width=600,height=600');
+    
+    // Show success feedback
+    this.showShareFeedback('Opening Reddit to share your level!');
   }
 
-  private shareToTwitter(): void {
+  private async shareToTwitter(): Promise<void> {
     const text = `🎮 I created a HexaWord puzzle: "${this.clue}"! Can you solve it? Play here: ${this.getShareUrl()} #HexaWord #PuzzleGame`;
+    
+    // Track the share
+    await this.trackShare();
+    
     const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
     window.open(twitterUrl, '_blank', 'width=600,height=400');
+    
+    // Show success feedback
+    this.showShareFeedback('Opening Twitter to share your level!');
   }
 
   private async copyShareLink(): Promise<void> {
@@ -232,5 +245,44 @@ export class ShareDialog {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+  }
+
+  private async trackShare(): Promise<void> {
+    try {
+      // Call the backend to track the share
+      await fetch(`/api/user-levels/${encodeURIComponent(this.levelId)}/share`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+    } catch (error) {
+      console.error('Failed to track share:', error);
+    }
+  }
+
+  private showShareFeedback(message: string): void {
+    // Create a temporary toast notification
+    const toast = document.createElement('div');
+    toast.className = 'fixed top-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg text-white text-sm font-medium z-[10003] transition-all duration-300';
+    toast.style.background = 'linear-gradient(135deg, #3B82F6 0%, #2563EB 100%)';
+    toast.textContent = message;
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(-50%) translateY(-20px)';
+    
+    document.body.appendChild(toast);
+    
+    // Animate in
+    setTimeout(() => {
+      toast.style.opacity = '1';
+      toast.style.transform = 'translateX(-50%) translateY(0)';
+    }, 10);
+    
+    // Remove after 3 seconds
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateX(-50%) translateY(-20px)';
+      setTimeout(() => toast.remove(), 300);
+    }, 3000);
   }
 }

@@ -59,15 +59,22 @@ router.post('/api/leaderboard/update', async (req: Request, res: Response) => {
     for (const type of types) {
       const key = getLeaderboardKey(type);
       
+      // Get current score for this user
+      const currentScore = await redis.zScore(key, username);
+      const newScore = Math.max(score, currentScore || 0); // Use the higher score
+      
+      // If we want to accumulate scores instead, use:
+      // const newScore = (currentScore || 0) + score;
+      
       // Use Redis sorted set to maintain leaderboard
       // Score is used for ranking, member data stored separately
-      await redis.zAdd(key, { score, member: username });
+      await redis.zAdd(key, { score: newScore, member: username });
       
       // Store additional user data
       const dataKey = `${key}:data:${username}`;
       const userData: LeaderboardEntry = {
         username,
-        score,
+        score: newScore,
         level: level || 1,
         coins: coins || 0,
         streak,

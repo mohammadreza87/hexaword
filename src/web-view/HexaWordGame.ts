@@ -2306,7 +2306,7 @@ export class HexaWordGame {
       if (progress.scoreState) {
         this.scoreService.loadState({
           levelScore: progress.scoreState.levelScore,
-          currentScore: this.scoreService.getState().currentScore,
+          currentScore: progress.scoreState.currentScore || this.scoreService.getState().currentScore,
           hintsUsed: progress.scoreState.hintsUsed,
           firstWordFound: progress.foundWords.length > 0,
           timeStarted: progress.scoreState.timeStarted
@@ -2357,6 +2357,7 @@ export class HexaWordGame {
       selectedCells: this.selectedCells.map(cell => `${cell.q},${cell.r}`),
       scoreState: {
         levelScore: scoreState.levelScore,
+        currentScore: scoreState.currentScore,
         hintsUsed: scoreState.hintsUsed,
         timeStarted: scoreState.timeStarted || Date.now()
       }

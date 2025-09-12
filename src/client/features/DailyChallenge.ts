@@ -88,8 +88,8 @@ export class DailyChallenge {
     this.overlay.className = 'fixed inset-0 bg-black/50 backdrop-blur-sm z-[10000] flex items-center justify-center';
     
     this.panel = document.createElement('div');
-    this.panel.className = 'bg-gradient-to-br from-hw-surface-primary to-hw-surface-secondary rounded-2xl shadow-2xl max-w-md w-full mx-4';
-    this.panel.style.transform = 'scale(0.85)';
+    this.panel.className = 'bg-gradient-to-br from-hw-surface-primary to-hw-surface-secondary rounded-2xl shadow-2xl max-w-sm w-full mx-4';
+    this.panel.style.transform = 'scale(0.68)';
     
     if (!this.data) {
       this.panel.innerHTML = `<div class="p-6 text-center text-white">Loading...</div>`;
@@ -99,6 +99,12 @@ export class DailyChallenge {
     
     const { challenge, userCompletion, userStreak, stats } = this.data;
     const isCompleted = !!userCompletion;
+    
+    // Calculate cycle day
+    const cycleStartDate = new Date('2024-01-01');
+    const today = new Date(challenge.date);
+    const daysSinceStart = Math.floor((today.getTime() - cycleStartDate.getTime()) / (1000 * 60 * 60 * 24));
+    const cycleDay = ((daysSinceStart % 60) + 1);
     
     // Get day name and emoji
     const dayEmojis: Record<string, string> = {
@@ -118,14 +124,17 @@ export class DailyChallenge {
     };
     
     this.panel.innerHTML = `
-      <div class="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4 rounded-t-2xl">
+      <div class="bg-gradient-to-r from-indigo-600 to-purple-600 px-5 py-3 rounded-t-2xl">
         <div class="flex items-center justify-between">
           <div>
             <div class="flex items-center gap-2">
               <span class="text-2xl">${dayEmojis[challenge.dayType] || '📅'}</span>
               <h2 class="text-xl font-bold text-white">Daily Challenge #${challenge.id}</h2>
             </div>
-            <p class="text-indigo-200 text-sm mt-1">${new Date(challenge.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+            <p class="text-indigo-200 text-sm mt-1">
+              ${new Date(challenge.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+              <span class="text-xs opacity-75"> • Day ${cycleDay}/60</span>
+            </p>
           </div>
           <button id="dc-close" class="text-white/80 hover:text-white transition-colors">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -135,7 +144,7 @@ export class DailyChallenge {
         </div>
       </div>
       
-      <div class="p-6 space-y-4">
+      <div class="p-5 space-y-3">
         <!-- Challenge Info -->
         <div class="bg-hw-surface-tertiary/30 rounded-lg p-4">
           <div class="flex items-center justify-between mb-2">
@@ -144,14 +153,7 @@ export class DailyChallenge {
               ${challenge.difficulty.toUpperCase()}
             </div>
           </div>
-          ${challenge.theme ? `<div class="text-sm text-hw-text-secondary mb-2">Theme: ${challenge.theme}</div>` : ''}
-          <div class="flex flex-wrap gap-1.5 mt-3">
-            ${challenge.words.map(word => `
-              <span class="px-2 py-1 rounded bg-hw-surface-secondary/50 text-hw-text-primary text-xs font-mono">
-                ${word} (${word.length})
-              </span>
-            `).join('')}
-          </div>
+          ${challenge.theme ? `<div class="text-sm text-hw-text-secondary">Theme: ${challenge.theme}</div>` : ''}
         </div>
         
         <!-- Streak Info -->

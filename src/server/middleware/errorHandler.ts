@@ -1,10 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import { ApiErrorResponse, ApiErrorCode } from '../../shared/types/api';
 import { ZodError } from 'zod';
+import { randomUUID } from 'crypto';
 
 // Generate unique request ID
 export function generateRequestId(): string {
-  return `req_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  // Use cryptographically strong UUIDs to avoid Math.random() in prod/tests
+  return `req_${randomUUID()}`;
 }
 
 // Structured logger

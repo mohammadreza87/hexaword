@@ -8,6 +8,7 @@ export interface LevelProgressData {
   selectedCells: string[];
   scoreState: {
     levelScore: number;
+    currentScore: number; // Total accumulated score across all levels
     hintsUsed: number;
     timeStarted: number;
   };

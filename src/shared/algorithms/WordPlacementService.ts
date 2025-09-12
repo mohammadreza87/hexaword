@@ -34,16 +34,20 @@ export class WordPlacementService {
     // Step 1: Place first 3 words crossing at center
     const layer1Success = this.placeFirstThreeWords(wordBank);
     if (!layer1Success) {
-      console.log('Failed to place first 3 words');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Failed to place first 3 words');
+      }
       return false;
     }
     
     // Step 2: Place remaining words systematically
     this.placeRemainingWords(wordBank);
     
-    console.log(`Placed ${this.wordsActive.length} out of ${words.length} words.`);
-    if (this.wordsActive.length < words.length) {
-      console.log('Failed to place:', words.filter(w => !this.wordsActive.includes(w)).map(w => w.word));
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`Placed ${this.wordsActive.length} out of ${words.length} words.`);
+      if (this.wordsActive.length < words.length) {
+        console.log('Failed to place:', words.filter(w => !this.wordsActive.includes(w)).map(w => w.word));
+      }
     }
     return this.wordsActive.length === words.length;
   }
@@ -57,14 +61,18 @@ export class WordPlacementService {
 
     const triplet = this.findSharedLetterTriplet(wordBank);
     if (!triplet) {
-      console.log('No shared letter triplet found among candidate words');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('No shared letter triplet found among candidate words');
+      }
       // Fallback 1: try to place any best pair that shares a letter
       const pair = this.findSharedLetterPair(wordBank);
       if (pair) {
         const { aIndex, bIndex, idx1, idx2, letter } = pair;
         const w1 = wordBank[aIndex];
         const w2 = wordBank[bIndex];
-        console.log(`Placing pair sharing '${letter}' at indices`, { idx1, idx2 });
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`Placing pair sharing '${letter}' at indices`, { idx1, idx2 });
+        }
         // Place word 1 horizontally crossing origin
         this.placeWordAt(w1, -idx1, 0, 0);
         // Place word 2 vertically crossing origin
@@ -80,7 +88,9 @@ export class WordPlacementService {
       const midIdx = Math.floor(anchor.chars.length / 2);
       this.placeWordAt(anchor, -midIdx, 0, 0);
       wordBank.splice(anchorIndex, 1);
-      console.log(`Placed single anchor word '${anchor.word}' at center`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`Placed single anchor word '${anchor.word}' at center`);
+      }
       return true;
     }
 
@@ -89,7 +99,9 @@ export class WordPlacementService {
     const w2 = wordBank[bIndex];
     const w3 = wordBank[cIndex];
 
-    console.log(`Placing first 3 words sharing '${letter}' at indices`, { idx1, idx2, idx3 });
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`Placing first 3 words sharing '${letter}' at indices`, { idx1, idx2, idx3 });
+    }
 
     // Place word 1 on Q axis (horizontal)
     this.placeWordAt(w1, -idx1, 0, 0);

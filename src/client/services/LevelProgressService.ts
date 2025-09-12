@@ -9,6 +9,7 @@ export interface LevelProgress {
   selectedCells: string[]; // Current selection
   scoreState: {
     levelScore: number;
+    currentScore: number; // Total accumulated score across all levels
     hintsUsed: number;
     timeStarted: number;
   };
@@ -105,6 +106,7 @@ export class LevelProgressService {
         selectedCells: [],
         scoreState: {
           levelScore: 0,
+          currentScore: 0,
           hintsUsed: 0,
           timeStarted: Date.now()
         },

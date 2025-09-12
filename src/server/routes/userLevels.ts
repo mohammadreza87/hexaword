@@ -202,7 +202,7 @@ router.post('/api/user-levels', async (req: Request, res: Response) => {
   }
 });
 
-// List current user's levels (last N)
+// List current user's levels (last N) - MUST BE BEFORE /:id route
 router.get('/api/user-levels/mine', async (_req: Request, res: Response) => {
   try {
     const username = await reddit.getCurrentUsername();
@@ -246,6 +246,58 @@ router.get('/api/user-levels/mine', async (_req: Request, res: Response) => {
   } catch (err) {
     console.error('List user levels failed:', err);
     return res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to load user levels', details: err.message } });
+  }
+});
+
+// Get a specific level by ID (for sharing) - MUST BE AFTER /mine route
+router.get('/api/user-levels/:id', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id;
+    const levelKey = `hw:ulevel:${id}`;
+    const raw = await redis.get(levelKey);
+    
+    if (!raw) {
+      return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Level not found' } });
+    }
+    
+    const level: UserLevelRecord = JSON.parse(raw);
+    
+    // Increment play count when level is accessed
+    level.playCount = (level.playCount || 0) + 1;
+    await redis.set(levelKey, JSON.stringify(level));
+    
+    return res.json({ level });
+  } catch (err) {
+    console.error('Get user level failed:', err);
+    return res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to load level' } });
+  }
+});
+
+// Track share for a user level
+router.post('/api/user-levels/:id/share', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id;
+    
+    // Get the level
+    const levelKey = `hw:ulevel:${id}`;
+    const raw = await redis.get(levelKey);
+    
+    if (!raw) {
+      return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Level not found' } });
+    }
+    
+    const level: UserLevelRecord = JSON.parse(raw);
+    
+    // Increment share count
+    level.shares = (level.shares || 0) + 1;
+    
+    // Save updated level
+    await redis.set(levelKey, JSON.stringify(level));
+    
+    return res.json({ success: true, shares: level.shares });
+  } catch (err) {
+    console.error('Track share failed:', err);
+    return res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to track share' } });
   }
 });
 

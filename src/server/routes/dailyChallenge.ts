@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import { reddit, redis } from '@devvit/web/server';
 import crypto from 'crypto';
+import { DAILY_CHALLENGES_60_DAY_CYCLE, calculateCycleDay, getChallengeForDay } from '../data/dailyChallenges';
 
 const router = express.Router();
 
@@ -58,91 +59,28 @@ function getDayType(date: Date): DailyChallenge['dayType'] {
   }
 }
 
-// Generate deterministic challenge for a given date
+// Generate deterministic challenge for a given date using 60-day cycle
 function generateDailyChallenge(dateStr: string): DailyChallenge {
   const date = new Date(dateStr);
   const daysSinceEpoch = Math.floor(date.getTime() / (1000 * 60 * 60 * 24));
   const id = daysSinceEpoch - 19000; // Start counting from a recent epoch
   
+  // Get the challenge from our 60-day cycle
+  const cycleDay = calculateCycleDay(date);
+  const predefinedChallenge = getChallengeForDay(cycleDay);
+  
   // Create deterministic seed from date
   const seed = crypto.createHash('md5').update(dateStr).digest('hex');
-  const seedNum = parseInt(seed.substr(0, 8), 16);
-  
-  const dayType = getDayType(date);
-  let words: string[] = [];
-  let theme: string | undefined;
-  let clue: string;
-  let difficulty: DailyChallenge['difficulty'];
-  
-  switch (dayType) {
-    case 'minimal':
-      // Easy 3-4 letter words
-      words = ['CAT', 'DOG', 'RUN', 'SUN', 'FUN', 'BAT'];
-      clue = 'Simple Start';
-      difficulty = 'easy';
-      break;
-      
-    case 'themed':
-      // Pick a theme based on seed
-      const themes = Object.keys(THEMED_WORDS);
-      theme = themes[seedNum % themes.length];
-      words = THEMED_WORDS[theme as keyof typeof THEMED_WORDS];
-      clue = `Theme: ${theme.charAt(0).toUpperCase() + theme.slice(1)}`;
-      difficulty = 'medium';
-      break;
-      
-    case 'wildcard':
-      // Random difficulty
-      const difficulties: DailyChallenge['difficulty'][] = ['easy', 'medium', 'hard'];
-      difficulty = difficulties[seedNum % 3];
-      if (difficulty === 'easy') {
-        words = ['TOP', 'HOT', 'POT', 'TOT', 'POP', 'HOP'];
-      } else if (difficulty === 'medium') {
-        words = ['WORD', 'GAME', 'PLAY', 'TILE', 'GRID', 'HINT'];
-      } else {
-        words = ['PUZZLE', 'HEXAGON', 'CROSSWORD', 'CHALLENGE', 'STRATEGIC', 'WORDSMITH'];
-      }
-      clue = `Wildcard ${difficulty}`;
-      break;
-      
-    case 'throwback':
-      // Use a previous popular challenge (simplified for now)
-      words = ['STAR', 'WARS', 'TREK', 'GATE', 'SHIP', 'SPACE'];
-      clue = 'Sci-Fi Classics';
-      difficulty = 'medium';
-      break;
-      
-    case 'frenzy':
-      // 6 medium-length words
-      words = ['QUICK', 'BROWN', 'FOXES', 'JUMPS', 'LAZY', 'DOGS'];
-      clue = 'Friday Frenzy';
-      difficulty = 'hard';
-      break;
-      
-    case 'social':
-      // Collaborative theme
-      words = ['TEAM', 'HELP', 'SHARE', 'FRIEND', 'GROUP', 'UNITY'];
-      clue = 'Better Together';
-      difficulty = 'medium';
-      break;
-      
-    case 'supreme':
-      // Hardest challenge
-      words = ['COMPLEX', 'SUPREME', 'HEXAGON', 'OVERLAP', 'VICTORY', 'MASTERS'];
-      clue = 'Sunday Supreme';
-      difficulty = 'hard';
-      break;
-  }
   
   return {
     id,
     date: dateStr,
-    words,
+    words: predefinedChallenge.words,
     seed: `daily:${dateStr}:${seed}`,
-    theme,
-    clue,
-    difficulty,
-    dayType
+    theme: predefinedChallenge.theme,
+    clue: predefinedChallenge.clue,
+    difficulty: predefinedChallenge.difficulty,
+    dayType: predefinedChallenge.dayType
   };
 }
 
@@ -400,5 +338,55 @@ function formatTime(seconds: number): string {
   const secs = seconds % 60;
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
+
+// Get challenge preview for next N days (admin/debug endpoint)
+router.get('/api/daily-challenge/preview', async (req: Request, res: Response) => {
+  try {
+    const days = parseInt(req.query.days as string) || 7;
+    const startDate = req.query.date ? new Date(req.query.date as string) : new Date();
+    
+    const previews = [];
+    for (let i = 0; i < days; i++) {
+      const date = new Date(startDate);
+      date.setDate(date.getDate() + i);
+      const dateStr = date.toISOString().split('T')[0];
+      const challenge = generateDailyChallenge(dateStr);
+      const cycleDay = calculateCycleDay(date);
+      
+      previews.push({
+        date: dateStr,
+        cycleDay,
+        dayOfWeek: date.toLocaleDateString('en-US', { weekday: 'long' }),
+        ...challenge
+      });
+    }
+    
+    return res.json({ previews });
+  } catch (error) {
+    console.error('Failed to get challenge preview:', error);
+    return res.status(500).json({ error: 'Failed to get challenge preview' });
+  }
+});
+
+// Get current cycle information
+router.get('/api/daily-challenge/cycle-info', async (req: Request, res: Response) => {
+  try {
+    const today = new Date();
+    const cycleDay = calculateCycleDay(today);
+    const totalDays = DAILY_CHALLENGES_60_DAY_CYCLE.length;
+    const daysRemaining = totalDays - cycleDay + 1;
+    
+    return res.json({
+      currentDay: cycleDay,
+      totalDays,
+      daysRemaining,
+      cycleProgress: Math.round((cycleDay / totalDays) * 100),
+      nextCycleStarts: new Date(Date.now() + (daysRemaining * 24 * 60 * 60 * 1000)).toISOString().split('T')[0]
+    });
+  } catch (error) {
+    console.error('Failed to get cycle info:', error);
+    return res.status(500).json({ error: 'Failed to get cycle info' });
+  }
+});
 
 export default router;

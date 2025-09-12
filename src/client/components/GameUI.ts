@@ -42,7 +42,7 @@ export class GameUI {
   private createLevelIndicator(): HTMLElement {
     const levelEl = document.createElement('div');
     levelEl.id = 'hw-level-indicator';
-    levelEl.className = 'absolute top-1 left-1 h-6 px-2 rounded-lg text-hw-text-secondary backdrop-blur-md border transition-all duration-base text-xs font-bold flex items-center justify-center pointer-events-auto';
+    levelEl.className = 'absolute top-1 left-1/2 -translate-x-1/2 h-6 px-2 rounded-lg text-hw-text-secondary backdrop-blur-md border transition-all duration-base text-xs font-bold flex items-center justify-center pointer-events-auto';
     levelEl.style.cssText = 'background: rgba(26, 31, 43, 0.6); border-color: rgba(255, 255, 255, 0.08);';
     levelEl.textContent = 'LEVEL 1';
     return levelEl;
@@ -60,9 +60,9 @@ export class GameUI {
   private createCoinDisplay(): HTMLElement {
     const coinEl = document.createElement('div');
     coinEl.id = 'hw-coins';
-    coinEl.className = 'absolute top-1 left-1/2 -translate-x-1/2 h-6 px-2 rounded-lg text-hw-text-primary backdrop-blur-md border transition-all duration-base text-xs font-bold flex items-center gap-1 justify-center pointer-events-auto';
+    coinEl.className = 'absolute top-1 left-1 h-6 px-2 rounded-lg text-hw-text-primary backdrop-blur-md border transition-all duration-base text-xs font-bold flex items-center gap-1 justify-center pointer-events-auto';
     coinEl.style.cssText = 'background: rgba(26, 31, 43, 0.6); border-color: rgba(255, 255, 255, 0.08);';
-    coinEl.innerHTML = '<span style="font-size: 14px;">🪙</span><span>0</span>';
+    coinEl.innerHTML = '<span style="font-size: 14px;">🪙</span><span id="hw-coin-amount">0</span>';
     return coinEl;
   }
   

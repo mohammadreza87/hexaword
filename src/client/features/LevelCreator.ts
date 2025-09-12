@@ -25,40 +25,71 @@ export class LevelCreator {
   private previewLevel: number = 1;
 
   async show(): Promise<CreateResult> {
+    console.log('LevelCreator.show() called');
     // Initialize color service
     this.colorPaletteService = ColorPaletteService.getInstance();
     // Use a random level for preview colors (1-20)
     this.previewLevel = Math.floor(Math.random() * 20) + 1;
     
     this.buildUI();
+    console.log('UI built, appending to body...');
     document.body.appendChild(this.overlay);
+    
+    // Ensure visibility
+    this.overlay.style.display = 'flex';
+    this.overlay.style.zIndex = '10001';
+    if (this.panel) {
+      this.panel.style.display = 'block';
+      this.panel.style.zIndex = '10002';
+    }
+    console.log('Overlay appended, binding events...');
     this.bindEvents();
+    console.log('Events bound, returning promise...');
     return new Promise<CreateResult>((resolve) => {
       const onClose = (r: CreateResult) => { this.overlay.remove(); resolve(r); };
-      // Bind all cancel buttons (both steps)
-      this.panel.querySelectorAll('#lc-cancel').forEach((el) => {
-        (el as HTMLButtonElement).onclick = () => onClose(null);
-      });
+      
+      // Close button handler (header)
+      const closeBtn = this.panel.querySelector('#lc-close-header') as HTMLButtonElement;
+      if (closeBtn) {
+        closeBtn.addEventListener('click', () => onClose(null));
+      }
+      
+      // Cancel button handler (step 2)
+      const cancelBtn = this.panel.querySelector('#lc-cancel') as HTMLButtonElement;
+      if (cancelBtn) {
+        cancelBtn.addEventListener('click', () => onClose(null));
+      }
+      
       // Step navigation
-      (this.panel.querySelector('#lc-next') as HTMLButtonElement).onclick = async () => {
+      const nextBtn = this.panel.querySelector('#lc-next') as HTMLButtonElement;
+      if (nextBtn) {
+        nextBtn.addEventListener('click', async () => {
         const payload = this.collect();
         const valid = this.validate(payload);
         if (!valid.ok) { this.showError(valid.msg); return; }
         this.step = 'preview';
         await this.renderPreview(payload.words);
-        this.showPreviewPage();
-      };
-      (this.panel.querySelector('#lc-back') as HTMLButtonElement).onclick = () => {
-        this.step = 'form';
-        this.showFormPage();
-      };
-      (this.panel.querySelector('#lc-save') as HTMLButtonElement).onclick = async () => {
+          this.showPreviewPage();
+        });
+      }
+      
+      const backBtn = this.panel.querySelector('#lc-back') as HTMLButtonElement;
+      if (backBtn) {
+        backBtn.addEventListener('click', () => {
+          this.step = 'form';
+          this.showFormPage();
+        });
+      }
+      
+      const saveBtn = this.panel.querySelector('#lc-save') as HTMLButtonElement;
+      if (saveBtn) {
+        saveBtn.addEventListener('click', async () => {
         const payload = this.collect();
         const valid = this.validate(payload);
         if (!valid.ok) { this.showError(valid.msg); return; }
         
         // Log the payload being sent
-        console.log('Sending level data:', payload);
+        // console.log('Sending level data:', payload);
         
         loadingOverlay.show('Saving your level...');
         
@@ -98,66 +129,115 @@ export class LevelCreator {
           loadingOverlay.hide();
           this.showError('Network error while saving');
         }
-      };
-      // No shuffle on step 2 per requirements
+        });
+      }
     });
   }
 
   private buildUI(): void {
     this.overlay = document.createElement('div');
-    this.overlay.className = 'modal-overlay';
+    this.overlay.className = 'fixed inset-0 z-[10000]';
+    this.overlay.style.display = 'block';
+    
     this.panel = document.createElement('div');
-    this.panel.className = 'modal-content panel-hex max-w-xl';
-    this.panel.style.maxHeight = '70vh';
-    this.panel.style.overflowY = 'auto';
-    this.panel.style.transform = 'scale(0.85)';
+    this.panel.className = 'absolute inset-0 bg-gradient-to-br from-hw-surface-primary to-hw-surface-secondary overflow-hidden';
+    
     this.panel.innerHTML = `
-      <div class="text-center mb-2">
-        <div class="text-xl tracking-wide text-hw-text-primary">Create Level</div>
-        <div class="text-xs text-hw-text-secondary">Step 1: Enter level details</div>
-      </div>
-      <div id="lc-error" class="text-red-400 text-xs mb-2" style="min-height:16px;"></div>
-      <div id="lc-step-form">
-        <div class="grid gap-2 mb-3">
-          <div class="relative">
-            <input id="lc-name" placeholder="Level name" maxlength="30" class="input text-sm py-2" style="text-transform: uppercase;" />
-            <div class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-hw-text-secondary/50" style="font-size: 10px;">
-              <span id="lc-name-count">0</span>/30
-            </div>
+      <!-- Header -->
+      <div class="bg-gradient-to-r from-purple-600 to-purple-800 px-6 py-3">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-xl font-bold text-white">✏️ Create Level</h2>
+            <p class="text-purple-200 text-xs mt-0.5">Step 1: Enter level details</p>
           </div>
-          <div class="relative">
-            <input id="lc-clue" placeholder="Theme or clue" maxlength="30" class="input text-sm py-2" style="text-transform: uppercase;" />
-            <div class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-hw-text-secondary/50" style="font-size: 10px;">
-              <span id="lc-clue-count">0</span>/30
-            </div>
-          </div>
-          <div class="border-t border-hw-surface-tertiary/30 pt-2">
-            <div class="flex items-center justify-between mb-1.5">
-              <span class="text-xs text-hw-text-secondary">Words</span>
-              <span class="text-xs text-hw-text-secondary/60" style="font-size: 10px;">Min 1, Max 6</span>
-            </div>
-            <div id="lc-words" class="grid gap-1.5" style="max-height: 200px; overflow-y: auto; padding-right: 4px;"></div>
-          </div>
-          <button id="lc-add" class="btn-add-word w-full sticky bottom-0 bg-opacity-95 py-2 text-sm">
-            <span style="font-size: 14px;">+</span>
-            <span>Add Word</span>
+          <button id="lc-close-header" class="text-white/80 hover:text-white transition-colors">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M15 5L5 15M5 5l10 10"/>
+            </svg>
           </button>
         </div>
-        <div class="flex gap-2 justify-end sticky bottom-0 bg-opacity-95" style="background: inherit; padding-top: 6px; margin-top: -4px;">
-          <button id="lc-next" class="btn-glass-primary py-1.5 text-sm">Next</button>
-          <button id="lc-cancel" class="btn-glass py-1.5 text-sm">Cancel</button>
-        </div>
       </div>
-      <div id="lc-step-preview" class="hidden">
-        <div class="text-xs text-hw-text-secondary mb-2">Step 2: Preview & Confirm</div>
-        <div class="mb-2 relative" style="max-height: calc(70vh - 160px); overflow-y: auto;">
-          <canvas id="lc-canvas" width="480" height="340" style="width:100%;height:200px;background:#0F1115;border:1px solid rgba(255,255,255,.08);border-radius:8px;"></canvas>
-          <div id="lc-clue-preview" class="absolute top-2 left-0 right-0 text-center" style="pointer-events:none;"></div>
-        </div>
-        <div class="flex gap-2 justify-end sticky bottom-0" style="background: inherit; padding-top: 6px;">
-          <button id="lc-save" class="btn-glass-primary py-1.5 text-sm">Save</button>
-          <button id="lc-back" class="btn-glass py-1.5 text-sm">Back</button>
-          <button id="lc-cancel" class="btn-glass py-1.5 text-sm">Cancel</button>
+      
+      <!-- Content Area -->
+      <div class="overflow-y-auto" style="height: calc(100vh - 80px);">
+        <div class="max-w-2xl mx-auto p-6">
+          <div id="lc-error" class="text-red-400 text-sm mb-3 text-center" style="min-height:20px;"></div>
+          
+          <!-- Step 1: Form -->
+          <div id="lc-step-form">
+            <div class="space-y-4">
+              <!-- Name Input -->
+              <div class="bg-black/20 rounded-lg p-4">
+                <label class="block text-sm text-purple-200 mb-2">Level Name (Optional)</label>
+                <div class="relative">
+                  <input id="lc-name" placeholder="Enter level name" maxlength="30" 
+                         class="w-full bg-black/30 text-white px-4 py-3 rounded-lg border border-white/10 focus:border-purple-500 focus:outline-none text-sm uppercase" />
+                  <div class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500">
+                    <span id="lc-name-count">0</span>/30
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Clue Input -->
+              <div class="bg-black/20 rounded-lg p-4">
+                <label class="block text-sm text-purple-200 mb-2">Theme or Clue (Required)</label>
+                <div class="relative">
+                  <input id="lc-clue" placeholder="Enter theme or clue" maxlength="30" 
+                         class="w-full bg-black/30 text-white px-4 py-3 rounded-lg border border-white/10 focus:border-purple-500 focus:outline-none text-sm uppercase" />
+                  <div class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500">
+                    <span id="lc-clue-count">0</span>/30
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Words Section -->
+              <div class="bg-black/20 rounded-lg p-4">
+                <div class="flex items-center justify-between mb-3">
+                  <label class="text-sm text-purple-200">Words</label>
+                  <span class="text-xs text-gray-500">Min 1, Max 6</span>
+                </div>
+                <div id="lc-words" class="space-y-2 mb-3" style="max-height: 300px; overflow-y: auto;"></div>
+                <button id="lc-add" class="w-full bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-semibold py-2.5 rounded-lg transition-all transform hover:scale-105 flex items-center justify-center gap-2 text-sm">
+                  <span class="text-lg">+</span>
+                  <span>Add Word</span>
+                </button>
+              </div>
+              
+              <!-- Action Buttons -->
+              <div class="flex gap-3 justify-end pt-4">
+                <button id="lc-cancel" class="px-6 py-2.5 rounded-lg bg-gray-600/50 hover:bg-gray-600/70 text-white font-semibold text-sm transition-colors">
+                  Cancel
+                </button>
+                <button id="lc-next" class="px-6 py-2.5 rounded-lg bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold text-sm transition-all transform hover:scale-105">
+                  Next →
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Step 2: Preview -->
+          <div id="lc-step-preview" class="hidden">
+            <div class="bg-black/20 rounded-lg p-4 mb-4" style="height: calc(100vh - 240px);">
+              <div class="text-sm text-purple-200 mb-3">Preview your level</div>
+              <div class="relative bg-black rounded-lg overflow-hidden" style="height: calc(100% - 40px);">
+                <canvas id="lc-canvas" width="600" height="500" style="width:100%;height:100%;object-fit:contain;"></canvas>
+                <div id="lc-clue-preview" class="absolute top-4 left-0 right-0 text-center" style="pointer-events:none;"></div>
+              </div>
+            </div>
+            
+            <!-- Action Buttons -->
+            <div class="flex gap-3 justify-end">
+              <button id="lc-back" class="px-6 py-2.5 rounded-lg bg-gray-600/50 hover:bg-gray-600/70 text-white font-semibold text-sm transition-colors">
+                ← Back
+              </button>
+              <button id="lc-cancel" class="px-6 py-2.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 font-semibold text-sm transition-colors">
+                Cancel
+              </button>
+              <button id="lc-save" class="px-6 py-2.5 rounded-lg bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold text-sm transition-all transform hover:scale-105">
+                Save Level
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     `;
@@ -219,7 +299,9 @@ export class LevelCreator {
       }
     };
     
-    (this.panel.querySelector('#lc-add') as HTMLButtonElement).onclick = () => {
+    const addWordBtn = this.panel.querySelector('#lc-add') as HTMLButtonElement;
+    if (addWordBtn) {
+      addWordBtn.addEventListener('click', () => {
       if (this.wordInputs.length >= 6) {
         this.showError('⚠️ Maximum 6 words allowed');
         return;
@@ -247,13 +329,13 @@ export class LevelCreator {
         removeBtn.className = 'absolute right-8 top-1/2 -translate-y-1/2 text-red-400 hover:text-red-300 transition-colors';
         removeBtn.style.fontSize = '14px';
         removeBtn.innerHTML = '✕';
-        removeBtn.onclick = () => {
+        removeBtn.addEventListener('click', () => {
           wrapper.remove();
           const idx = this.wordInputs.indexOf(inp);
           if (idx > -1) this.wordInputs.splice(idx, 1);
           // Check if scroll indicators are still needed
           setTimeout(checkScrollIndicators, 100);
-        };
+        });
         wrapper.appendChild(removeBtn);
       }
       
@@ -275,9 +357,10 @@ export class LevelCreator {
       inp.focus();
       wrapper.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       
-      // Check if scroll indicators are needed
-      setTimeout(checkScrollIndicators, 100);
-    };
+        // Check if scroll indicators are needed
+        setTimeout(checkScrollIndicators, 100);
+      });
+    }
     // Enforce uppercase letters
     this.nameInput && this.enforceUppercase(this.nameInput, true);
     this.clueInput && this.enforceUppercase(this.clueInput, true);
@@ -404,7 +487,7 @@ export class LevelCreator {
       const boardWidth = (bounds.maxQ - bounds.minQ + 1) * 1.5;
       const boardHeight = (bounds.maxR - bounds.minR + 1) * 1.732;
       const hexSize = Math.min(
-        20,
+        25,
         Math.floor(Math.min(availableWidth / boardWidth, availableHeight / boardHeight))
       );
       
@@ -534,6 +617,12 @@ export class LevelCreator {
     const prev = this.panel.querySelector('#lc-step-preview') as HTMLDivElement;
     form.classList.remove('hidden');
     prev.classList.add('hidden');
+    
+    // Update header subtitle
+    const subtitle = this.panel.querySelector('.text-purple-200.text-xs');
+    if (subtitle) {
+      subtitle.textContent = 'Step 1: Enter level details';
+    }
   }
 
   private showPreviewPage(): void {
@@ -541,5 +630,11 @@ export class LevelCreator {
     const prev = this.panel.querySelector('#lc-step-preview') as HTMLDivElement;
     form.classList.add('hidden');
     prev.classList.remove('hidden');
+    
+    // Update header subtitle
+    const subtitle = this.panel.querySelector('.text-purple-200.text-xs');
+    if (subtitle) {
+      subtitle.textContent = 'Step 2: Preview and save';
+    }
   }
 }
