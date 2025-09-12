@@ -106,6 +106,9 @@ router.get('/api/leaderboard', async (req: Request, res: Response) => {
       weekly: [],
       daily: [],
       creators: [],
+      creatorsByPlays: [],
+      creatorsByUpvotes: [],
+      creatorsByShares: [],
       userRank: null
     };
     
@@ -165,42 +168,101 @@ router.get('/api/leaderboard', async (req: Request, res: Response) => {
       }
     }
     
-    // Get creator leaderboard
+    // Get overall creator leaderboard
     const creatorKey = 'hw:leaderboard:creators';
     const topCreators = await redis.zRange(creatorKey, 0, limit - 1, { reverse: true });
     
+    // Collect all creator data first
+    const allCreatorData: CreatorStats[] = [];
+    
     if (topCreators && topCreators.length > 0) {
-      const creatorEntries = [];
-      for (let i = 0; i < topCreators.length; i++) {
-        const member = topCreators[i].member;
-        const dataKey = `${creatorKey}:data:${member}`;
+      for (const entry of topCreators) {
+        const dataKey = `${creatorKey}:data:${entry.member}`;
         const dataStr = await redis.get(dataKey);
         
         if (dataStr) {
           const data = JSON.parse(dataStr) as CreatorStats;
-          creatorEntries.push({
-            rank: i + 1,
-            username: data.username,
-            totalPlays: data.totalPlays,
-            totalUpvotes: data.totalUpvotes,
-            totalDownvotes: data.totalDownvotes,
-            totalShares: data.totalShares,
-            levelCount: data.levelCount,
-            score: topCreators[i].score
-          });
+          allCreatorData.push(data);
         }
       }
-      result.creators = creatorEntries;
-      
-      // Get current user's creator rank if they have created levels
-      if (currentUsername) {
-        const userCreatorRank = await redis.zRank(creatorKey, currentUsername, { reverse: true });
-        if (userCreatorRank !== null && userCreatorRank !== undefined) {
-          if (!result.userRank) {
-            result.userRank = {};
-          }
-          result.userRank.creator = userCreatorRank + 1;
+    }
+    
+    // Sort by overall score (already done by Redis)
+    result.creators = allCreatorData.map((data, i) => ({
+      rank: i + 1,
+      username: data.username,
+      totalPlays: data.totalPlays,
+      totalUpvotes: data.totalUpvotes,
+      totalDownvotes: data.totalDownvotes,
+      totalShares: data.totalShares,
+      levelCount: data.levelCount,
+      score: (data.totalPlays * 10) + (data.totalUpvotes * 50) - (data.totalDownvotes * 20) + (data.totalShares * 30) + (data.levelCount * 100)
+    }));
+    
+    // Sort by plays
+    const sortedByPlays = [...allCreatorData].sort((a, b) => b.totalPlays - a.totalPlays);
+    result.creatorsByPlays = sortedByPlays.slice(0, limit).map((data, i) => ({
+      rank: i + 1,
+      username: data.username,
+      totalPlays: data.totalPlays,
+      totalUpvotes: data.totalUpvotes,
+      totalDownvotes: data.totalDownvotes,
+      totalShares: data.totalShares,
+      levelCount: data.levelCount,
+      score: data.totalPlays
+    }));
+    
+    // Sort by upvotes
+    const sortedByUpvotes = [...allCreatorData].sort((a, b) => b.totalUpvotes - a.totalUpvotes);
+    result.creatorsByUpvotes = sortedByUpvotes.slice(0, limit).map((data, i) => ({
+      rank: i + 1,
+      username: data.username,
+      totalPlays: data.totalPlays,
+      totalUpvotes: data.totalUpvotes,
+      totalDownvotes: data.totalDownvotes,
+      totalShares: data.totalShares,
+      levelCount: data.levelCount,
+      score: data.totalUpvotes
+    }));
+    
+    // Sort by shares
+    const sortedByShares = [...allCreatorData].sort((a, b) => b.totalShares - a.totalShares);
+    result.creatorsByShares = sortedByShares.slice(0, limit).map((data, i) => ({
+      rank: i + 1,
+      username: data.username,
+      totalPlays: data.totalPlays,
+      totalUpvotes: data.totalUpvotes,
+      totalDownvotes: data.totalDownvotes,
+      totalShares: data.totalShares,
+      levelCount: data.levelCount,
+      score: data.totalShares
+    }));
+    
+    // Get current user's ranks in all categories
+    if (currentUsername) {
+      // Overall rank
+      const userCreatorRank = await redis.zRank(creatorKey, currentUsername, { reverse: true });
+      if (userCreatorRank !== null && userCreatorRank !== undefined) {
+        if (!result.userRank) {
+          result.userRank = {};
         }
+        result.userRank.creator = userCreatorRank + 1;
+      }
+      
+      // Find user in sorted lists for other ranks
+      const userPlayRank = sortedByPlays.findIndex(c => c.username === currentUsername);
+      if (userPlayRank !== -1) {
+        result.userRank.creatorPlays = userPlayRank + 1;
+      }
+      
+      const userUpvoteRank = sortedByUpvotes.findIndex(c => c.username === currentUsername);
+      if (userUpvoteRank !== -1) {
+        result.userRank.creatorUpvotes = userUpvoteRank + 1;
+      }
+      
+      const userShareRank = sortedByShares.findIndex(c => c.username === currentUsername);
+      if (userShareRank !== -1) {
+        result.userRank.creatorShares = userShareRank + 1;
       }
     }
     

@@ -26,11 +26,17 @@ interface LeaderboardData {
   weekly: LeaderboardEntry[];
   daily: LeaderboardEntry[];
   creators: CreatorEntry[];
+  creatorsByPlays: CreatorEntry[];
+  creatorsByUpvotes: CreatorEntry[];
+  creatorsByShares: CreatorEntry[];
   userRank?: {
     global: number;
     weekly: number;
     daily: number;
     creator?: number;
+    creatorPlays?: number;
+    creatorUpvotes?: number;
+    creatorShares?: number;
   };
 }
 
@@ -38,7 +44,8 @@ export class Leaderboard {
   private overlay!: HTMLDivElement;
   private panel!: HTMLDivElement;
   private currentMainTab: 'levels' | 'creators' = 'levels';
-  private currentSubTab: 'global' | 'weekly' | 'daily' = 'global';
+  private currentLevelSubTab: 'global' | 'weekly' | 'daily' = 'global';
+  private currentCreatorSubTab: 'overall' | 'plays' | 'upvotes' | 'shares' = 'overall';
   private data: LeaderboardData | null = null;
 
   async show(): Promise<void> {
@@ -95,18 +102,38 @@ export class Leaderboard {
       </div>
       
       <!-- Sub Tabs (for Levels) -->
-      <div id="lb-sub-tabs" class="flex border-b border-hw-surface-tertiary/30 bg-hw-surface-primary/50">
-        <button data-sub-tab="global" class="lb-sub-tab flex-1 px-4 py-2.5 text-xs font-medium transition-all relative">
+      <div id="lb-level-sub-tabs" class="flex border-b border-hw-surface-tertiary/30 bg-hw-surface-primary/50">
+        <button data-level-sub-tab="global" class="lb-level-sub-tab flex-1 px-4 py-2.5 text-xs font-medium transition-all relative">
           <span class="relative z-10">🌍 Global</span>
-          <div class="lb-sub-tab-indicator absolute bottom-0 left-0 right-0 h-0.5 bg-purple-400 transform scale-x-0 transition-transform"></div>
+          <div class="lb-level-sub-tab-indicator absolute bottom-0 left-0 right-0 h-0.5 bg-purple-400 transform scale-x-0 transition-transform"></div>
         </button>
-        <button data-sub-tab="weekly" class="lb-sub-tab flex-1 px-4 py-2.5 text-xs font-medium transition-all relative">
+        <button data-level-sub-tab="weekly" class="lb-level-sub-tab flex-1 px-4 py-2.5 text-xs font-medium transition-all relative">
           <span class="relative z-10">📅 Weekly</span>
-          <div class="lb-sub-tab-indicator absolute bottom-0 left-0 right-0 h-0.5 bg-purple-400 transform scale-x-0 transition-transform"></div>
+          <div class="lb-level-sub-tab-indicator absolute bottom-0 left-0 right-0 h-0.5 bg-purple-400 transform scale-x-0 transition-transform"></div>
         </button>
-        <button data-sub-tab="daily" class="lb-sub-tab flex-1 px-4 py-2.5 text-xs font-medium transition-all relative">
+        <button data-level-sub-tab="daily" class="lb-level-sub-tab flex-1 px-4 py-2.5 text-xs font-medium transition-all relative">
           <span class="relative z-10">☀️ Daily</span>
-          <div class="lb-sub-tab-indicator absolute bottom-0 left-0 right-0 h-0.5 bg-purple-400 transform scale-x-0 transition-transform"></div>
+          <div class="lb-level-sub-tab-indicator absolute bottom-0 left-0 right-0 h-0.5 bg-purple-400 transform scale-x-0 transition-transform"></div>
+        </button>
+      </div>
+      
+      <!-- Sub Tabs (for Creators) -->
+      <div id="lb-creator-sub-tabs" class="hidden flex border-b border-hw-surface-tertiary/30 bg-hw-surface-primary/50">
+        <button data-creator-sub-tab="overall" class="lb-creator-sub-tab flex-1 px-3 py-2.5 text-xs font-medium transition-all relative">
+          <span class="relative z-10">⭐ Overall</span>
+          <div class="lb-creator-sub-tab-indicator absolute bottom-0 left-0 right-0 h-0.5 bg-purple-400 transform scale-x-0 transition-transform"></div>
+        </button>
+        <button data-creator-sub-tab="plays" class="lb-creator-sub-tab flex-1 px-3 py-2.5 text-xs font-medium transition-all relative">
+          <span class="relative z-10">🎮 Most Played</span>
+          <div class="lb-creator-sub-tab-indicator absolute bottom-0 left-0 right-0 h-0.5 bg-purple-400 transform scale-x-0 transition-transform"></div>
+        </button>
+        <button data-creator-sub-tab="upvotes" class="lb-creator-sub-tab flex-1 px-3 py-2.5 text-xs font-medium transition-all relative">
+          <span class="relative z-10">👍 Most Liked</span>
+          <div class="lb-creator-sub-tab-indicator absolute bottom-0 left-0 right-0 h-0.5 bg-purple-400 transform scale-x-0 transition-transform"></div>
+        </button>
+        <button data-creator-sub-tab="shares" class="lb-creator-sub-tab flex-1 px-3 py-2.5 text-xs font-medium transition-all relative">
+          <span class="relative z-10">📤 Most Shared</span>
+          <div class="lb-creator-sub-tab-indicator absolute bottom-0 left-0 right-0 h-0.5 bg-purple-400 transform scale-x-0 transition-transform"></div>
         </button>
       </div>
       
@@ -166,13 +193,26 @@ export class Leaderboard {
       });
     });
     
-    // Sub tabs (Global/Weekly/Daily)
-    const subTabs = this.panel.querySelectorAll('.lb-sub-tab');
-    subTabs.forEach(tab => {
+    // Level sub tabs (Global/Weekly/Daily)
+    const levelSubTabs = this.panel.querySelectorAll('.lb-level-sub-tab');
+    levelSubTabs.forEach(tab => {
       tab.addEventListener('click', () => {
-        const tabName = (tab as HTMLElement).dataset.subTab as 'global' | 'weekly' | 'daily';
-        if (tabName && tabName !== this.currentSubTab) {
-          this.currentSubTab = tabName;
+        const tabName = (tab as HTMLElement).dataset.levelSubTab as 'global' | 'weekly' | 'daily';
+        if (tabName && tabName !== this.currentLevelSubTab) {
+          this.currentLevelSubTab = tabName;
+          this.updateTabStyles();
+          this.renderLeaderboard();
+        }
+      });
+    });
+    
+    // Creator sub tabs (Overall/Plays/Upvotes/Shares)
+    const creatorSubTabs = this.panel.querySelectorAll('.lb-creator-sub-tab');
+    creatorSubTabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const tabName = (tab as HTMLElement).dataset.creatorSubTab as 'overall' | 'plays' | 'upvotes' | 'shares';
+        if (tabName && tabName !== this.currentCreatorSubTab) {
+          this.currentCreatorSubTab = tabName;
           this.updateTabStyles();
           this.renderLeaderboard();
         }
@@ -206,19 +246,44 @@ export class Leaderboard {
     });
     
     // Show/hide sub tabs based on main tab
-    const subTabsContainer = this.panel.querySelector('#lb-sub-tabs') as HTMLElement;
+    const levelSubTabsContainer = this.panel.querySelector('#lb-level-sub-tabs') as HTMLElement;
+    const creatorSubTabsContainer = this.panel.querySelector('#lb-creator-sub-tabs') as HTMLElement;
+    
     if (this.currentMainTab === 'creators') {
-      subTabsContainer.classList.add('hidden');
-    } else {
-      subTabsContainer.classList.remove('hidden');
+      levelSubTabsContainer.classList.add('hidden');
+      creatorSubTabsContainer.classList.remove('hidden');
       
-      // Update sub tabs
-      const subTabs = this.panel.querySelectorAll('.lb-sub-tab');
-      subTabs.forEach(tab => {
-        const tabName = (tab as HTMLElement).dataset.subTab;
-        const indicator = tab.querySelector('.lb-sub-tab-indicator') as HTMLElement;
+      // Update creator sub tabs
+      const creatorSubTabs = this.panel.querySelectorAll('.lb-creator-sub-tab');
+      creatorSubTabs.forEach(tab => {
+        const tabName = (tab as HTMLElement).dataset.creatorSubTab;
+        const indicator = tab.querySelector('.lb-creator-sub-tab-indicator') as HTMLElement;
         
-        if (tabName === this.currentSubTab) {
+        if (tabName === this.currentCreatorSubTab) {
+          tab.classList.add('text-purple-400');
+          tab.classList.remove('text-hw-text-secondary');
+          if (indicator) {
+            indicator.style.transform = 'scaleX(1)';
+          }
+        } else {
+          tab.classList.remove('text-purple-400');
+          tab.classList.add('text-hw-text-secondary');
+          if (indicator) {
+            indicator.style.transform = 'scaleX(0)';
+          }
+        }
+      });
+    } else {
+      levelSubTabsContainer.classList.remove('hidden');
+      creatorSubTabsContainer.classList.add('hidden');
+      
+      // Update level sub tabs
+      const levelSubTabs = this.panel.querySelectorAll('.lb-level-sub-tab');
+      levelSubTabs.forEach(tab => {
+        const tabName = (tab as HTMLElement).dataset.levelSubTab;
+        const indicator = tab.querySelector('.lb-level-sub-tab-indicator') as HTMLElement;
+        
+        if (tabName === this.currentLevelSubTab) {
           tab.classList.add('text-purple-400');
           tab.classList.remove('text-hw-text-secondary');
           if (indicator) {
@@ -308,7 +373,7 @@ export class Leaderboard {
     const emptyEl = this.panel.querySelector('#lb-empty') as HTMLDivElement;
     const userStatsEl = this.panel.querySelector('#lb-user-stats') as HTMLDivElement;
     
-    const entries = this.data![this.currentSubTab];
+    const entries = this.data![this.currentLevelSubTab];
     
     if (!entries || entries.length === 0) {
       listContainer.innerHTML = '';
@@ -324,7 +389,7 @@ export class Leaderboard {
       userStatsEl.classList.remove('hidden');
       const userRankEl = userStatsEl.querySelector('#lb-user-rank');
       if (userRankEl) {
-        userRankEl.textContent = `#${this.data!.userRank[this.currentSubTab] || '--'}`;
+        userRankEl.textContent = `#${this.data!.userRank[this.currentLevelSubTab] || '--'}`;
       }
     }
     
@@ -366,7 +431,29 @@ export class Leaderboard {
     const emptyEl = this.panel.querySelector('#lb-empty') as HTMLDivElement;
     const userStatsEl = this.panel.querySelector('#lb-user-stats') as HTMLDivElement;
     
-    const entries = this.data!.creators;
+    // Select data based on current creator sub-tab
+    let entries: CreatorEntry[] = [];
+    let userRankKey = 'creator';
+    
+    switch (this.currentCreatorSubTab) {
+      case 'plays':
+        entries = this.data!.creatorsByPlays || [];
+        userRankKey = 'creatorPlays';
+        break;
+      case 'upvotes':
+        entries = this.data!.creatorsByUpvotes || [];
+        userRankKey = 'creatorUpvotes';
+        break;
+      case 'shares':
+        entries = this.data!.creatorsByShares || [];
+        userRankKey = 'creatorShares';
+        break;
+      case 'overall':
+      default:
+        entries = this.data!.creators || [];
+        userRankKey = 'creator';
+        break;
+    }
     
     if (!entries || entries.length === 0) {
       listContainer.innerHTML = '';
@@ -378,21 +465,51 @@ export class Leaderboard {
     emptyEl.classList.add('hidden');
     
     // Update user stats if available for creators
-    if (this.data!.userRank?.creator) {
+    const userRank = this.data!.userRank?.[userRankKey as keyof typeof this.data.userRank];
+    if (userRank) {
       userStatsEl.classList.remove('hidden');
       const userRankEl = userStatsEl.querySelector('#lb-user-rank');
       if (userRankEl) {
-        userRankEl.textContent = `#${this.data!.userRank.creator}`;
+        userRankEl.textContent = `#${userRank}`;
       }
     } else {
       userStatsEl.classList.add('hidden');
     }
     
-    // Render creator entries
+    // Render creator entries with appropriate score label
+    let scoreLabel = 'creator score';
+    let primaryStat = '';
+    
+    switch (this.currentCreatorSubTab) {
+      case 'plays':
+        scoreLabel = 'total plays';
+        primaryStat = 'plays';
+        break;
+      case 'upvotes':
+        scoreLabel = 'total likes';
+        primaryStat = 'upvotes';
+        break;
+      case 'shares':
+        scoreLabel = 'total shares';
+        primaryStat = 'shares';
+        break;
+    }
+    
     listContainer.innerHTML = entries.map((entry) => {
       const isTopThree = entry.rank <= 3;
       const medal = entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : entry.rank === 3 ? '🥉' : '';
-      const netVotes = entry.totalUpvotes - entry.totalDownvotes;
+      
+      // Highlight the primary stat based on current sorting
+      let statsLine2 = '';
+      if (primaryStat === 'plays') {
+        statsLine2 = `<span class="text-purple-400 font-semibold">🎮 ${entry.totalPlays} plays</span> · 👍 ${entry.totalUpvotes} · 📤 ${entry.totalShares}`;
+      } else if (primaryStat === 'upvotes') {
+        statsLine2 = `🎮 ${entry.totalPlays} · <span class="text-purple-400 font-semibold">👍 ${entry.totalUpvotes} likes</span> · 📤 ${entry.totalShares}`;
+      } else if (primaryStat === 'shares') {
+        statsLine2 = `🎮 ${entry.totalPlays} · 👍 ${entry.totalUpvotes} · <span class="text-purple-400 font-semibold">📤 ${entry.totalShares} shares</span>`;
+      } else {
+        statsLine2 = `🎮 ${entry.totalPlays} plays · 👍 ${entry.totalUpvotes} · 👎 ${entry.totalDownvotes} · 📤 ${entry.totalShares}`;
+      }
       
       return `
         <div class="flex items-center gap-3 p-3 rounded-lg bg-hw-surface-secondary/50 hover:bg-hw-surface-secondary/70 transition-all ${isTopThree ? 'border border-purple-500/30' : ''}">
@@ -407,17 +524,17 @@ export class Leaderboard {
             <div class="flex-1">
               <div class="text-sm font-medium text-hw-text-primary">${this.escapeHtml(entry.username)}</div>
               <div class="text-xs text-hw-text-secondary">
-                📝 ${entry.levelCount} levels · 🎮 ${entry.totalPlays} plays
+                📝 ${entry.levelCount} ${entry.levelCount === 1 ? 'level' : 'levels'}
               </div>
               <div class="text-xs text-hw-text-secondary mt-0.5">
-                👍 ${entry.totalUpvotes} · 👎 ${entry.totalDownvotes} · 📤 ${entry.totalShares}
+                ${statsLine2}
               </div>
             </div>
           </div>
           
           <div class="text-right">
             <div class="text-lg font-bold ${isTopThree ? 'text-purple-400' : 'text-hw-text-primary'}">${entry.score.toLocaleString()}</div>
-            <div class="text-xs text-hw-text-secondary">creator score</div>
+            <div class="text-xs text-hw-text-secondary">${scoreLabel}</div>
           </div>
         </div>
       `;
