@@ -364,7 +364,7 @@ class App {
         <button id="hw-level" class="btn-glass-primary py-2 text-sm">Level 1</button>
         <button disabled class="btn-glass opacity-50 cursor-not-allowed py-2 text-sm">Daily Challenge (soon)</button>
         <button id="hw-create" class="btn-glass py-2 text-sm">📝 My Levels</button>
-        <button disabled class="btn-glass opacity-50 cursor-not-allowed py-2 text-sm">Leaderboard (soon)</button>
+        <button id="hw-leaderboard" class="btn-glass py-2 text-sm">🏆 Leaderboard</button>
         <button id="hw-test-wheel" class="btn-glass py-2 text-sm">🎰 Test Wheel (Dev)</button>
         <button id="hw-reset" class="btn-glass py-2 text-sm">🧹 Reset Progress (Dev)</button>
       </div>
@@ -438,6 +438,21 @@ class App {
         this.showToast('Failed to open level manager', 'error');
       } finally {
         this.menuBusy = false;
+      }
+    };
+    
+    // Leaderboard button handler
+    const leaderboardBtn = el.querySelector('#hw-leaderboard') as HTMLButtonElement;
+    leaderboardBtn.onclick = async () => {
+      if (this.menuBusy) return;
+      
+      try {
+        const { Leaderboard } = await import('./features/Leaderboard');
+        const leaderboard = new Leaderboard();
+        await leaderboard.show();
+      } catch (error) {
+        console.error('Failed to show leaderboard:', error);
+        this.showToast('Failed to load leaderboard', 'error');
       }
     };
     
@@ -710,6 +725,12 @@ class App {
       }
     }
     
+    // Get current coin balance for leaderboard
+    const totalCoins = coinStorageService?.getCachedBalance() || 0;
+    
+    // Update leaderboard for user level completion
+    this.updateLeaderboard(scoreData.levelScore || 0, 1, totalCoins);
+    
     const completion = new UserLevelCompletion({
       levelName: config.levelName,
       levelId: config.levelId,
@@ -936,6 +957,9 @@ class App {
         console.error('Failed to add coin reward:', err);
       });
     }
+    
+    // Update leaderboard with score
+    this.updateLeaderboard(scoreData.currentScore || scoreData.levelScore, level, totalCoinsAfterReward);
     
     panel.innerHTML = `
       <div class="text-center mb-3">
@@ -1304,6 +1328,29 @@ class App {
     } catch (e) {
       loadingOverlay.hide();
       this.showToast('Failed to load user level', 'error');
+    }
+  }
+  
+  /**
+   * Update leaderboard with current score
+   */
+  private async updateLeaderboard(score: number, level: number, coins: number): Promise<void> {
+    try {
+      // Get current streak from storage
+      const progress = loadLocalProgress();
+      const streak = progress?.streak || 0;
+      
+      const response = await fetch('/api/leaderboard/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ score, level, coins, streak })
+      });
+      
+      if (!response.ok) {
+        console.error('Failed to update leaderboard');
+      }
+    } catch (error) {
+      console.error('Error updating leaderboard:', error);
     }
   }
   

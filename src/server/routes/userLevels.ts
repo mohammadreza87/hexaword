@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import { reddit, redis, context } from '@devvit/web/server';
 import { z } from 'zod';
+import { updateCreatorStats } from '../utils/updateCreatorStats';
 
 // Minimal profanity blocklist (expand as needed)
 const PROFANITY = [
@@ -175,6 +176,9 @@ router.post('/api/user-levels', async (req: Request, res: Response) => {
       await redis.set(userKey, JSON.stringify(idList));
       
       console.log('Level saved successfully');
+      
+      // Update creator stats
+      await updateCreatorStats(effectiveUsername, 'create');
     } catch (redisErr) {
       console.error('Redis operation failed:', redisErr);
       console.error('Redis error details:', {
@@ -283,6 +287,10 @@ router.delete('/api/user-levels/:id', async (req: Request, res: Response) => {
     }
     
     console.log(`Deleted level ${id} for user ${username}`);
+    
+    // Update creator stats
+    await updateCreatorStats(username, 'delete');
+    
     return res.status(204).end();
   } catch (err) {
     console.error('Delete user level failed:', err);
@@ -339,6 +347,11 @@ router.post('/api/user-levels/:id/vote', async (req: Request, res: Response) => 
       // Add to upvotes
       level.upvotedBy.push(currentUser);
       level.upvotes = level.upvotedBy.length;
+      
+      // Update creator stats
+      if (level.author) {
+        await updateCreatorStats(level.author, 'upvote', id);
+      }
     } else {
       // If already downvoted, do nothing
       if (hasDownvoted) {
@@ -357,6 +370,11 @@ router.post('/api/user-levels/:id/vote', async (req: Request, res: Response) => 
       // Add to downvotes
       level.downvotedBy.push(currentUser);
       level.downvotes = level.downvotedBy.length;
+      
+      // Update creator stats
+      if (level.author) {
+        await updateCreatorStats(level.author, 'downvote', id);
+      }
     }
     
     await redis.set(levelKey, JSON.stringify(level));
@@ -394,10 +412,17 @@ router.post('/api/user-levels/:id/share', async (req: Request, res: Response) =>
     if (!level.sharedBy) level.sharedBy = [];
     
     // Track unique share
+    let isNewShare = false;
     if (!level.sharedBy.includes(currentUser)) {
       level.sharedBy.push(currentUser);
       level.shares = level.sharedBy.length;
       await redis.set(levelKey, JSON.stringify(level));
+      isNewShare = true;
+    }
+    
+    // Update creator stats for new shares only
+    if (isNewShare && level.author) {
+      await updateCreatorStats(level.author, 'share', id);
     }
     
     return res.json({ 
@@ -424,13 +449,20 @@ router.get('/api/user-levels/:id/init', async (req: Request, res: Response) => {
     
     // Track unique play (only count first play per user, but allow replays)
     const currentUser = username || `anon_${req.ip}`;
+    let isNewPlay = false;
     if (!level.playedBy) level.playedBy = [];
     if (!level.playedBy.includes(currentUser)) {
       level.playedBy.push(currentUser);
       level.playCount = level.playedBy.length;
       await redis.set(levelKey, JSON.stringify(level));
+      isNewPlay = true;
     }
     // User can replay the level, but play count stays the same
+    
+    // Update creator stats for new plays only
+    if (isNewPlay && level.author) {
+      await updateCreatorStats(level.author, 'play', id);
+    }
     
     const postId = context.postId || 'custom';
     return res.json({

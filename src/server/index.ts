@@ -23,6 +23,8 @@ import hintsRouter from "./routes/hints";
 import levelProgressRouter from "./routes/levelProgress";
 import dailyRewardRouter from "./routes/dailyReward";
 import userLevelsRouter from "./routes/userLevels";
+import leaderboardRouter from "./routes/leaderboard";
+import creatorMigrationRouter from "./routes/creatorMigration";
 
 const app = express();
 const logger = Logger.getInstance();
@@ -156,6 +158,8 @@ app.use(hintsRouter);
 app.use(levelProgressRouter);
 app.use(dailyRewardRouter);
 app.use(userLevelsRouter);
+app.use(leaderboardRouter);
+app.use(creatorMigrationRouter);
 
 // Error handler middleware (must be last)
 app.use(errorHandler);
