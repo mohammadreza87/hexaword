@@ -3,6 +3,7 @@ import { HexRenderer } from '../../web-view/engine/HexRenderer';
 import { ColorPaletteService } from '../../web-view/services/ColorPaletteService';
 import { getPaletteForLevel } from '../../web-view/config/ColorPalettes';
 import { ShareDialog } from './ShareDialog';
+import { loadingOverlay } from '../utils/LoadingOverlay';
 import type { HexCell } from '../../shared/types/hexaword';
 
 type CreateResult = { playNowId?: string } | null;
@@ -59,6 +60,8 @@ export class LevelCreator {
         // Log the payload being sent
         console.log('Sending level data:', payload);
         
+        loadingOverlay.show('Saving your level...');
+        
         try {
           const res = await fetch('/api/user-levels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
           if (!res.ok) {
@@ -70,9 +73,12 @@ export class LevelCreator {
             if (data?.error?.details) {
               console.error('Validation errors:', data.error.details);
             }
+            loadingOverlay.hide();
             return;
           }
           const data = await res.json();
+          
+          loadingOverlay.hide();
           
           // Close the creator overlay first
           this.overlay.remove();
@@ -89,6 +95,7 @@ export class LevelCreator {
             resolve(null);
           }
         } catch (e) {
+          loadingOverlay.hide();
           this.showError('Network error while saving');
         }
       };

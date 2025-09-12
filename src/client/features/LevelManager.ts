@@ -1,4 +1,5 @@
 import { LevelCreator } from './LevelCreator';
+import { loadingOverlay } from '../utils/LoadingOverlay';
 
 interface UserLevel {
   id: string;
@@ -117,7 +118,8 @@ export class LevelManager {
   }
 
   private async loadUserLevels(): Promise<void> {
-    this.showLoading(true);
+    // Use the new loading overlay instead of built-in loading
+    loadingOverlay.show('Loading your levels...');
     
     try {
       const response = await fetch('/api/user-levels/mine', {
@@ -139,7 +141,7 @@ export class LevelManager {
       this.levels = [];
     }
     
-    this.showLoading(false);
+    loadingOverlay.hide();
     this.renderLevelsList();
   }
 
@@ -254,6 +256,8 @@ export class LevelManager {
       return;
     }
     
+    loadingOverlay.show('Deleting level...');
+    
     try {
       // Call the delete API
       const response = await fetch(`/api/user-levels/${encodeURIComponent(levelId)}`, {
@@ -280,6 +284,8 @@ export class LevelManager {
     } catch (error) {
       console.error('Error deleting level:', error);
       this.showError('Failed to delete level. Please try again.');
+    } finally {
+      loadingOverlay.hide();
     }
   }
 

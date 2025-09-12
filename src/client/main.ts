@@ -13,6 +13,7 @@ import { GameUI } from './components/GameUI';
 import { ShareService } from './services/ShareService';
 import { WheelOfFortune } from './components/WheelOfFortune';
 import { DailyRewardService } from './services/DailyRewardService';
+import { loadingOverlay } from './utils/LoadingOverlay';
 import { CoinStorageService } from './services/CoinStorageService';
 import { HintStorageService } from './services/HintStorageService';
 import { ColorPaletteService } from '../web-view/services/ColorPaletteService';
@@ -1247,9 +1248,14 @@ class App {
 
   // Load and play a specific user-created level by id
   private async playUserLevel(id: string): Promise<void> {
+    loadingOverlay.show('Loading level...');
+    
     try {
       const res = await fetch(`/api/user-levels/${encodeURIComponent(id)}/init`);
-      if (!res.ok) throw new Error('Failed to init user level');
+      if (!res.ok) {
+        loadingOverlay.hide();
+        throw new Error('Failed to init user level');
+      }
       const d = await res.json();
       const words: string[] = d.words?.slice?.(0, Math.min(6, d.words.length)) ?? [];
       
@@ -1284,6 +1290,7 @@ class App {
             }
           });
         });
+        loadingOverlay.hide();
         return;
       }
       // Update the game config with user level metadata
@@ -1293,7 +1300,9 @@ class App {
       (this.game as any).config.levelAuthor = levelAuthor;
       
       await this.game.loadLevel({ words, seed: d.seed, clue: d.clue, level: 1 });
+      loadingOverlay.hide();
     } catch (e) {
+      loadingOverlay.hide();
       this.showToast('Failed to load user level', 'error');
     }
   }
