@@ -36,7 +36,7 @@ export interface CoinState {
   balance: number;
   totalEarned: number;
   totalSpent: number;
-  levelEarnings: number;  // Coins earned in current level
+  // levelEarnings removed - coins only awarded at level completion
 }
 
 export class CoinService {
@@ -72,8 +72,7 @@ export class CoinService {
     this.state = {
       balance: 0,
       totalEarned: 0,
-      totalSpent: 0,
-      levelEarnings: 0
+      totalSpent: 0
     };
   }
 
@@ -84,14 +83,13 @@ export class CoinService {
     this.state.balance = savedBalance;
     this.state.totalEarned = savedBalance;
     this.state.totalSpent = 0;
-    this.state.levelEarnings = 0;
   }
 
   /**
    * Start tracking a new level
    */
   public startLevel(): void {
-    this.state.levelEarnings = 0;
+    // No per-word tracking anymore
   }
 
   /**
@@ -101,15 +99,8 @@ export class CoinService {
     word: string,
     foundQuickly: boolean = false
   ): number {
-    let reward = this.config.perWordFound;
-    
-    // Bonus for finding quickly (within first attempt)
-    if (foundQuickly) {
-      reward += this.config.firstTryBonus;
-    }
-    
-    this.state.levelEarnings += reward;
-    return reward;
+    // No longer used - coins only awarded at level completion
+    return 0;
   }
 
   /**
@@ -123,8 +114,7 @@ export class CoinService {
   ): number {
     let reward = this.config.baseCompletion;
     
-    // Add per-word rewards accumulated during level
-    reward += this.state.levelEarnings;
+    // No per-word rewards anymore - only level completion bonus
     
     // Perfect bonus (no hints)
     if (hintsUsed === 0) {

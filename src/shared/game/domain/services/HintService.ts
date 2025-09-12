@@ -16,8 +16,8 @@ export interface HintCosts {
 
 export class HintService {
   private static readonly DEFAULT_COSTS: HintCosts = {
-    revealCost: 40,       // 40 coins for reveal letter hint
-    targetCost: 80        // 80 coins for target hint
+    revealCost: 50,       // 50 coins for reveal letter hint
+    targetCost: 100       // 100 coins for target hint
   };
 
   private static readonly INITIAL_FREE_HINTS = {

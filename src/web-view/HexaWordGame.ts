@@ -773,16 +773,10 @@ export class HexaWordGame {
       timeToFind
     );
     
-    // Calculate and add coin reward for the word
-    const foundQuickly = timeToFind < 5000; // Found within 5 seconds
-    const coinReward = this.coinService.calculateWordReward(word.word, foundQuickly);
-    
-    // Sync coins with server (fire and forget)
-    this.coinStorageService.addCoins(coinReward).catch(console.error);
+    // No coin rewards during gameplay - only at level completion
     
     // Update displays
     this.updateScoreDisplay();
-    this.updateCoinDisplay();
     
     // Reset timer for next word
     this.wordStartTime = Date.now();
@@ -929,7 +923,7 @@ export class HexaWordGame {
       timeElapsed
     );
     
-    // Calculate and award coin rewards
+    // Calculate coin rewards but DON'T add them yet - let the complete panel handle it
     const hintsUsed = this.scoreService.getState().hintsUsed;
     const coinReward = this.coinService.calculateLevelReward(
       this.currentLevel,
@@ -938,12 +932,11 @@ export class HexaWordGame {
       hintsUsed
     );
     
-    // Sync level reward with server
-    this.coinStorageService.addCoins(coinReward).catch(console.error);
+    // Don't add coins here - the complete panel will show them and add them when user continues
+    // this.coinStorageService.addCoins(coinReward).catch(console.error);
     
-    // Update displays
+    // Update score display only
     this.updateScoreDisplay();
-    this.updateCoinDisplay();
     
     // No more ugly popup notifications - scores are shown in the complete panel
     
@@ -1295,7 +1288,11 @@ export class HexaWordGame {
    * Updates the coin display in the UI
    */
   private updateCoinDisplay(): void {
-    const balance = this.coinService.getBalance();
+    // Use the server-synced balance from CoinStorageService
+    const balance = this.coinStorageService.getCachedBalance();
+    
+    // Also update the local CoinService to keep it in sync
+    this.coinService.initialize(balance);
     
     // Update the UI using GameUI component
     if ((window as any).gameUI) {
@@ -1537,7 +1534,7 @@ export class HexaWordGame {
   public async revealRandomLetter(): Promise<boolean> {
     // Check if user has hints
     const inventory = this.hintService.getInventory();
-    const coinBalance = this.coinService.getBalance();
+    const coinBalance = this.coinStorageService.getCachedBalance();
     
     // If no hints, show purchase UI
     if (inventory.revealHints === 0) {
@@ -1550,11 +1547,29 @@ export class HexaWordGame {
         currentBalance: coinBalance,
         onPurchase: async (quantity) => {
           const totalCost = quantity * 50;
-          if (coinBalance < totalCost) return false;
+          
+          // Reload balance from server to ensure it's current
+          await this.coinStorageService.loadCoins();
+          const currentBalance = this.coinStorageService.getCachedBalance();
+          
+          console.log(`Purchase attempt: ${quantity} hints for ${totalCost} coins. Balance: ${currentBalance}`);
+          
+          if (currentBalance < totalCost) {
+            console.log(`Insufficient funds: ${currentBalance} < ${totalCost}`);
+            return false;
+          }
           
           // Deduct coins on server and add hints
           const spendRes = await this.coinStorageService.spendCoins(totalCost);
-          if (!spendRes.success) return false;
+          if (!spendRes.success) {
+            console.log(`Server rejected purchase. New balance: ${spendRes.balance}`);
+            // Update cached balance with server's response
+            this.coinStorageService.clearCache();
+            await this.coinStorageService.loadCoins();
+            this.updateCoinDisplay();
+            return false;
+          }
+          
           this.hintService.addHints(quantity, 0);
           await this.hintStorageService.addHints('reveal', quantity);
           
@@ -1568,27 +1583,26 @@ export class HexaWordGame {
       return false;
     }
     
-    // Use hint normally
-    const hintCheck = this.hintService.useRevealHint(coinBalance);
+    // First, load the latest inventory from server to ensure sync (force refresh)
+    const serverInventory = await this.hintStorageService.loadHints(true);
+    this.hintService.loadInventory(serverInventory);
     
-    if (!hintCheck.success) {
-      // Should not happen since we checked above
+    const beforeCoins = this.coinStorageService.getCachedBalance();
+    
+    console.log('Before using hint:', {
+      revealHints: serverInventory.revealHints,
+      targetHints: serverInventory.targetHints,
+      coins: beforeCoins
+    });
+    
+    // Can only use hints from inventory, not directly with coins
+    if (serverInventory.revealHints <= 0) {
+      console.log('No reveal hints available on server');
       return false;
     }
     
-    // Deduct coins if needed
-    if (hintCheck.cost > 0) {
-      const spendRes = await this.coinStorageService.spendCoins(hintCheck.cost);
-      if (!spendRes.success) return false;
-      this.updateCoinDisplay();
-    } else {
-      // Using free hint, sync with server
-      await this.hintStorageService.useHint('reveal');
-    }
-    
-    // Update hint display
-    this.updateHintDisplay();
-    // Find all unsolved cells from unfound words
+    // Find all unsolved cells from unfound words FIRST
+    // (before using the hint, to ensure we can actually reveal something)
     const unsolvedCells: Array<{cell: HexCell, word: WordObject}> = [];
     
     this.placedWords.forEach(word => {
@@ -1616,26 +1630,51 @@ export class HexaWordGame {
     const { cell, word } = unsolvedCells[randomIndex];
     const key = `${cell.q},${cell.r}`;
     
-    // Mark cell as solved
-    this.solvedCells.add(key);
-    
-    // Apply hint penalty to score
-    this.scoreService.useHint('letter');
-    this.updateScoreDisplay();
-    
-    // Trigger reveal animation
-    this.animationService.triggerRevealAnimation(key);
-    
-    // Re-render to show the revealed letter
-    this.render();
-    
-    // Check if this completes any word
-    this.checkForCompletedWords();
-    
-    // Save progress
-    this.saveProgress();
-    
-    return true;
+    // Now try to use the hint on the server
+    try {
+      await this.hintStorageService.useHint('reveal');
+      // Update local inventory to match server
+      const updatedInventory = await this.hintStorageService.loadHints();
+      this.hintService.loadInventory(updatedInventory);
+      
+      console.log('Reveal hint used successfully. New inventory:', {
+        revealHints: updatedInventory.revealHints,
+        targetHints: updatedInventory.targetHints
+      });
+      
+      // Only reveal the cell if hint was successfully used
+      this.solvedCells.add(key);
+      
+      // Apply hint penalty to score
+      this.scoreService.useHint('letter');
+      this.updateScoreDisplay();
+      
+      // Trigger reveal animation
+      this.animationService.triggerRevealAnimation(key);
+      
+      // Update hint display
+      this.updateHintDisplay();
+      
+      // Re-render to show the revealed letter
+      this.render();
+      
+      // Check if this completes any word
+      this.checkForCompletedWords();
+      
+      // Save progress
+      this.saveProgress();
+      
+      return true;
+    } catch (error) {
+      console.error('Failed to use reveal hint - not enough hints:', error);
+      // Reload inventory from server to ensure we're in sync
+      const latestInventory = await this.hintStorageService.loadHints();
+      this.hintService.loadInventory(latestInventory);
+      this.updateHintDisplay();
+      // Log that no hints are available
+      console.log('No reveal hints available!');
+      return false;
+    }
   }
   
   /**
@@ -1644,7 +1683,7 @@ export class HexaWordGame {
   /**
    * Starts target hint mode - player selects a cell to reveal
    */
-  public startTargetHint(): void {
+  public async startTargetHint(): Promise<void> {
     // Toggle target hint mode
     if (this.isTargetHintMode) {
       // Exit target hint mode
@@ -1652,12 +1691,20 @@ export class HexaWordGame {
       this.removeTargetHintOverlay();
       this.render();
     } else {
-      // Check if user has hints
-      const inventory = this.hintService.getInventory();
-      const coinBalance = this.coinService.getBalance();
+      // First, sync with server to get latest inventory (force refresh)
+      const serverInventory = await this.hintStorageService.loadHints(true);
+      this.hintService.loadInventory(serverInventory);
+      this.updateHintDisplay();
+      
+      const coinBalance = this.coinStorageService.getCachedBalance();
+      
+      console.log('Starting target hint mode. Server inventory:', {
+        targetHints: serverInventory.targetHints,
+        revealHints: serverInventory.revealHints
+      });
       
       // If no hints, show purchase UI
-      if (inventory.targetHints === 0) {
+      if (serverInventory.targetHints === 0) {
         this.hintPurchaseUI.show({
           type: 'target',
           icon: '🎯',
@@ -1667,11 +1714,29 @@ export class HexaWordGame {
           currentBalance: coinBalance,
           onPurchase: async (quantity) => {
             const totalCost = quantity * 100;
-            if (coinBalance < totalCost) return false;
+            
+            // Reload balance from server to ensure it's current
+            await this.coinStorageService.loadCoins();
+            const currentBalance = this.coinStorageService.getCachedBalance();
+            
+            console.log(`Purchase attempt: ${quantity} target hints for ${totalCost} coins. Balance: ${currentBalance}`);
+            
+            if (currentBalance < totalCost) {
+              console.log(`Insufficient funds: ${currentBalance} < ${totalCost}`);
+              return false;
+            }
             
             // Deduct coins on server and add hints
             const spendRes = await this.coinStorageService.spendCoins(totalCost);
-            if (!spendRes.success) return false;
+            if (!spendRes.success) {
+              console.log(`Server rejected purchase. New balance: ${spendRes.balance}`);
+              // Update cached balance with server's response
+              this.coinStorageService.clearCache();
+              await this.coinStorageService.loadCoins();
+              this.updateCoinDisplay();
+              return false;
+            }
+            
             this.hintService.addHints(0, quantity);
             await this.hintStorageService.addHints('target', quantity);
             
@@ -1855,22 +1920,45 @@ export class HexaWordGame {
     }
   }
   
+  private isProcessingHint: boolean = false;  // Guard flag to prevent double-processing
+  
   /**
    * Handles cell click in target hint mode
    */
   private async handleTargetHintClick(x: number, y: number): Promise<void> {
     if (!this.isTargetHintMode) return;
     
-    // Use the hint when cell is clicked
-    const coinBalance = this.coinService.getBalance();
-    const hintResult = this.hintService.useTargetHint(coinBalance);
-    
-    if (!hintResult.success) {
-      // Should not happen as we checked before entering mode
-      this.isTargetHintMode = false;
-      this.removeTargetHintOverlay();
-      this.render();
+    // Prevent double-processing
+    if (this.isProcessingHint) {
+      console.log('Already processing a hint, ignoring click');
       return;
+    }
+    this.isProcessingHint = true;
+    
+    try {
+      // First, load the latest inventory from server to ensure sync (force refresh)
+      const serverInventory = await this.hintStorageService.loadHints(true);
+      this.hintService.loadInventory(serverInventory);
+      
+      console.log('Target hint click - server inventory:', {
+        revealHints: serverInventory.revealHints,
+        targetHints: serverInventory.targetHints
+      });
+      
+      // Check if we have target hints
+      if (serverInventory.targetHints <= 0) {
+        console.log('No target hints available on server');
+        this.isTargetHintMode = false;
+        this.removeTargetHintOverlay();
+        this.render();
+        this.isProcessingHint = false;  // Reset flag
+        return;
+      }
+    } finally {
+      // Ensure flag is reset even if there's an error above
+      if (!this.isTargetHintMode) {
+        this.isProcessingHint = false;
+      }
     }
     
     // Get canvas dimensions
@@ -1922,24 +2010,42 @@ export class HexaWordGame {
         return;
       }
       
-      // Reveal the cell
-      this.solvedCells.add(key);
-      
-      // Apply hint penalty for target hint
-      this.scoreService.useHint('position');
-      this.updateScoreDisplay();
-      
-      // Trigger reveal animation
-      this.animationService.triggerRevealAnimation(key);
-      
-      // Deduct coins if needed
-      if (hintResult.cost > 0) {
-        const spendRes = await this.coinStorageService.spendCoins(hintResult.cost);
-        if (!spendRes.success) return;
-        this.updateCoinDisplay();
-      } else {
-        // Using free hint, sync with server
+      // First, try to use hint from inventory on the server
+      try {
         await this.hintStorageService.useHint('target');
+        // Update local inventory to match server
+        const updatedInventory = await this.hintStorageService.loadHints();
+        this.hintService.loadInventory(updatedInventory);
+        console.log('Target hint used successfully. New inventory:', updatedInventory);
+        
+        // Only reveal the cell if hint was successfully used
+        this.solvedCells.add(key);
+        
+        // Apply hint penalty for target hint
+        this.scoreService.useHint('position');
+        this.updateScoreDisplay();
+        
+        // Trigger reveal animation
+        this.animationService.triggerRevealAnimation(key);
+      } catch (error) {
+        console.error('Failed to use target hint - not enough hints:', error);
+        // Reload inventory from server to ensure we're in sync (force refresh)
+        try {
+          const latestInventory = await this.hintStorageService.loadHints(true);
+          this.hintService.loadInventory(latestInventory);
+          this.updateHintDisplay();
+        } catch (e) {
+          console.error('Failed to reload inventory:', e);
+        }
+        // Exit target hint mode
+        this.isTargetHintMode = false;
+        this.removeTargetHintOverlay();
+        this.render();
+        // Log that no hints are available
+        console.log('No target hints available!');
+        // Reset processing flag
+        this.isProcessingHint = false;
+        return;
       }
       
       // Update hint display
@@ -1957,6 +2063,9 @@ export class HexaWordGame {
       
       // Save progress
       this.saveProgress();
+      
+      // Reset processing flag
+      this.isProcessingHint = false;
     }
   }
   
@@ -2017,15 +2126,9 @@ export class HexaWordGame {
           60000 // 60 seconds - no time bonus for hint-revealed words
         );
         
-        // Calculate and add coin reward for the word
-        const foundQuickly = false; // Not found quickly since it was through hints
-        const coinReward = this.coinService.calculateWordReward(word.word, foundQuickly);
-        
-        // Sync coins with server (fire and forget)
-        this.coinStorageService.addCoins(coinReward).catch(console.error);
+        // No coin rewards during gameplay - only at level completion
         
         // Update displays
-        this.updateCoinDisplay();
         this.updateScoreDisplay();
         
         // Save progress

@@ -1,5 +1,5 @@
 import express from 'express';
-import { reddit, redis } from '@devvit/web/server';
+import { reddit, redis, context } from '@devvit/web/server';
 
 const router = express.Router();
 
@@ -12,14 +12,15 @@ type CoinData = {
 
 const COIN_KEY_PREFIX = 'hw:coins:';
 
+// Resolve a per-user coin key. Prefer Reddit username; fallback to Devvit context.userId.
 const getCoinKey = async (): Promise<string | null> => {
   try {
     const username = await reddit.getCurrentUsername();
-    if (!username) return null;
-    return `${COIN_KEY_PREFIX}${username}`;
-  } catch {
-    return null;
-  }
+    if (username) return `${COIN_KEY_PREFIX}${username}`;
+  } catch {}
+  const userId = context.userId;
+  if (userId) return `coins:${userId}`;
+  return null;
 };
 
 // Get current user's coin balance
@@ -33,10 +34,10 @@ router.get('/api/coins', async (_req, res) => {
     const raw = await redis.get(key);
     
     if (!raw) {
-      // New user starts with 200 coins
+      // New user starts with 100 coins
       const initialData: CoinData = {
-        balance: 200,
-        totalEarned: 200,
+        balance: 100,
+        totalEarned: 100,
         totalSpent: 0,
         lastUpdated: Date.now()
       };
@@ -65,8 +66,8 @@ router.post('/api/coins', async (req, res) => {
     // Get current data
     const currentRaw = await redis.get(key);
     let currentData: CoinData = currentRaw ? JSON.parse(currentRaw) : {
-      balance: 200,
-      totalEarned: 200,
+      balance: 100,
+      totalEarned: 100,
       totalSpent: 0,
       lastUpdated: Date.now()
     };
@@ -78,7 +79,9 @@ router.post('/api/coins', async (req, res) => {
       currentData.totalEarned += amount;
     } else if (body.action === 'spend') {
       const amount = Number(body.amount) || 0;
+      console.log(`Spend request: ${amount} coins. Current balance: ${currentData.balance}`);
       if (currentData.balance < amount) {
+        console.log(`Insufficient coins: ${currentData.balance} < ${amount}`);
         return res.status(400).json({ 
           status: 'error', 
           message: 'insufficient coins',
@@ -87,6 +90,7 @@ router.post('/api/coins', async (req, res) => {
       }
       currentData.balance -= amount;
       currentData.totalSpent += amount;
+      console.log(`Spend successful. New balance: ${currentData.balance}`);
     } else if (body.action === 'set') {
       // Direct set (used for syncing)
       currentData.balance = Number(body.balance) || currentData.balance;
@@ -119,8 +123,8 @@ router.post('/api/coins/check', async (req, res) => {
     
     const raw = await redis.get(key);
     const coinData: CoinData = raw ? JSON.parse(raw) : {
-      balance: 200,
-      totalEarned: 200,
+      balance: 100,
+      totalEarned: 100,
       totalSpent: 0,
       lastUpdated: Date.now()
     };

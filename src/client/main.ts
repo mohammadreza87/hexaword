@@ -682,17 +682,29 @@ class App {
     const scoreData = (this.game as any)?.scoreService?.getState() || { levelScore: 0, currentScore: 0 };
     const coinService = (this.game as any)?.coinService;
     const coinStorageService = (this.game as any)?.coinStorageService;
-    const coinState = coinService?.getState() || { levelEarnings: 0 };
-    // Calculate total coins earned this level (base + word rewards)
+    // Calculate total coins earned this level
     const hintsUsed = scoreData.hintsUsed || 0;
     const coinReward = coinService ? 
       coinService.calculateLevelReward(level, words.length, Date.now() - (scoreData.timeStarted || Date.now()), hintsUsed) : 
-      coinState.levelEarnings;
+      0;
     
     // Get current coin balance BEFORE reward
     const coinsBeforeReward = coinStorageService?.getCachedBalance() || 0;
     // Calculate total coins AFTER adding the level reward
     const totalCoinsAfterReward = coinsBeforeReward + coinReward;
+    
+    // IMPORTANT: Actually add the coin reward to the server!
+    if (coinReward > 0 && coinStorageService) {
+      coinStorageService.addCoins(coinReward).then(() => {
+        console.log(`Added ${coinReward} coins for completing level ${level}`);
+        // Update the display
+        if ((window as any).gameUI) {
+          (window as any).gameUI.updateCoins(totalCoinsAfterReward);
+        }
+      }).catch(err => {
+        console.error('Failed to add coin reward:', err);
+      });
+    }
     
     panel.innerHTML = `
       <div class="text-center mb-3">
@@ -748,6 +760,15 @@ class App {
     blurGameContainer('lg');
 
     nextBtn.onclick = async () => {
+      // Add the coin reward to server when proceeding
+      if (coinReward > 0 && coinStorageService) {
+        await coinStorageService.addCoins(coinReward);
+        // Update the coin display if game is available
+        if (this.game && (this.game as any).updateCoinDisplay) {
+          (this.game as any).updateCoinDisplay();
+        }
+      }
+      
       overlay.remove();
       this.currentLevel = Math.max(this.currentLevel, level + 1);
       // Use blur transition for smooth level progression
@@ -760,6 +781,15 @@ class App {
       });
     };
     menuBtn.onclick = async () => {
+      // Add the coin reward to server when going to menu
+      if (coinReward > 0 && coinStorageService) {
+        await coinStorageService.addCoins(coinReward);
+        // Update the coin display if game is available
+        if (this.game && (this.game as any).updateCoinDisplay) {
+          (this.game as any).updateCoinDisplay();
+        }
+      }
+      
       overlay.remove();
       // Update in-memory level when going back to menu
       this.currentLevel = Math.max(this.currentLevel, level + 1);

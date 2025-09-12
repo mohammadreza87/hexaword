@@ -56,6 +56,7 @@ router.post('/api/hints', async (req: Request, res: Response) => {
     let hints: HintData;
     
     if (!currentData) {
+      console.log(`[HINT] No existing data for ${key}, creating default`);
       hints = {
         revealHints: 2,
         targetHints: 2,
@@ -64,34 +65,46 @@ router.post('/api/hints', async (req: Request, res: Response) => {
         lastUpdated: Date.now()
       };
     } else {
-      hints = JSON.parse(currentData);
+      try {
+        hints = JSON.parse(currentData);
+        // Ensure all fields exist and are numbers
+        if (typeof hints.revealHints !== 'number') hints.revealHints = 0;
+        if (typeof hints.targetHints !== 'number') hints.targetHints = 0;
+        if (typeof hints.freeReveals !== 'number') hints.freeReveals = 0;
+        if (typeof hints.freeTargets !== 'number') hints.freeTargets = 0;
+        console.log(`[HINT] Loaded data for ${key}:`, hints);
+      } catch (e) {
+        console.error(`[HINT ERROR] Failed to parse data for ${key}:`, currentData, e);
+        hints = {
+          revealHints: 2,
+          targetHints: 2,
+          freeReveals: 0,
+          freeTargets: 0,
+          lastUpdated: Date.now()
+        };
+      }
     }
     
     // Handle different actions
     switch (action) {
       case 'use': {
-        // Server-authoritative spend before consuming a hint (constant pricing)
-        const cost = hintType === 'reveal' ? 50 : 100;
-        const coinKey = username ? `hw:coins:${username}` : null;
-        if (!coinKey) {
-          return res.status(401).json({ error: 'unauthorized' });
-        }
-        const coinRaw = await redis.get(coinKey);
-        let coins = coinRaw ? JSON.parse(coinRaw) : { balance: 100, totalEarned: 100, totalSpent: 0, lastUpdated: Date.now() };
-        if (coins.balance < cost) {
-          return res.status(400).json({ error: 'insufficient_coins', balance: coins.balance, cost });
-        }
+        // Consume one hint from inventory if available (no coin charge here).
+        console.log(`[HINT USE] Type: ${hintType}, Current inventory before use:`, hints);
         if (hintType === 'reveal') {
-          if (hints.revealHints <= 0) return res.status(400).json({ error: 'no_reveal_hints' });
+          if (hints.revealHints <= 0) {
+            console.log(`[HINT ERROR] No reveal hints available. Count: ${hints.revealHints}`);
+            return res.status(400).json({ error: 'no_reveal_hints' });
+          }
           hints.revealHints--;
+          console.log(`[HINT SUCCESS] Reveal hint used. New count: ${hints.revealHints}`);
         } else if (hintType === 'target') {
-          if (hints.targetHints <= 0) return res.status(400).json({ error: 'no_target_hints' });
+          if (hints.targetHints <= 0) {
+            console.log(`[HINT ERROR] No target hints available. Count: ${hints.targetHints}`);
+            return res.status(400).json({ error: 'no_target_hints' });
+          }
           hints.targetHints--;
+          console.log(`[HINT SUCCESS] Target hint used. New count: ${hints.targetHints}`);
         }
-        coins.balance -= cost;
-        coins.totalSpent += cost;
-        coins.lastUpdated = Date.now();
-        await redis.set(coinKey, JSON.stringify(coins));
         break;
       }
         
@@ -126,8 +139,11 @@ router.post('/api/hints', async (req: Request, res: Response) => {
     }
     
     hints.lastUpdated = Date.now();
-    await redis.set(key, JSON.stringify(hints));
+    const dataToSave = JSON.stringify(hints);
+    console.log(`[HINT SAVE] Saving to ${key}:`, dataToSave);
+    await redis.set(key, dataToSave);
     
+    console.log(`[HINT RESPONSE] Returning:`, hints);
     return res.json(hints);
   } catch (error) {
     console.error('Error updating hints:', error);

@@ -33,17 +33,24 @@ export class HintStorageService {
   /**
    * Load hint inventory from server
    */
-  public async loadHints(): Promise<HintInventory> {
+  public async loadHints(forceRefresh: boolean = false): Promise<HintInventory> {
     try {
-      const response = await fetch('/api/hints');
+      // Clear cache if force refresh is requested
+      if (forceRefresh) {
+        this.cachedInventory = null;
+      }
+      
+      const response = await fetch('/api/hints', {
+        cache: forceRefresh ? 'no-cache' : 'default'
+      });
       
       if (!response.ok) {
-        // Return default for new users
+        // Return default for new users (matches server defaults)
         return {
-          revealHints: 5,
-          targetHints: 3,
-          freeReveals: 5,
-          freeTargets: 3,
+          revealHints: 2,
+          targetHints: 2,
+          freeReveals: 0,
+          freeTargets: 0,
           lastUpdated: Date.now()
         };
       }
@@ -59,12 +66,16 @@ export class HintStorageService {
       return data;
     } catch (error) {
       console.error('Error loading hints:', error);
-      // Return cached or default
-      return this.cachedInventory || {
-        revealHints: 5,
-        targetHints: 3,
-        freeReveals: 5,
-        freeTargets: 3,
+      // Only return cached if not force refresh
+      if (!forceRefresh && this.cachedInventory) {
+        return this.cachedInventory;
+      }
+      // Return default (matches server defaults)
+      return {
+        revealHints: 2,
+        targetHints: 2,
+        freeReveals: 0,
+        freeTargets: 0,
         lastUpdated: Date.now()
       };
     }
@@ -96,21 +107,9 @@ export class HintStorageService {
       return data;
     } catch (error) {
       console.error('Error using hint:', error);
-      // Update cache optimistically
-      if (this.cachedInventory) {
-        if (type === 'reveal' && this.cachedInventory.revealHints > 0) {
-          this.cachedInventory.revealHints--;
-        } else if (type === 'target' && this.cachedInventory.targetHints > 0) {
-          this.cachedInventory.targetHints--;
-        }
-      }
-      return this.cachedInventory || {
-        revealHints: 5,
-        targetHints: 3,
-        freeReveals: 5,
-        freeTargets: 3,
-        lastUpdated: Date.now()
-      };
+      // DO NOT update cache on error - the server rejected the request
+      // Just re-throw the error so the caller knows it failed
+      throw error;
     }
   }
   
