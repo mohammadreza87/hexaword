@@ -209,7 +209,8 @@ export class UserLevelCompletion {
     const upvoteBtn = panel.querySelector('#ulc-upvote') as HTMLButtonElement;
     if (upvoteBtn) {
       upvoteBtn.addEventListener('click', () => {
-        if (!this.hasVoted) {
+        // Allow changing vote or new vote
+        if (this.voteType !== 'up') {
           this.handleVote('up');
           this.options.onUpvote();
         }
@@ -220,7 +221,8 @@ export class UserLevelCompletion {
     const downvoteBtn = panel.querySelector('#ulc-downvote') as HTMLButtonElement;
     if (downvoteBtn) {
       downvoteBtn.addEventListener('click', () => {
-        if (!this.hasVoted) {
+        // Allow changing vote or new vote
+        if (this.voteType !== 'down') {
           this.handleVote('down');
           this.options.onDownvote();
         }
@@ -255,33 +257,51 @@ export class UserLevelCompletion {
   }
 
   private handleVote(type: 'up' | 'down'): void {
-    if (this.hasVoted) return;
-
-    this.hasVoted = true;
-    this.voteType = type;
-
-    // Update button states
+    // Allow changing vote
     const upvoteBtn = this.panel.querySelector('#ulc-upvote') as HTMLButtonElement;
     const downvoteBtn = this.panel.querySelector('#ulc-downvote') as HTMLButtonElement;
     const feedback = this.panel.querySelector('#ulc-vote-feedback') as HTMLDivElement;
 
+    // If clicking the same vote type, ignore
+    if (this.voteType === type) {
+      return;
+    }
+
+    // Reset styles first if changing vote
+    if (this.hasVoted) {
+      upvoteBtn.style.background = 'rgba(34, 197, 94, 0.2)';
+      upvoteBtn.style.borderColor = 'rgba(34, 197, 94, 0.4)';
+      upvoteBtn.style.opacity = '1';
+      upvoteBtn.disabled = false;
+      
+      downvoteBtn.style.background = 'rgba(239, 68, 68, 0.2)';
+      downvoteBtn.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+      downvoteBtn.style.opacity = '1';
+      downvoteBtn.disabled = false;
+    }
+
+    this.hasVoted = true;
+    this.voteType = type;
+
+    // Apply new vote styling
     if (type === 'up') {
       upvoteBtn.style.background = 'rgba(34, 197, 94, 0.4)';
       upvoteBtn.style.borderColor = '#22C55E';
-      upvoteBtn.disabled = true;
       downvoteBtn.style.opacity = '0.5';
-      downvoteBtn.disabled = true;
     } else {
       downvoteBtn.style.background = 'rgba(239, 68, 68, 0.4)';
       downvoteBtn.style.borderColor = '#EF4444';
-      downvoteBtn.disabled = true;
       upvoteBtn.style.opacity = '0.5';
-      upvoteBtn.disabled = true;
     }
 
     // Show feedback
     if (feedback) {
+      feedback.textContent = type === 'up' ? 'Thanks for upvoting!' : 'Thanks for your feedback!';
+      feedback.style.color = type === 'up' ? '#22C55E' : '#EF4444';
       feedback.style.opacity = '1';
+      setTimeout(() => {
+        feedback.style.opacity = '0';
+      }, 2000);
     }
   }
 

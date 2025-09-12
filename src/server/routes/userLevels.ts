@@ -23,6 +23,11 @@ type UserLevelRecord = {
   upvotes?: number;
   downvotes?: number;
   shares?: number;
+  // Unique user tracking
+  playedBy?: string[];
+  upvotedBy?: string[];
+  downvotedBy?: string[];
+  sharedBy?: string[];
 };
 
 const router = express.Router();
@@ -144,7 +149,12 @@ router.post('/api/user-levels', async (req: Request, res: Response) => {
       playCount: 0,
       upvotes: 0,
       downvotes: 0,
-      shares: 0
+      shares: 0,
+      // Initialize unique user tracking
+      playedBy: [],
+      upvotedBy: [],
+      downvotedBy: [],
+      sharedBy: []
     };
 
     // Persist with error handling
@@ -280,6 +290,126 @@ router.delete('/api/user-levels/:id', async (req: Request, res: Response) => {
   }
 });
 
+// Vote on a user level (allows changing vote)
+router.post('/api/user-levels/:id/vote', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id;
+    const { type } = req.body; // 'up' or 'down'
+    
+    if (type !== 'up' && type !== 'down') {
+      return res.status(400).json({ error: { code: 'INVALID_VOTE', message: 'Vote type must be "up" or "down"' } });
+    }
+    
+    const username = await reddit.getCurrentUsername();
+    const currentUser = username || `anon_${req.ip}`;
+    
+    const levelKey = `hw:ulevel:${id}`;
+    const raw = await redis.get(levelKey);
+    
+    if (!raw) {
+      return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Level not found' } });
+    }
+    
+    const level: UserLevelRecord = JSON.parse(raw);
+    
+    // Initialize arrays if not present
+    if (!level.upvotedBy) level.upvotedBy = [];
+    if (!level.downvotedBy) level.downvotedBy = [];
+    
+    // Check if user already voted
+    const hasUpvoted = level.upvotedBy.includes(currentUser);
+    const hasDownvoted = level.downvotedBy.includes(currentUser);
+    
+    // Allow changing vote: remove from opposite list if present
+    if (type === 'up') {
+      // If already upvoted, do nothing
+      if (hasUpvoted) {
+        return res.json({ 
+          success: true, 
+          message: 'Already upvoted',
+          upvotes: level.upvotes, 
+          downvotes: level.downvotes 
+        });
+      }
+      // Remove from downvotes if present
+      if (hasDownvoted) {
+        level.downvotedBy = level.downvotedBy.filter(u => u !== currentUser);
+        level.downvotes = level.downvotedBy.length;
+      }
+      // Add to upvotes
+      level.upvotedBy.push(currentUser);
+      level.upvotes = level.upvotedBy.length;
+    } else {
+      // If already downvoted, do nothing
+      if (hasDownvoted) {
+        return res.json({ 
+          success: true, 
+          message: 'Already downvoted',
+          upvotes: level.upvotes, 
+          downvotes: level.downvotes 
+        });
+      }
+      // Remove from upvotes if present
+      if (hasUpvoted) {
+        level.upvotedBy = level.upvotedBy.filter(u => u !== currentUser);
+        level.upvotes = level.upvotedBy.length;
+      }
+      // Add to downvotes
+      level.downvotedBy.push(currentUser);
+      level.downvotes = level.downvotedBy.length;
+    }
+    
+    await redis.set(levelKey, JSON.stringify(level));
+    
+    return res.json({ 
+      success: true, 
+      message: type === 'up' ? 'Upvoted' : 'Downvoted',
+      upvotes: level.upvotes, 
+      downvotes: level.downvotes 
+    });
+  } catch (err) {
+    console.error('Vote on user level failed:', err);
+    return res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to vote on level' } });
+  }
+});
+
+// Share a user level
+router.post('/api/user-levels/:id/share', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id;
+    
+    const username = await reddit.getCurrentUsername();
+    const currentUser = username || `anon_${req.ip}`;
+    
+    const levelKey = `hw:ulevel:${id}`;
+    const raw = await redis.get(levelKey);
+    
+    if (!raw) {
+      return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Level not found' } });
+    }
+    
+    const level: UserLevelRecord = JSON.parse(raw);
+    
+    // Initialize array if not present
+    if (!level.sharedBy) level.sharedBy = [];
+    
+    // Track unique share
+    if (!level.sharedBy.includes(currentUser)) {
+      level.sharedBy.push(currentUser);
+      level.shares = level.sharedBy.length;
+      await redis.set(levelKey, JSON.stringify(level));
+    }
+    
+    return res.json({ 
+      success: true, 
+      shares: level.shares 
+    });
+  } catch (err) {
+    console.error('Share user level failed:', err);
+    return res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to share level' } });
+  }
+});
+
 // Init payload for playing a user level (compatible with /api/game/init)
 router.get('/api/user-levels/:id/init', async (req: Request, res: Response) => {
   try {
@@ -289,12 +419,20 @@ router.get('/api/user-levels/:id/init', async (req: Request, res: Response) => {
     if (!raw) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Level not found' } });
     const level: UserLevelRecord = JSON.parse(raw);
     
-    // Increment play count
-    level.playCount = (level.playCount || 0) + 1;
-    await redis.set(levelKey, JSON.stringify(level));
+    // Get username first
+    const username = (await reddit.getCurrentUsername()) || 'anonymous';
+    
+    // Track unique play (only count first play per user, but allow replays)
+    const currentUser = username || `anon_${req.ip}`;
+    if (!level.playedBy) level.playedBy = [];
+    if (!level.playedBy.includes(currentUser)) {
+      level.playedBy.push(currentUser);
+      level.playCount = level.playedBy.length;
+      await redis.set(levelKey, JSON.stringify(level));
+    }
+    // User can replay the level, but play count stays the same
     
     const postId = context.postId || 'custom';
-    const username = (await reddit.getCurrentUsername()) || 'anonymous';
     return res.json({
       type: 'game_init',
       postId,

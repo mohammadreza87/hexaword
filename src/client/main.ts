@@ -716,17 +716,54 @@ class App {
       clue: config.clue,
       score: scoreData.levelScore,
       coins: coinReward,
-      onUpvote: () => {
-        // TODO: Implement upvote API call
-        console.log('Upvoted level:', config.levelId);
+      onUpvote: async () => {
+        try {
+          const response = await fetch(`/api/user-levels/${config.levelId}/vote`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: 'up' })
+          });
+          if (response.ok) {
+            const data = await response.json();
+            console.log('Upvoted level:', config.levelId, data);
+          }
+        } catch (error) {
+          console.error('Failed to upvote:', error);
+        }
       },
-      onDownvote: () => {
-        // TODO: Implement downvote API call
-        console.log('Downvoted level:', config.levelId);
+      onDownvote: async () => {
+        try {
+          const response = await fetch(`/api/user-levels/${config.levelId}/vote`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: 'down' })
+          });
+          if (response.ok) {
+            const data = await response.json();
+            console.log('Downvoted level:', config.levelId, data);
+          }
+        } catch (error) {
+          console.error('Failed to downvote:', error);
+        }
       },
-      onShare: () => {
-        // TODO: Implement share functionality
-        console.log('Share level:', config.levelId);
+      onShare: async () => {
+        try {
+          // Track the share
+          const response = await fetch(`/api/user-levels/${config.levelId}/share`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          if (response.ok) {
+            const data = await response.json();
+            console.log('Shared level:', config.levelId, data);
+          }
+          
+          // Open share dialog (this would be platform-specific)
+          // For now, just show a success message
+          this.showToast('Level shared to community!', 'info');
+        } catch (error) {
+          console.error('Failed to share:', error);
+        }
       },
       onNextLevel: async () => {
         // Load another random user level or go back to menu

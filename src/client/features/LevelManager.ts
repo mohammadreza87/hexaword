@@ -173,10 +173,10 @@ export class LevelManager {
                   </span>
                 `).join('')}
               </div>
-              <div class="flex items-center gap-3 mt-2 mb-1.5 text-hw-text-secondary" style="font-size: 10px;">
+              <div class="flex items-center justify-between mt-2 mb-1.5 text-hw-text-secondary" style="font-size: 10px;">
                 <span class="flex items-center gap-0.5">
                   <span style="font-size: 12px;">🎮</span>
-                  <span>${level.playCount || 0} plays</span>
+                  <span>${level.playCount || 0}</span>
                 </span>
                 <span class="flex items-center gap-0.5">
                   <span style="font-size: 12px;">👍</span>
