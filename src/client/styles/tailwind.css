@@ -251,6 +251,32 @@
     @apply opacity-100;
   }
   
+  /* Share button styling */
+  .share-btn {
+    @apply transition-all duration-200;
+  }
+  
+  .share-btn:hover {
+    transform: translateY(-2px);
+  }
+  
+  .share-btn:active {
+    transform: translateY(0);
+  }
+  
+  /* Level card styling */
+  .level-card {
+    @apply transition-all duration-200;
+    background: rgba(42, 52, 70, 0.3);
+    backdrop-filter: blur(10px);
+  }
+  
+  .level-card:hover {
+    background: rgba(42, 52, 70, 0.5);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+  
   /* Toast notifications */
   .toast {
     @apply fixed bottom-4 left-1/2 -translate-x-1/2 z-notification

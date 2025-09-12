@@ -296,8 +296,14 @@ export class GameUI {
     document.body.appendChild(this.container);
   }
   
-  public updateLevel(level: number): void {
-    this.levelEl.textContent = `LEVEL ${level}`;
+  public updateLevel(level: number | string): void {
+    if (typeof level === 'string') {
+      // User level - show the level name
+      this.levelEl.textContent = level;
+    } else {
+      // Regular level - show level number
+      this.levelEl.textContent = `LEVEL ${level}`;
+    }
   }
   
   public updateWordCount(found: number, total: number): void {

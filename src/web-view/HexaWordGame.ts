@@ -14,6 +14,7 @@ import { HintService } from '../shared/game/domain/services/HintService';
 import { HintStorageService } from '../client/services/HintStorageService';
 import { HintPurchaseUI } from '../client/services/HintPurchaseUI';
 import { LevelProgressService } from '../client/services/LevelProgressService';
+import { UserLevelCompletion } from './components/UserLevelCompletion';
 
 export interface GameConfig {
   containerId: string;
@@ -27,6 +28,11 @@ export interface GameConfig {
   onError?: (error: Error) => void;
   onWordFound?: (word: string) => void;
   onLevelComplete?: (level: number) => void;
+  // User level specific
+  isUserLevel?: boolean;
+  levelName?: string;
+  levelId?: string;
+  levelAuthor?: string;
 }
 
 export class HexaWordGame {
@@ -61,6 +67,12 @@ export class HexaWordGame {
   private isTargetHintMode: boolean = false;  // Track target hint mode
   private targetHintOverlay: HTMLElement | null = null;  // Blur overlay element
   private targetHintInstruction: HTMLElement | null = null;  // Instruction text element
+  
+  // User level specific
+  private isUserLevel: boolean = false;
+  private userLevelName?: string;
+  private userLevelId?: string;
+  private userLevelAuthor?: string;
   
   // Default word list - Uncommon Occupations theme
   private defaultWords = [

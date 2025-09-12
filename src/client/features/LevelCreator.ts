@@ -2,6 +2,7 @@ import { CrosswordGenerator } from '../../web-view/services/CrosswordGenerator';
 import { HexRenderer } from '../../web-view/engine/HexRenderer';
 import { ColorPaletteService } from '../../web-view/services/ColorPaletteService';
 import { getPaletteForLevel } from '../../web-view/config/ColorPalettes';
+import { ShareDialog } from './ShareDialog';
 import type { HexCell } from '../../shared/types/hexaword';
 
 type CreateResult = { playNowId?: string } | null;
@@ -54,15 +55,39 @@ export class LevelCreator {
         const payload = this.collect();
         const valid = this.validate(payload);
         if (!valid.ok) { this.showError(valid.msg); return; }
+        
+        // Log the payload being sent
+        console.log('Sending level data:', payload);
+        
         try {
           const res = await fetch('/api/user-levels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
           if (!res.ok) {
             const data = await res.json().catch(() => ({} as any));
-            this.showError(data?.error?.message || 'Failed to save level');
+            console.error('Save failed:', res.status, data);
+            this.showError(data?.error?.message || `Failed to save level (${res.status})`);
+            
+            // Show validation details if available
+            if (data?.error?.details) {
+              console.error('Validation errors:', data.error.details);
+            }
             return;
           }
           const data = await res.json();
-          onClose({ playNowId: data.id });
+          
+          // Close the creator overlay first
+          this.overlay.remove();
+          
+          // Show share dialog
+          const shareDialog = new ShareDialog(data.id, payload.name, payload.clue);
+          const shareResult = await shareDialog.show();
+          
+          if (shareResult.action === 'play') {
+            // User wants to play the level
+            resolve({ playNowId: data.id });
+          } else {
+            // User closed or went back to levels
+            resolve(null);
+          }
         } catch (e) {
           this.showError('Network error while saving');
         }
@@ -75,56 +100,57 @@ export class LevelCreator {
     this.overlay = document.createElement('div');
     this.overlay.className = 'modal-overlay';
     this.panel = document.createElement('div');
-    this.panel.className = 'modal-content panel-hex max-w-2xl';
-    this.panel.style.maxHeight = '90vh';
+    this.panel.className = 'modal-content panel-hex max-w-xl';
+    this.panel.style.maxHeight = '70vh';
     this.panel.style.overflowY = 'auto';
+    this.panel.style.transform = 'scale(0.85)';
     this.panel.innerHTML = `
-      <div class="text-center mb-3">
-        <div class="text-2xl tracking-wide text-hw-text-primary">Create Level</div>
-        <div class="text-sm text-hw-text-secondary">Step 1: Enter level details</div>
+      <div class="text-center mb-2">
+        <div class="text-xl tracking-wide text-hw-text-primary">Create Level</div>
+        <div class="text-xs text-hw-text-secondary">Step 1: Enter level details</div>
       </div>
-      <div id="lc-error" class="text-red-400 text-sm mb-2" style="min-height:18px;"></div>
+      <div id="lc-error" class="text-red-400 text-xs mb-2" style="min-height:16px;"></div>
       <div id="lc-step-form">
-        <div class="grid gap-3 mb-4">
+        <div class="grid gap-2 mb-3">
           <div class="relative">
-            <input id="lc-name" placeholder="Level name" maxlength="30" class="input" style="text-transform: uppercase;" />
-            <div class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-hw-text-secondary/50">
+            <input id="lc-name" placeholder="Level name" maxlength="30" class="input text-sm py-2" style="text-transform: uppercase;" />
+            <div class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-hw-text-secondary/50" style="font-size: 10px;">
               <span id="lc-name-count">0</span>/30
             </div>
           </div>
           <div class="relative">
-            <input id="lc-clue" placeholder="Theme or clue" maxlength="30" class="input" style="text-transform: uppercase;" />
-            <div class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-hw-text-secondary/50">
+            <input id="lc-clue" placeholder="Theme or clue" maxlength="30" class="input text-sm py-2" style="text-transform: uppercase;" />
+            <div class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-hw-text-secondary/50" style="font-size: 10px;">
               <span id="lc-clue-count">0</span>/30
             </div>
           </div>
-          <div class="border-t border-hw-surface-tertiary/30 pt-3">
-            <div class="flex items-center justify-between mb-2">
-              <span class="text-sm text-hw-text-secondary">Words</span>
-              <span class="text-xs text-hw-text-secondary/60">Min 1, Max 6</span>
+          <div class="border-t border-hw-surface-tertiary/30 pt-2">
+            <div class="flex items-center justify-between mb-1.5">
+              <span class="text-xs text-hw-text-secondary">Words</span>
+              <span class="text-xs text-hw-text-secondary/60" style="font-size: 10px;">Min 1, Max 6</span>
             </div>
-            <div id="lc-words" class="grid gap-2" style="max-height: 280px; overflow-y: auto; padding-right: 4px;"></div>
+            <div id="lc-words" class="grid gap-1.5" style="max-height: 200px; overflow-y: auto; padding-right: 4px;"></div>
           </div>
-          <button id="lc-add" class="btn-add-word w-full sticky bottom-0 bg-opacity-95">
-            <span style="font-size: 16px;">+</span>
+          <button id="lc-add" class="btn-add-word w-full sticky bottom-0 bg-opacity-95 py-2 text-sm">
+            <span style="font-size: 14px;">+</span>
             <span>Add Word</span>
           </button>
         </div>
-        <div class="flex gap-2 justify-end sticky bottom-0 bg-opacity-95" style="background: inherit; padding-top: 8px; margin-top: -4px;">
-          <button id="lc-next" class="btn-glass-primary">Next</button>
-          <button id="lc-cancel" class="btn-glass">Cancel</button>
+        <div class="flex gap-2 justify-end sticky bottom-0 bg-opacity-95" style="background: inherit; padding-top: 6px; margin-top: -4px;">
+          <button id="lc-next" class="btn-glass-primary py-1.5 text-sm">Next</button>
+          <button id="lc-cancel" class="btn-glass py-1.5 text-sm">Cancel</button>
         </div>
       </div>
       <div id="lc-step-preview" class="hidden">
-        <div class="text-sm text-hw-text-secondary mb-2">Step 2: Preview & Confirm</div>
-        <div class="mb-3 relative" style="max-height: calc(90vh - 200px); overflow-y: auto;">
-          <canvas id="lc-canvas" width="480" height="340" style="width:100%;height:260px;background:#0F1115;border:1px solid rgba(255,255,255,.08);border-radius:8px;"></canvas>
+        <div class="text-xs text-hw-text-secondary mb-2">Step 2: Preview & Confirm</div>
+        <div class="mb-2 relative" style="max-height: calc(70vh - 160px); overflow-y: auto;">
+          <canvas id="lc-canvas" width="480" height="340" style="width:100%;height:200px;background:#0F1115;border:1px solid rgba(255,255,255,.08);border-radius:8px;"></canvas>
           <div id="lc-clue-preview" class="absolute top-2 left-0 right-0 text-center" style="pointer-events:none;"></div>
         </div>
-        <div class="flex gap-2 justify-end sticky bottom-0" style="background: inherit; padding-top: 8px;">
-          <button id="lc-save" class="btn-glass-primary">Save</button>
-          <button id="lc-back" class="btn-glass">Back</button>
-          <button id="lc-cancel" class="btn-glass">Cancel</button>
+        <div class="flex gap-2 justify-end sticky bottom-0" style="background: inherit; padding-top: 6px;">
+          <button id="lc-save" class="btn-glass-primary py-1.5 text-sm">Save</button>
+          <button id="lc-back" class="btn-glass py-1.5 text-sm">Back</button>
+          <button id="lc-cancel" class="btn-glass py-1.5 text-sm">Cancel</button>
         </div>
       </div>
     `;
@@ -147,11 +173,12 @@ export class LevelCreator {
       const inp = document.createElement('input');
       inp.placeholder = placeholders[i];
       inp.maxLength = 12;
-      inp.className = 'input-word';
+      inp.className = 'input-word text-sm py-2';
       inp.dataset.index = String(i);
       
       const counter = document.createElement('div');
-      counter.className = 'absolute right-3 top-1/2 -translate-y-1/2 text-xs text-hw-text-secondary/50';
+      counter.className = 'absolute right-2 top-1/2 -translate-y-1/2 text-xs text-hw-text-secondary/50';
+      counter.style.fontSize = '10px';
       counter.innerHTML = `<span class="word-count" data-index="${i}">0</span>/12`;
       
       wrapper.appendChild(inp);
@@ -199,17 +226,19 @@ export class LevelCreator {
       const inp = document.createElement('input');
       inp.placeholder = `Word ${index + 1}`;
       inp.maxLength = 12;
-      inp.className = 'input-word';
+      inp.className = 'input-word text-sm py-2';
       inp.dataset.index = String(index);
       
       const counter = document.createElement('div');
-      counter.className = 'absolute right-3 top-1/2 -translate-y-1/2 text-xs text-hw-text-secondary/50';
+      counter.className = 'absolute right-2 top-1/2 -translate-y-1/2 text-xs text-hw-text-secondary/50';
+      counter.style.fontSize = '10px';
       counter.innerHTML = `<span class="word-count" data-index="${index}">0</span>/12`;
       
       // Add remove button for words beyond the initial 3
       if (index >= 3) {
         const removeBtn = document.createElement('button');
-        removeBtn.className = 'absolute right-10 top-1/2 -translate-y-1/2 text-red-400 hover:text-red-300 transition-colors';
+        removeBtn.className = 'absolute right-8 top-1/2 -translate-y-1/2 text-red-400 hover:text-red-300 transition-colors';
+        removeBtn.style.fontSize = '14px';
         removeBtn.innerHTML = '✕';
         removeBtn.onclick = () => {
           wrapper.remove();
@@ -258,7 +287,8 @@ export class LevelCreator {
     });
   }
 
-  private collect(): { clue: string; words: string[] } {
+  private collect(): { name?: string; clue: string; words: string[] } {
+    const name = (this.nameInput.value || '').trim();
     const clue = (this.clueInput.value || '').trim();
     const words = this.wordInputs
       .map((w) => (w.value || '').trim().toUpperCase().replace(/[^A-Z]/g, ''))
@@ -266,7 +296,11 @@ export class LevelCreator {
     // Deduplicate
     const uniq: string[] = [];
     for (const w of words) if (!uniq.includes(w)) uniq.push(w);
-    return { clue, words: uniq.slice(0, 6) };
+    return { 
+      name: name.length > 0 ? name : undefined,
+      clue, 
+      words: uniq.slice(0, 6) 
+    };
   }
 
   private validate(payload: { clue: string; words: string[] }): { ok: boolean; msg?: string } {

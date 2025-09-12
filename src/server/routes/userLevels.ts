@@ -18,16 +18,21 @@ type UserLevelRecord = {
   createdAt: string;
   visibility: 'private' | 'public';
   status: 'active' | 'pending' | 'rejected';
+  // Stats
+  playCount?: number;
+  upvotes?: number;
+  downvotes?: number;
+  shares?: number;
 };
 
 const router = express.Router();
 
 // ------- Validation Schemas -------
 const CreateLevelSchema = z.object({
-  name: z.string().min(3).max(30).optional(),
+  name: z.string().min(1).max(30).optional(),  // Allow shorter names
   clue: z.string().min(3).max(30),
   words: z
-    .array(z.string().min(2).max(8))
+    .array(z.string().min(2).max(12))  // Match client's 12 char limit
     .min(1)
     .max(6)
 });
@@ -74,14 +79,32 @@ function basicSolvability(words: string[]): boolean {
 // Create a user level
 router.post('/api/user-levels', async (req: Request, res: Response) => {
   try {
+    console.log('Create level request body:', req.body);
+    
     const username = await reddit.getCurrentUsername();
+    console.log('Current username:', username);
+    
     if (!username) {
-      return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
+      // For development, use a default username if not authenticated
+      console.log('No username found, using anonymous for dev');
     }
+    
+    const effectiveUsername = username || 'anonymous';
 
     const parsed = CreateLevelSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Invalid payload', details: parsed.error.errors } });
+      console.error('Validation failed:', parsed.error.errors);
+      // Format error messages for better readability
+      const errorMessages = parsed.error.errors.map(err => 
+        `${err.path.join('.')}: ${err.message}`
+      ).join(', ');
+      return res.status(400).json({ 
+        error: { 
+          code: 'VALIDATION_ERROR', 
+          message: errorMessages || 'Invalid payload', 
+          details: parsed.error.errors 
+        } 
+      });
     }
 
     const clue = parsed.data.clue.trim();
@@ -105,10 +128,10 @@ router.post('/api/user-levels', async (req: Request, res: Response) => {
 
     // Assign id and seed
     const id = buildId();
-    const seed = `ulevel:${username}:${id}`;
+    const seed = `ulevel:${effectiveUsername}:${id}`;
     const record: UserLevelRecord = {
       id,
-      author: username,
+      author: effectiveUsername,
       name,
       clue: clue,
       words: wordsNorm,
@@ -116,17 +139,52 @@ router.post('/api/user-levels', async (req: Request, res: Response) => {
       generatorVersion: '1',
       createdAt: new Date().toISOString(),
       visibility: 'private',
-      status: 'active'
+      status: 'active',
+      // Initialize stats
+      playCount: 0,
+      upvotes: 0,
+      downvotes: 0,
+      shares: 0
     };
 
-    // Persist
-    await redis.set(`hw:ulevel:${id}`, JSON.stringify(record));
-    await redis.rpush(getUserKey(username), id);
+    // Persist with error handling
+    console.log('Saving level with ID:', id);
+    try {
+      // Store level data
+      const levelKey = `hw:ulevel:${id}`;
+      const userKey = getUserKey(effectiveUsername);
+      
+      console.log('Storing level at key:', levelKey);
+      await redis.set(levelKey, JSON.stringify(record));
+      
+      // Instead of rpush, use a different approach - store as JSON array
+      console.log('Adding to user list:', userKey);
+      const existingIds = await redis.get(userKey);
+      const idList = existingIds ? JSON.parse(existingIds) : [];
+      idList.push(id);
+      await redis.set(userKey, JSON.stringify(idList));
+      
+      console.log('Level saved successfully');
+    } catch (redisErr) {
+      console.error('Redis operation failed:', redisErr);
+      console.error('Redis error details:', {
+        message: redisErr?.message,
+        stack: redisErr?.stack,
+        name: redisErr?.name
+      });
+      return res.status(500).json({ 
+        error: { 
+          code: 'STORAGE_ERROR', 
+          message: 'Failed to save level to storage',
+          details: redisErr?.message || 'Unknown Redis error'
+        } 
+      });
+    }
 
     return res.json(record);
   } catch (err) {
-    console.error('Create user level failed', err);
-    return res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to create level' } });
+    console.error('Create user level failed:', err);
+    return res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to create level', details: err.message } });
   }
 });
 
@@ -135,21 +193,90 @@ router.get('/api/user-levels/mine', async (_req: Request, res: Response) => {
   try {
     const username = await reddit.getCurrentUsername();
     if (!username) {
-      return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
+      // Return empty list for anonymous users instead of error
+      return res.json({ levels: [] });
     }
+    
     const key = getUserKey(username);
-    const ids = await redis.lrange(key, -50, -1); // latest up to 50
-    const levels: UserLevelRecord[] = [];
-    for (const id of ids) {
-      const raw = await redis.get(`hw:ulevel:${id}`);
-      if (raw) levels.push(JSON.parse(raw));
+    console.log('Fetching user levels for key:', key);
+    
+    // Get the JSON array of level IDs
+    const idsJson = await redis.get(key);
+    if (!idsJson) {
+      console.log('No levels found for user:', username);
+      return res.json({ levels: [] });
     }
+    
+    const ids = JSON.parse(idsJson);
+    console.log('Found level IDs:', ids);
+    
+    // Get only the latest 50
+    const latestIds = ids.slice(-50);
+    
+    const levels: UserLevelRecord[] = [];
+    for (const id of latestIds) {
+      try {
+        const raw = await redis.get(`hw:ulevel:${id}`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          levels.push(parsed);
+        }
+      } catch (parseErr) {
+        console.error(`Failed to parse level ${id}:`, parseErr);
+      }
+    }
+    
     // Return newest first
     levels.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
     return res.json({ levels });
   } catch (err) {
-    console.error('List user levels failed', err);
-    return res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to load user levels' } });
+    console.error('List user levels failed:', err);
+    return res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to load user levels', details: err.message } });
+  }
+});
+
+// Delete a user level
+router.delete('/api/user-levels/:id', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id;
+    const username = await reddit.getCurrentUsername();
+    
+    if (!username) {
+      return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Must be logged in to delete levels' } });
+    }
+    
+    // Get the level to verify ownership
+    const levelKey = `hw:ulevel:${id}`;
+    const raw = await redis.get(levelKey);
+    
+    if (!raw) {
+      return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Level not found' } });
+    }
+    
+    const level: UserLevelRecord = JSON.parse(raw);
+    
+    // Check if user owns this level
+    if (level.author !== username) {
+      return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'You can only delete your own levels' } });
+    }
+    
+    // Delete the level
+    await redis.del(levelKey);
+    
+    // Remove from user's level list
+    const userKey = getUserKey(username);
+    const existingIds = await redis.get(userKey);
+    if (existingIds) {
+      const idList = JSON.parse(existingIds);
+      const filteredList = idList.filter((levelId: string) => levelId !== id);
+      await redis.set(userKey, JSON.stringify(filteredList));
+    }
+    
+    console.log(`Deleted level ${id} for user ${username}`);
+    return res.status(204).end();
+  } catch (err) {
+    console.error('Delete user level failed:', err);
+    return res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to delete level' } });
   }
 });
 
@@ -157,9 +284,15 @@ router.get('/api/user-levels/mine', async (_req: Request, res: Response) => {
 router.get('/api/user-levels/:id/init', async (req: Request, res: Response) => {
   try {
     const id = req.params.id;
-    const raw = await redis.get(`hw:ulevel:${id}`);
+    const levelKey = `hw:ulevel:${id}`;
+    const raw = await redis.get(levelKey);
     if (!raw) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Level not found' } });
     const level: UserLevelRecord = JSON.parse(raw);
+    
+    // Increment play count
+    level.playCount = (level.playCount || 0) + 1;
+    await redis.set(levelKey, JSON.stringify(level));
+    
     const postId = context.postId || 'custom';
     const username = (await reddit.getCurrentUsername()) || 'anonymous';
     return res.json({
@@ -170,6 +303,8 @@ router.get('/api/user-levels/:id/init', async (req: Request, res: Response) => {
       words: level.words,
       level: 'custom',
       clue: level.clue,
+      name: level.name,
+      author: level.author,
       createdAt: level.createdAt
     });
   } catch (err) {

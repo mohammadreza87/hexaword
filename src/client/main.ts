@@ -339,38 +339,33 @@ class App {
     el.className = 'modal-overlay hidden';
     
     const panel = document.createElement('div');
-    panel.className = 'modal-content max-w-lg panel-hex';
-    panel.innerHTML = `
-      <div class="text-center mb-4">
-        <div id="hexaword-title" class="text-3xl tracking-wide" style="
+    panel.className = 'modal-content max-w-md panel-hex relative';
+    panel.style.transform = 'scale(0.85)';
+    
+    // Add settings button in top-right corner
+    const settingsBtn = document.createElement('button');
+    settingsBtn.id = 'hw-settings-btn';
+    settingsBtn.className = 'absolute top-3 right-3 text-hw-text-secondary hover:text-hw-text-primary transition-colors p-1';
+    settingsBtn.innerHTML = '<span style="font-size: 18px;">⚙️</span>';
+    panel.appendChild(settingsBtn);
+    
+    panel.innerHTML += `
+      <div class="text-center mb-3">
+        <div id="hexaword-title" class="text-2xl tracking-wide" style="
           font-weight: 900;
           font-family: 'Inter', Arial, sans-serif;
           text-transform: uppercase;
           position: relative;
         ">HEXA WORDS</div>
-        <div class="text-sm text-hw-text-secondary mt-1">Main Menu</div>
+        <div class="text-xs text-hw-text-secondary mt-1">Main Menu</div>
       </div>
-      <div class="flex flex-col gap-3 my-4">
-        <button id="hw-level" class="btn-glass-primary py-3 text-lg">Level 1</button>
-        <button disabled class="btn-glass opacity-50 cursor-not-allowed py-3">Daily Challenge (soon)</button>
-        <button id="hw-create" class="btn-glass py-3">➕ Create Level</button>
-        <button disabled class="btn-glass opacity-50 cursor-not-allowed py-3">Leaderboard (soon)</button>
-        <button id="hw-test-wheel" class="btn-glass py-3">🎰 Test Wheel (Dev)</button>
-        <button id="hw-reset" class="btn-glass py-3">🧹 Reset Progress (Dev)</button>
-      </div>
-      <div class="mt-4 pt-4 border-t border-hw-surface-tertiary/20">
-        <div class="text-base text-hw-text-secondary mb-3">Settings</div>
-        <div class="toggle-option">
-          <label class="toggle-option-label">
-            <span class="toggle-option-icon">🎬</span>
-            <span>Reduce Motion</span>
-          </label>
-          <label class="toggle-switch">
-            <input type="checkbox" id="hw-motion-toggle">
-            <span class="toggle-slider"></span>
-          </label>
-        </div>
-        <button id="hw-howto" class="btn-glass w-full mt-2 text-sm">📖 How to Play</button>
+      <div class="flex flex-col gap-2 my-3">
+        <button id="hw-level" class="btn-glass-primary py-2 text-sm">Level 1</button>
+        <button disabled class="btn-glass opacity-50 cursor-not-allowed py-2 text-sm">Daily Challenge (soon)</button>
+        <button id="hw-create" class="btn-glass py-2 text-sm">📝 My Levels</button>
+        <button disabled class="btn-glass opacity-50 cursor-not-allowed py-2 text-sm">Leaderboard (soon)</button>
+        <button id="hw-test-wheel" class="btn-glass py-2 text-sm">🎰 Test Wheel (Dev)</button>
+        <button id="hw-reset" class="btn-glass py-2 text-sm">🧹 Reset Progress (Dev)</button>
       </div>
     `;
     el.appendChild(panel);
@@ -379,8 +374,7 @@ class App {
 
     // Wire buttons
     const levelBtn = panel.querySelector('#hw-level') as HTMLButtonElement;
-    const motionToggle = panel.querySelector('#hw-motion-toggle') as HTMLInputElement;
-    const howBtn = panel.querySelector('#hw-howto') as HTMLButtonElement;
+    const settingsButton = panel.querySelector('#hw-settings-btn') as HTMLButtonElement;
     const createBtn = panel.querySelector('#hw-create') as HTMLButtonElement;
     const resetBtn = panel.querySelector('#hw-reset') as HTMLButtonElement;
 
@@ -417,46 +411,46 @@ class App {
         this.menuBusy = false; // clear busy once menu is hidden
       });
     };
-    // Initialize toggle from stored prefs
-    const currentMotionPref = localStorage.getItem('hexaword_reduce_motion') === 'true';
-    motionToggle.checked = currentMotionPref;
     
-    motionToggle.onchange = () => {
-      const isEnabled = motionToggle.checked;
-      localStorage.setItem('hexaword_reduce_motion', String(isEnabled));
-      const svc = (window as any).hwAnimSvc as any;
-      if (svc?.setReducedMotion) svc.setReducedMotion(isEnabled);
-    };
-    howBtn.onclick = async () => {
-      // Focus effect: blur everything except the how-to modal
-      await blurTransition.focusOn('hw-howto-modal', {
-        blurLevel: 'md',
-        duration: 300
-      });
-      this.showHowTo();
+    // Settings button handler
+    settingsButton.onclick = () => {
+      this.showSettingsPanel();
     };
 
-    // Create Level flow
+    // My Levels flow (shows list and create button)
     createBtn.onclick = async () => {
       if (this.menuBusy) return;
       this.menuBusy = true;
       try {
-        const { LevelCreator } = await import('./features/LevelCreator');
-        const creator = new LevelCreator();
-        const result = await creator.show();
-        if (result?.playNowId) {
-          // Load created level using user-levels init endpoint
+        const { LevelManager } = await import('./features/LevelManager');
+        const manager = new LevelManager();
+        const result = await manager.show();
+        
+        if (result?.action === 'play' && result.levelId) {
+          // Load and play the selected level
           await blurTransition.transitionWithBlur(async () => {
-            await this.playUserLevel(result.playNowId);
+            await this.playUserLevel(result.levelId);
             this.hideMainMenu();
           }, { blurIntensity: 'lg', inDuration: 200, outDuration: 250 });
         }
       } catch (e) {
-        this.showToast('Failed to open level creator', 'error');
+        this.showToast('Failed to open level manager', 'error');
       } finally {
         this.menuBusy = false;
       }
     };
+    
+    // Listen for play-user-level events from LevelManager
+    window.addEventListener('play-user-level', async (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const levelId = customEvent.detail?.levelId;
+      if (levelId) {
+        await blurTransition.transitionWithBlur(async () => {
+          await this.playUserLevel(levelId);
+          this.hideMainMenu();
+        }, { blurIntensity: 'lg', inDuration: 200, outDuration: 250 });
+      }
+    });
     
     // Test wheel button handler
     const testWheelBtn = el.querySelector('#hw-test-wheel') as HTMLButtonElement;
@@ -691,8 +685,184 @@ class App {
     await this.game.loadLevel({ words, seed: d.seed, clue: d.clue, level: d.level });
   }
 
+  // Show user level completion overlay with voting and sharing
+  private async showUserLevelCompleteOverlay(): Promise<void> {
+    const { UserLevelCompletion } = await import('../web-view/components/UserLevelCompletion');
+    
+    const config = (this.game as any).config;
+    const scoreData = (this.game as any)?.scoreService?.getState() || { levelScore: 0 };
+    const coinService = (this.game as any)?.coinService;
+    const coinStorageService = (this.game as any)?.coinStorageService;
+    
+    // Calculate coins earned
+    const hintsUsed = scoreData.hintsUsed || 0;
+    const words = (this.game?.getPlacedWords() || []).map(w => w.word);
+    const coinReward = coinService ? 
+      coinService.calculateLevelReward(1, words.length, Date.now() - (scoreData.timeStarted || Date.now()), hintsUsed) : 
+      0;
+    
+    // Add coins to server
+    if (coinReward > 0 && coinStorageService) {
+      await coinStorageService.addCoins(coinReward);
+      if (this.game && (this.game as any).updateCoinDisplay) {
+        (this.game as any).updateCoinDisplay();
+      }
+    }
+    
+    const completion = new UserLevelCompletion({
+      levelName: config.levelName,
+      levelId: config.levelId,
+      author: config.levelAuthor,
+      clue: config.clue,
+      score: scoreData.levelScore,
+      coins: coinReward,
+      onUpvote: () => {
+        // TODO: Implement upvote API call
+        console.log('Upvoted level:', config.levelId);
+      },
+      onDownvote: () => {
+        // TODO: Implement downvote API call
+        console.log('Downvoted level:', config.levelId);
+      },
+      onShare: () => {
+        // TODO: Implement share functionality
+        console.log('Share level:', config.levelId);
+      },
+      onNextLevel: async () => {
+        // Load another random user level or go back to menu
+        this.showMainMenu();
+      },
+      onMainMenu: () => {
+        this.showMainMenu();
+      }
+    });
+    
+    completion.show();
+  }
+
+  // Show settings panel similar to in-game settings
+  private showSettingsPanel(): void {
+    // Create overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'fixed inset-0 bg-black/50 backdrop-blur-sm z-[10000] flex items-center justify-center';
+    
+    // Create panel
+    const panel = document.createElement('div');
+    panel.className = 'bg-hw-surface-primary border border-hw-surface-tertiary/30 rounded-xl p-4 max-w-sm w-[90%]';
+    panel.style.transform = 'scale(0.85)';
+    
+    panel.innerHTML = `
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-bold text-hw-text-primary">Settings</h2>
+        <button id="settings-close" class="text-hw-text-secondary hover:text-hw-text-primary transition-colors">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M15 5L5 15M5 5l10 10"/>
+          </svg>
+        </button>
+      </div>
+      
+      <div class="space-y-3">
+        <!-- Reduce Motion Toggle -->
+        <div class="flex items-center justify-between p-3 rounded-lg bg-hw-surface-secondary/50">
+          <div class="flex items-center gap-2">
+            <span class="text-base">🎬</span>
+            <span class="text-sm text-hw-text-primary">Reduce Motion</span>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="settings-motion-toggle" class="sr-only peer">
+            <div class="w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-hw-accent-primary"></div>
+          </label>
+        </div>
+        
+        <!-- How to Play Button -->
+        <button id="settings-howto" class="w-full p-3 rounded-lg bg-hw-surface-secondary/50 text-sm text-hw-text-primary hover:bg-hw-surface-secondary/70 transition-colors flex items-center gap-2">
+          <span class="text-base">📖</span>
+          <span>How to Play</span>
+        </button>
+        
+        <!-- Restart Level Button -->
+        <button id="settings-restart" class="w-full p-3 rounded-lg bg-hw-surface-secondary/50 text-sm text-hw-text-primary hover:bg-hw-surface-secondary/70 transition-colors flex items-center gap-2">
+          <span class="text-base">🔄</span>
+          <span>Restart Current Level</span>
+        </button>
+        
+        <!-- Main Menu Button -->
+        <button id="settings-mainmenu" class="w-full p-3 rounded-lg bg-hw-surface-secondary/50 text-sm text-hw-text-primary hover:bg-hw-surface-secondary/70 transition-colors flex items-center gap-2">
+          <span class="text-base">🏠</span>
+          <span>Back to Main Menu</span>
+        </button>
+      </div>
+    `;
+    
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+    
+    // Initialize motion toggle state
+    const motionToggle = panel.querySelector('#settings-motion-toggle') as HTMLInputElement;
+    const currentMotionPref = localStorage.getItem('hexaword_reduce_motion') === 'true';
+    motionToggle.checked = currentMotionPref;
+    
+    // Wire up event handlers
+    motionToggle.onchange = () => {
+      const isEnabled = motionToggle.checked;
+      localStorage.setItem('hexaword_reduce_motion', String(isEnabled));
+      const svc = (window as any).hwAnimSvc as any;
+      if (svc?.setReducedMotion) svc.setReducedMotion(isEnabled);
+    };
+    
+    // Close button
+    panel.querySelector('#settings-close')?.addEventListener('click', () => {
+      overlay.remove();
+    });
+    
+    // Click outside to close
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        overlay.remove();
+      }
+    });
+    
+    // How to Play button
+    panel.querySelector('#settings-howto')?.addEventListener('click', async () => {
+      overlay.remove();
+      await blurTransition.focusOn('hw-howto-modal', {
+        blurLevel: 'md',
+        duration: 300
+      });
+      this.showHowTo();
+    });
+    
+    // Restart button (only visible if game is active)
+    const restartBtn = panel.querySelector('#settings-restart') as HTMLButtonElement;
+    if (restartBtn) {
+      if (!this.game) {
+        restartBtn.style.display = 'none';
+      } else {
+        restartBtn.addEventListener('click', () => {
+          overlay.remove();
+          if (this.game) {
+            // Restart current level
+            this.loadLevelFromServer(this.currentLevel);
+          }
+        });
+      }
+    }
+    
+    // Main Menu button
+    panel.querySelector('#settings-mainmenu')?.addEventListener('click', () => {
+      overlay.remove();
+      // Already in main menu, do nothing
+    });
+  }
+
   // Show level completion overlay with blur, details, and actions
-  private showLevelCompleteOverlay(level: number): void {
+  private async showLevelCompleteOverlay(level: number): Promise<void> {
+    // Check if this is a user level and show custom completion
+    if (this.game && (this.game as any).config?.isUserLevel) {
+      await this.showUserLevelCompleteOverlay();
+      return;
+    }
+    
     const overlay = document.createElement('div');
     overlay.id = 'hw-complete-overlay';
     overlay.className = 'modal-overlay';
@@ -1045,6 +1215,16 @@ class App {
       if (!res.ok) throw new Error('Failed to init user level');
       const d = await res.json();
       const words: string[] = d.words?.slice?.(0, Math.min(6, d.words.length)) ?? [];
+      
+      // Extract user level metadata
+      const levelName = d.name || d.clue;
+      const levelAuthor = d.author || 'anonymous';
+      
+      // Update UI to show level name instead of number
+      if (this.gameUI) {
+        this.gameUI.updateLevel(levelName);
+      }
+      
       if (!this.game) {
         await new Promise<void>((resolve, reject) => {
           this.game = new HexaWordGame({
@@ -1055,12 +1235,26 @@ class App {
             gridRadius: 10,
             level: 1,
             theme: 'dark',
+            // Add user level specific properties
+            isUserLevel: true,
+            levelName,
+            levelId: id,
+            levelAuthor,
             onReady: () => { try { this.setupUI(); this.initializeGameUI(); } finally { resolve(); } },
-            onError: (err) => { console.error(err); reject(err); }
+            onError: (err) => { console.error(err); reject(err); },
+            onLevelComplete: async (lvl) => {
+              this.showLevelCompleteOverlay(lvl);
+            }
           });
         });
         return;
       }
+      // Update the game config with user level metadata
+      (this.game as any).config.isUserLevel = true;
+      (this.game as any).config.levelName = levelName;
+      (this.game as any).config.levelId = id;
+      (this.game as any).config.levelAuthor = levelAuthor;
+      
       await this.game.loadLevel({ words, seed: d.seed, clue: d.clue, level: 1 });
     } catch (e) {
       this.showToast('Failed to load user level', 'error');
