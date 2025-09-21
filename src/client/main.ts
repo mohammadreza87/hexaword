@@ -362,82 +362,69 @@ class App {
     if (this.mainMenuEl) return;
     const el = document.createElement('div');
     el.id = 'hw-main-menu';
-    el.className = 'fixed inset-0 bg-gradient-to-br from-hw-surface-primary to-hw-surface-secondary hidden z-50';
-    
+    el.className = 'fixed inset-0 hidden z-50 overflow-hidden';
+
     el.innerHTML = `
-      <!-- Top Bar -->
-      <div class="absolute top-0 left-0 right-0 flex justify-between items-center p-4">
-        <!-- Coins Display (left) -->
-        <div class="flex items-center gap-2 bg-black/20 backdrop-blur-sm rounded-full px-3 py-1.5">
-          <span class="text-lg">🪙</span>
-          <span id="menu-coin-amount" class="text-hw-text-primary font-bold">0</span>
-        </div>
-        
-        <!-- Settings Button (right) -->
-        <button id="hw-settings-btn" class="bg-black/20 backdrop-blur-sm rounded-full p-2 hover:bg-black/30 transition-colors">
-          <span class="text-xl">⚙️</span>
-        </button>
-      </div>
-      
-      <!-- Main Content Area -->
-      <div class="relative h-full">
-        <!-- Title - Close to top HUD -->
-        <div class="absolute top-20 left-0 right-0 text-center">
-          <div id="hexaword-title" class="text-4xl font-black tracking-wide uppercase font-['Inter'] bg-gradient-to-br from-amber-500 to-red-500 bg-clip-text text-transparent">HEXA WORDS</div>
-        </div>
-        
-        <!-- Daily and My Levels - Centered vertically in middle -->
-        <div class="absolute top-1/2 left-0 right-0 -translate-y-1/2 px-4">
-          <div class="flex justify-between w-full max-w-sm mx-auto px-2 sm:px-4">
-            <!-- My Levels (left) -->
-            <button id="hw-create" class="bg-gradient-to-br from-purple-600 to-purple-700 backdrop-blur-sm rounded-xl w-24 h-24 flex flex-col items-center justify-center hover:scale-105 transition-transform shadow-lg border border-purple-500/30">
-              <div class="text-2xl mb-1">📝</div>
-              <div class="text-xs text-white font-semibold uppercase tracking-wide">My Levels</div>
-            </button>
-            
-            <!-- Daily Challenge (right) -->
-            <button id="hw-daily-challenge" class="bg-gradient-to-br from-amber-500 to-orange-500 backdrop-blur-sm rounded-xl w-24 h-24 flex flex-col items-center justify-center hover:scale-105 transition-transform shadow-lg border border-amber-400/30 relative">
-              <div class="text-2xl mb-1">☀️</div>
-              <div class="text-xs text-white font-semibold uppercase tracking-wide">Daily</div>
-              <span id="dc-streak-badge" class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold"></span>
+      <div class="hw-splash">
+        <div class="hw-splash-card">
+          <!-- Top Bar -->
+          <div class="hw-splash-header">
+            <div class="flex items-center gap-2 bg-black/20 backdrop-blur-sm rounded-full px-3 py-1.5">
+              <span class="text-lg">🪙</span>
+              <span id="menu-coin-amount" class="text-hw-text-primary font-bold">0</span>
+            </div>
+
+            <button id="hw-settings-btn" class="bg-black/20 backdrop-blur-sm rounded-full p-2 hover:bg-black/30 transition-colors">
+              <span class="text-xl">⚙️</span>
             </button>
           </div>
-        </div>
-        
-        <!-- Play Button - Bottom position -->
-        <div class="absolute bottom-24 left-0 right-0 px-4">
-          <div class="flex justify-center">
-            <button id="hw-level" class="bg-gradient-to-br from-green-500 to-green-600 backdrop-blur-sm rounded-xl w-24 h-24 flex flex-col items-center justify-center hover:scale-105 transition-transform shadow-xl border border-green-400/30">
-              <div class="text-2xl mb-1">▶️</div>
-              <div class="text-xs text-white font-bold uppercase tracking-wide">PLAY</div>
-              <div class="text-[10px] text-green-100 opacity-90">Level 1</div>
-            </button>
+
+          <!-- Main Content Area -->
+          <div class="hw-splash-body">
+            <div id="hexaword-title" class="hw-splash-title text-4xl font-black tracking-wide uppercase font-['Inter']">HEXA WORDS</div>
+
+            <div class="hw-splash-actions">
+              <button id="hw-create" class="bg-gradient-to-br from-purple-600 to-purple-700 backdrop-blur-sm rounded-xl w-24 h-24 flex flex-col items-center justify-center hover:scale-105 transition-transform shadow-lg border border-purple-500/30">
+                <div class="text-2xl mb-1">📝</div>
+                <div class="text-xs text-white font-semibold uppercase tracking-wide">My Levels</div>
+              </button>
+
+              <button id="hw-daily-challenge" class="bg-gradient-to-br from-amber-500 to-orange-500 backdrop-blur-sm rounded-xl w-24 h-24 flex flex-col items-center justify-center hover:scale-105 transition-transform shadow-lg border border-amber-400/30 relative">
+                <div class="text-2xl mb-1">☀️</div>
+                <div class="text-xs text-white font-semibold uppercase tracking-wide">Daily</div>
+                <span id="dc-streak-badge" class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold"></span>
+              </button>
+            </div>
+
+            <div class="hw-splash-play">
+              <button id="hw-level" class="bg-gradient-to-br from-green-500 to-green-600 backdrop-blur-sm rounded-xl w-24 h-24 flex flex-col items-center justify-center hover:scale-105 transition-transform shadow-xl border border-green-400/30">
+                <div class="text-2xl mb-1">▶️</div>
+                <div class="text-xs text-white font-bold uppercase tracking-wide">PLAY</div>
+                <div class="text-[10px] text-green-100 opacity-90">Level 1</div>
+              </button>
+            </div>
           </div>
-        </div>
-      </div>
-      
-      <!-- Bottom Navigation Tabs -->
-      <div class="absolute bottom-0 left-0 right-0 bg-black/30 backdrop-blur-md border-t border-white/10">
-        <div class="flex">
-          <!-- Shop Tab (disabled) -->
-          <button class="flex-1 flex flex-col items-center justify-center py-3 gap-1 opacity-30 cursor-not-allowed pointer-events-none bg-black/20" disabled tabindex="-1">
-            <span class="text-xl opacity-60">🛍️</span>
-            <span class="text-xs text-gray-600">Shop</span>
-          </button>
-          
-          <!-- Home Tab (active) - with theme color highlight -->
-          <button id="hw-home-tab" class="flex-1 flex flex-col items-center justify-center py-3 gap-1 bg-hw-accent-primary/10 border-t-2 border-hw-accent-primary relative">
-            <span class="text-xl">🏠</span>
-            <span class="text-xs text-hw-accent-primary font-semibold">Home</span>
-            <!-- Active indicator -->
-            <div class="absolute inset-x-0 bottom-0 h-0.5 bg-hw-accent-primary"></div>
-          </button>
-          
-          <!-- Leaderboard Tab -->
-          <button id="hw-leaderboard" class="flex-1 flex flex-col items-center justify-center py-3 gap-1 hover:bg-white/5 transition-colors">
-            <span class="text-xl">🏆</span>
-            <span class="text-xs text-hw-text-secondary hover:text-hw-text-primary">Leaderboard</span>
-          </button>
+
+          <!-- Bottom Navigation Tabs -->
+          <div class="hw-splash-footer">
+            <div class="flex">
+              <button class="flex-1 flex flex-col items-center justify-center py-3 gap-1 opacity-30 cursor-not-allowed pointer-events-none bg-black/20" disabled tabindex="-1">
+                <span class="text-xl opacity-60">🛍️</span>
+                <span class="text-xs text-gray-600">Shop</span>
+              </button>
+
+              <button id="hw-home-tab" class="flex-1 flex flex-col items-center justify-center py-3 gap-1 bg-hw-accent-primary/10 border-t-2 border-hw-accent-primary relative">
+                <span class="text-xl">🏠</span>
+                <span class="text-xs text-hw-accent-primary font-semibold">Home</span>
+                <div class="absolute inset-x-0 bottom-0 h-0.5 bg-hw-accent-primary"></div>
+              </button>
+
+              <button id="hw-leaderboard" class="flex-1 flex flex-col items-center justify-center py-3 gap-1 hover:bg-white/5 transition-colors">
+                <span class="text-xl">🏆</span>
+                <span class="text-xs text-hw-text-secondary hover:text-hw-text-primary">Leaderboard</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     `;
