@@ -15,8 +15,14 @@ export const GameInitResponseSchema = z.object({
   words: z.array(z.string().min(3).max(15)).min(1).max(20),
   username: z.string().optional(),
   createdAt: z.string().optional(),
-  level: z.number().int().min(1).optional(),
-  clue: z.string().min(1).max(100).optional()
+  level: z.union([z.number().int().min(1), z.string()]).optional(),
+  clue: z.string().min(1).max(100).optional(),
+  name: z.string().min(1).max(60).optional(),
+  author: z.string().min(1).max(60).optional(),
+  levelId: z.string().optional(),
+  shareType: z.enum(['user-level']).optional(),
+  letters: z.array(z.string().min(1).max(1)).optional(),
+  palette: z.string().optional()
 });
 
 export const ApiErrorResponseSchema = z.object({
