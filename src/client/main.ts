@@ -18,6 +18,7 @@ import { CoinStorageService } from './services/CoinStorageService';
 import { HintStorageService } from './services/HintStorageService';
 import { ColorPaletteService } from '../web-view/services/ColorPaletteService';
 import { getPaletteForLevel } from '../web-view/config/ColorPalettes';
+import { shareUserLevelToReddit } from './services/UserLevelShareService';
 
 // HexaWord Crossword Generator v4.0 - Modular Architecture
 
@@ -106,9 +107,10 @@ class App {
       }
     } catch {}
     this.showMainMenu();
-    
+
     // Check for daily wheel on second launch
     await this.checkDailyWheel();
+    await this.handleDeepLink();
   }
 
   // Apply palette/theme for the menu using the player's current level
@@ -1306,22 +1308,29 @@ class App {
     document.body.appendChild(dialog);
     
     // Handle Reddit share
-    dialog.querySelector('#share-reddit')?.addEventListener('click', async () => {
-      // Track the share
+    dialog.querySelector('#share-reddit')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget as HTMLButtonElement;
+      button.disabled = true;
+      const originalText = button.innerHTML;
+      button.innerHTML = '<span class="text-xl">⏳</span><span>Posting…</span>';
+
       try {
-        await fetch(`/api/user-levels/${encodeURIComponent(levelId)}/share`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
+        const result = await shareUserLevelToReddit({
+          levelId,
+          levelName,
+          clue: levelClue
         });
+
+        window.open(result.url, '_blank', 'width=600,height=600');
+        this.showToast('Your level is live on Reddit!', 'success');
+        dialog.remove();
       } catch (error) {
-        console.error('Failed to track share:', error);
+        console.error('Failed to publish level:', error);
+        this.showToast('Failed to share level. Please try again.', 'error');
+      } finally {
+        button.disabled = false;
+        button.innerHTML = originalText;
       }
-      
-      // Reddit submission URL
-      const redditUrl = `https://www.reddit.com/submit?url=${encodeURIComponent(shareUrl)}&title=${encodeURIComponent(title)}`;
-      window.open(redditUrl, '_blank', 'width=600,height=600');
-      
-      this.showToast('Opening Reddit to share your level!', 'success');
     });
     
     // Handle copy link
@@ -1846,6 +1855,19 @@ class App {
     const d = await fetchGameDataWithFallback(level, (error) => {
       this.showToast(error.message, 'warning');
     });
+    if (d.shareType === 'user-level' && typeof d.levelId === 'string') {
+      await this.startSharedUserLevel({
+        levelId: d.levelId,
+        name: d.name,
+        clue: d.clue,
+        words: d.words,
+        seed: d.seed,
+        author: d.author,
+        letters: d.letters,
+        palette: d.palette
+      });
+      return;
+    }
     const words = d.words.slice(0, Math.min(6, d.words.length));
     if (!this.game) {
       // Create the game instance and wait for onReady before resolving
@@ -2453,64 +2475,129 @@ class App {
     }, 3000);
   }
 
+  private async launchUserLevelGame(config: {
+    id: string;
+    name?: string;
+    clue: string;
+    words: string[];
+    seed: string;
+    author?: string;
+  }): Promise<void> {
+    const words = config.words.slice(0, Math.min(6, config.words.length));
+    const levelName = config.name || config.clue;
+    const levelAuthor = config.author || 'anonymous';
+
+    if (this.gameUI) {
+      this.gameUI.updateLevel(levelName);
+    }
+
+    if (!this.game) {
+      await new Promise<void>((resolve, reject) => {
+        this.game = new HexaWordGame({
+          containerId: 'hex-grid-container',
+          words,
+          clue: config.clue || 'CUSTOM',
+          seed: config.seed,
+          gridRadius: 10,
+          level: 1,
+          theme: 'dark',
+          isUserLevel: true,
+          levelName,
+          levelId: config.id,
+          levelAuthor,
+          onReady: () => { try { this.setupUI(); this.initializeGameUI(); } finally { resolve(); } },
+          onError: (err) => { console.error(err); reject(err); },
+          onLevelComplete: async (lvl) => {
+            this.showLevelCompleteOverlay(lvl);
+          }
+        });
+      });
+      return;
+    }
+
+    (this.game as any).config.isUserLevel = true;
+    (this.game as any).config.levelName = levelName;
+    (this.game as any).config.levelId = config.id;
+    (this.game as any).config.levelAuthor = levelAuthor;
+
+    await this.game.loadLevel({ words, seed: config.seed, clue: config.clue, level: 1 });
+  }
+
   // Load and play a specific user-created level by id
   private async playUserLevel(id: string): Promise<void> {
     loadingOverlay.show('Loading level...');
-    
+
     try {
       const res = await fetch(`/api/user-levels/${encodeURIComponent(id)}/init`);
       if (!res.ok) {
-        loadingOverlay.hide();
         throw new Error('Failed to init user level');
       }
       const d = await res.json();
-      const words: string[] = d.words?.slice?.(0, Math.min(6, d.words.length)) ?? [];
-      
-      // Extract user level metadata
-      const levelName = d.name || d.clue;
-      const levelAuthor = d.author || 'anonymous';
-      
-      // Update UI to show level name instead of number
-      if (this.gameUI) {
-        this.gameUI.updateLevel(levelName);
+
+      await this.launchUserLevelGame({
+        id,
+        name: d.name,
+        clue: d.clue || 'CUSTOM',
+        words: d.words ?? [],
+        seed: d.seed,
+        author: d.author
+      });
+    } catch (e) {
+      this.showToast('Failed to load user level', 'error');
+    } finally {
+      loadingOverlay.hide();
+    }
+  }
+
+  private async startSharedUserLevel(data: {
+    levelId: string;
+    name?: string;
+    clue?: string;
+    words: string[];
+    seed: string;
+    author?: string;
+    letters?: string[];
+    palette?: string;
+  }): Promise<void> {
+    loadingOverlay.show('Loading level...');
+    try {
+      await this.launchUserLevelGame({
+        id: data.levelId,
+        name: data.name,
+        clue: data.clue || 'CUSTOM',
+        words: data.words,
+        seed: data.seed,
+        author: data.author
+      });
+
+      if (data.author) {
+        this.showToast(`Playing level shared by ${data.author}!`, 'info');
       }
-      
-      if (!this.game) {
-        await new Promise<void>((resolve, reject) => {
-          this.game = new HexaWordGame({
-            containerId: 'hex-grid-container',
-            words,
-            clue: d.clue || 'CUSTOM',
-            seed: d.seed,
-            gridRadius: 10,
-            level: 1,
-            theme: 'dark',
-            // Add user level specific properties
-            isUserLevel: true,
-            levelName,
-            levelId: id,
-            levelAuthor,
-            onReady: () => { try { this.setupUI(); this.initializeGameUI(); } finally { resolve(); } },
-            onError: (err) => { console.error(err); reject(err); },
-            onLevelComplete: async (lvl) => {
-              this.showLevelCompleteOverlay(lvl);
-            }
-          });
-        });
-        loadingOverlay.hide();
+    } catch (error) {
+      console.error('Failed to load shared level:', error);
+      this.showToast('Failed to load shared level', 'error');
+    } finally {
+      loadingOverlay.hide();
+    }
+  }
+
+  private async handleDeepLink(): Promise<void> {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const levelParam = params.get('level');
+      if (!levelParam) {
         return;
       }
-      // Update the game config with user level metadata
-      (this.game as any).config.isUserLevel = true;
-      (this.game as any).config.levelName = levelName;
-      (this.game as any).config.levelId = id;
-      (this.game as any).config.levelAuthor = levelAuthor;
-      
-      await this.game.loadLevel({ words, seed: d.seed, clue: d.clue, level: 1 });
-      loadingOverlay.hide();
-    } catch (e) {
-      loadingOverlay.hide();
-      this.showToast('Failed to load user level', 'error');
+
+      if (/^\d+$/.test(levelParam)) {
+        this.currentLevel = Math.max(1, parseInt(levelParam, 10));
+        return;
+      }
+
+      await this.playUserLevel(levelParam);
+      this.hideMainMenu();
+    } catch (err) {
+      console.error('Failed to process deep link:', err);
     }
   }
   

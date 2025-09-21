@@ -1,5 +1,6 @@
 import { LevelCreator } from './LevelCreator';
 import { loadingOverlay } from '../utils/LoadingOverlay';
+import { shareUserLevelToReddit } from '../services/UserLevelShareService';
 
 interface UserLevel {
   id: string;
@@ -322,16 +323,29 @@ export class LevelManager {
     document.body.appendChild(dialog);
     
     // Handle Reddit share
-    dialog.querySelector('#share-reddit')?.addEventListener('click', async () => {
-      // Track the share
-      await this.trackShare(levelId);
-      
-      // Reddit submission URL (best practice is to use submit.reddit.com)
-      const redditUrl = `https://www.reddit.com/submit?url=${encodeURIComponent(shareUrl)}&title=${encodeURIComponent(title)}`;
-      window.open(redditUrl, '_blank', 'width=600,height=600');
-      
-      // Show success message
-      this.showSuccess('Opening Reddit to share your level!');
+    dialog.querySelector('#share-reddit')?.addEventListener('click', async (event) => {
+      const button = event.currentTarget as HTMLButtonElement;
+      const originalText = button.innerHTML;
+      button.disabled = true;
+      button.innerHTML = '<span class="text-xl">⏳</span><span>Posting…</span>';
+
+      try {
+        const result = await shareUserLevelToReddit({
+          levelId,
+          levelName,
+          clue: levelClue
+        });
+
+        window.open(result.url, '_blank', 'width=600,height=600');
+        this.showSuccess('Your level is live on Reddit!');
+        dialog.remove();
+      } catch (err) {
+        console.error('Failed to share level:', err);
+        this.showError('Failed to publish level. Please try again.');
+      } finally {
+        button.disabled = false;
+        button.innerHTML = originalText;
+      }
     });
     
     // Handle copy link

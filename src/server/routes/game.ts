@@ -1,14 +1,18 @@
 import express from 'express';
-import { context, reddit } from '@devvit/web/server';
-import { 
-  GameInitResponse, 
-  ApiErrorResponse, 
+import { context, reddit, redis } from '@devvit/web/server';
+import {
+  GameInitResponse,
+  ApiErrorResponse,
   ApiErrorCode,
-  GameInitResponseSchema 
+  GameInitResponseSchema
 } from '../../shared/types/api';
 import { LevelSelector } from '../services/LevelSelector';
 import { LevelRepository } from '../services/LevelRepository';
 import { Logger, asyncHandler } from '../middleware/errorHandler';
+import {
+  SHARED_LEVEL_REDIS_KEY_PREFIX,
+  type SharedLevelPostRecord
+} from '../utils/levelShare';
 
 export const gameRouter = express.Router();
 const logger = Logger.getInstance();
@@ -78,7 +82,48 @@ gameRouter.get<unknown, GameInitResponse | ApiErrorResponse>(
       logger.warn('Failed to get username', undefined, { requestId, error: err });
       // Continue with anonymous
     }
-      
+
+    // Check if this post is a shared user level
+    const sharedKey = `${SHARED_LEVEL_REDIS_KEY_PREFIX}${postId}`;
+    const sharedData = await redis.get(sharedKey);
+    if (sharedData) {
+      const record = JSON.parse(sharedData) as SharedLevelPostRecord;
+      const sharedResponse: GameInitResponse = {
+        type: 'game_init',
+        postId,
+        username,
+        seed: record.seed || `shared:${record.levelId}`,
+        words: record.words,
+        level: record.levelId,
+        clue: record.clue,
+        createdAt: record.sharedAt,
+        name: record.name,
+        author: record.author,
+        levelId: record.levelId,
+        shareType: 'user-level',
+        letters: record.letters,
+        palette: record.palette
+      } as GameInitResponse;
+
+      const validation = GameInitResponseSchema.safeParse(sharedResponse);
+      if (!validation.success) {
+        logger.error('Shared level response validation failed', undefined, {
+          requestId,
+          errors: validation.error.errors
+        });
+        res.status(500).json(
+          createErrorResponse(
+            ApiErrorCode.INTERNAL_ERROR,
+            'Failed to load shared level'
+          )
+        );
+        return;
+      }
+
+      res.json(validation.data);
+      return;
+    }
+
       // Determine requested level (default 1)
       const levelParam = Number((req.query?.level as string) ?? '1');
       const level = Number.isFinite(levelParam) && levelParam > 0 ? Math.floor(levelParam) : 1;

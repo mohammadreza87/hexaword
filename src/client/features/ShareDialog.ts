@@ -1,3 +1,5 @@
+import { shareUserLevelToReddit } from '../services/UserLevelShareService';
+
 export class ShareDialog {
   private overlay!: HTMLDivElement;
   private panel!: HTMLDivElement;
@@ -164,18 +166,32 @@ export class ShareDialog {
   }
 
   private async shareToReddit(): Promise<void> {
-    const title = `I created a HexaWord puzzle: "${this.clue}"`;
-    const shareUrl = this.getShareUrl();
-    
-    // Track the share
-    await this.trackShare();
-    
-    // Reddit share URL - using the simpler format that works better
-    const redditUrl = `https://www.reddit.com/submit?url=${encodeURIComponent(shareUrl)}&title=${encodeURIComponent(title)}`;
-    window.open(redditUrl, '_blank', 'width=600,height=600');
-    
-    // Show success feedback
-    this.showShareFeedback('Opening Reddit to share your level!');
+    const button = this.panel.querySelector('#sd-share-reddit') as HTMLButtonElement | null;
+    const originalContent = button?.innerHTML;
+
+    if (button) {
+      button.disabled = true;
+      button.innerHTML = '<div class="flex items-center gap-1"><span class="text-xl">⏳</span><span>Posting…</span></div>';
+    }
+
+    try {
+      const result = await shareUserLevelToReddit({
+        levelId: this.levelId,
+        levelName: this.levelName,
+        clue: this.clue
+      });
+
+      window.open(result.url, '_blank', 'width=600,height=600');
+      this.showShareFeedback('Your level is live on Reddit!');
+    } catch (error) {
+      console.error('Failed to share level to Reddit:', error);
+      this.showShareFeedback('Failed to share level. Please try again.');
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.innerHTML = originalContent || '';
+      }
+    }
   }
 
   private async shareToTwitter(): Promise<void> {
