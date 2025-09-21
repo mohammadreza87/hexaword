@@ -249,15 +249,19 @@ export class HexaWordGame {
   private setupEventHandlers(): void {
     // Handle resize
     window.addEventListener('resize', () => this.handleResize());
-    
-    // Handle canvas clicks (for future interaction)
-    this.canvas.addEventListener('click', (e) => this.handleClick(e));
-    
+
+    const isMobile = this.isMobileDevice();
+
+    // Handle canvas clicks (desktop interactions)
+    if (!isMobile) {
+      this.canvas.addEventListener('click', (e) => this.handleClick(e));
+    }
+
     // Handle touch events for mobile
-    this.canvas.addEventListener('touchstart', (e) => this.handleTouch(e));
-    
+    this.canvas.addEventListener('touchstart', (e) => this.handleTouch(e), { passive: false });
+
     // Handle keyboard input (only on desktop/laptop)
-    if (!this.isMobileDevice()) {
+    if (!isMobile) {
       this.setupKeyboardHandling();
     }
   }
