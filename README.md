@@ -32,6 +32,13 @@ A modern, interactive hexagonal crossword puzzle game built for Reddit's Devvit 
 - **Reddit Integration**: Deep integration with Reddit's platform features
 - **Persistent Progress**: Save and sync progress across sessions
 
+### Dynamic Splash Experience
+- **Custom Splash Metadata**: Populate Devvit Web posts with `appDisplayName`, `heading`, and a descriptive `buttonLabel`
+- **Lightweight Media**: Keep splash images under 2MB and host them in `client/public` or via HTTPS for quick loading
+- **Clear CTA**: Use actionable button copy such as “Start Playing” to launch the puzzle immediately
+- **Contextual Details**: Surface the shared level's clue and letter bank in the splash description to set expectations
+- **Consistent Branding**: Reuse your HexaWord iconography and palette so shared links feel cohesive with the main app
+
 ## Tech Stack
 
 - **Frontend**: TypeScript, Vite, GSAP animations
