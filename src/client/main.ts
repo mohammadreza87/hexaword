@@ -20,6 +20,7 @@ import { ColorPaletteService } from '../web-view/services/ColorPaletteService';
 import { getPaletteForLevel } from '../web-view/config/ColorPalettes';
 import { shareUserLevelToReddit } from './services/UserLevelShareService';
 
+
 interface SharedLevelPreview {
   id: string;
   name?: string;
@@ -127,6 +128,7 @@ class App {
 
     // Handle shared level links (e.g. ?level=ID)
     await this.handleSharedLevelLaunch();
+
   }
 
   // Apply palette/theme for the menu using the player's current level
