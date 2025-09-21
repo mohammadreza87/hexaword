@@ -206,18 +206,15 @@ router.post('/api/user-levels', async (req: Request, res: Response) => {
 router.get('/api/user-levels/mine', async (_req: Request, res: Response) => {
   try {
     const username = await reddit.getCurrentUsername();
-    if (!username) {
-      // Return empty list for anonymous users instead of error
-      return res.json({ levels: [] });
-    }
-    
-    const key = getUserKey(username);
+    const effectiveUsername = username || 'anonymous';
+
+    const key = getUserKey(effectiveUsername);
     console.log('Fetching user levels for key:', key);
     
     // Get the JSON array of level IDs
     const idsJson = await redis.get(key);
     if (!idsJson) {
-      console.log('No levels found for user:', username);
+      console.log('No levels found for user:', effectiveUsername);
       return res.json({ levels: [] });
     }
     

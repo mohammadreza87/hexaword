@@ -302,7 +302,11 @@ class App {
         this.handleShare();
       }
     });
-    
+
+    this.gameUI.onExploreLevels(async () => {
+      await this.openLevelExplorer();
+    });
+
     this.gameUI.onHowToPlay(() => {
       this.showHowTo();
     });
@@ -793,7 +797,22 @@ class App {
       }
     }
   }
-  
+
+  private async openLevelExplorer(): Promise<void> {
+    try {
+      const { LevelManager } = await import('./features/LevelManager');
+      const manager = new LevelManager();
+      const result = await manager.show();
+
+      if (result?.action === 'play' && result.levelId) {
+        await this.playUserLevel(result.levelId);
+      }
+    } catch (error) {
+      console.error('Failed to open level explorer:', error);
+      this.showToast('Failed to open level explorer', 'error');
+    }
+  }
+
   private formatRelativeTime(dateString: string): string {
     const date = new Date(dateString);
     const now = new Date();

@@ -11,6 +11,7 @@ export class GameUI {
   private coinEl: HTMLElement;
   private settingsBtn: HTMLButtonElement;
   private menuPanel: HTMLElement;
+  private exploreBtn: HTMLButtonElement;
   private shuffleBtn: HTMLButtonElement;
   private revealBtn: HTMLButtonElement;
   private targetBtn: HTMLButtonElement;
@@ -23,6 +24,7 @@ export class GameUI {
     this.coinEl = this.createCoinDisplay();
     this.settingsBtn = this.createSettingsButton();
     this.menuPanel = this.createMenuPanel();
+    this.exploreBtn = this.createExploreButton();
     this.shuffleBtn = this.createShuffleButton();
     this.revealBtn = this.createRevealButton();
     this.targetBtn = this.createTargetButton();
@@ -101,7 +103,14 @@ export class GameUI {
     mainMenuBtn.textContent = '🏠 Main Menu';
     mainMenuBtn.className = 'block w-full text-left px-3 py-2 text-sm text-hw-text-primary hover:bg-hw-surface-secondary rounded-lg transition-colors mb-2';
     panel.appendChild(mainMenuBtn);
-    
+
+    // Level Explorer button
+    const exploreBtn = document.createElement('button');
+    exploreBtn.id = 'explore-levels';
+    exploreBtn.textContent = '🧭 Explore Levels';
+    exploreBtn.className = 'block w-full text-left px-3 py-2 text-sm text-hw-text-primary hover:bg-hw-surface-secondary rounded-lg transition-colors mb-2';
+    panel.appendChild(exploreBtn);
+
     // Divider
     const divider = document.createElement('div');
     divider.className = 'border-t border-hw-surface-tertiary/20 my-2';
@@ -131,7 +140,17 @@ export class GameUI {
     
     return panel;
   }
-  
+
+  private createExploreButton(): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.id = 'hw-explore-btn';
+    btn.className = 'absolute right-1 top-12 w-8 h-8 rounded-full text-hw-text-primary backdrop-blur-md border transition-all duration-base flex items-center justify-center pointer-events-auto';
+    btn.style.cssText = 'background: rgba(42, 52, 70, 0.7); border-color: rgba(59, 71, 96, 0.3);';
+    btn.innerHTML = '<span style="font-size: 14px;">🧭</span>';
+    btn.title = 'Explore Levels';
+    return btn;
+  }
+
   private createShuffleButton(): HTMLButtonElement {
     const btn = document.createElement('button');
     btn.id = 'hw-shuffle-btn';
@@ -273,7 +292,18 @@ export class GameUI {
       this.shareBtn.style.background = 'rgba(42, 52, 70, 0.8)';
       this.shareBtn.style.transform = 'scale(1)';
     });
-    
+
+    // Explore button hover effect
+    this.exploreBtn.addEventListener('mouseenter', () => {
+      this.exploreBtn.style.background = 'rgba(59, 71, 96, 0.85)';
+      this.exploreBtn.style.transform = 'scale(1.05)';
+    });
+
+    this.exploreBtn.addEventListener('mouseleave', () => {
+      this.exploreBtn.style.background = 'rgba(42, 52, 70, 0.7)';
+      this.exploreBtn.style.transform = 'scale(1)';
+    });
+
     // Close menu when clicking outside
     document.addEventListener('click', (e) => {
       if (!this.settingsBtn.contains(e.target as Node) && 
@@ -289,6 +319,7 @@ export class GameUI {
     this.container.appendChild(this.coinEl);
     this.container.appendChild(this.settingsBtn);
     this.container.appendChild(this.menuPanel);
+    this.container.appendChild(this.exploreBtn);
     this.container.appendChild(this.shuffleBtn);
     this.container.appendChild(this.revealBtn);
     this.container.appendChild(this.targetBtn);
@@ -367,6 +398,19 @@ export class GameUI {
   public onMainMenu(callback: () => void): void {
     const mainMenuBtn = this.menuPanel.querySelector('#main-menu');
     mainMenuBtn?.addEventListener('click', () => {
+      callback();
+      this.menuPanel.classList.add('hidden');
+    });
+  }
+
+  public onExploreLevels(callback: () => void): void {
+    this.exploreBtn.addEventListener('click', () => {
+      callback();
+      this.menuPanel.classList.add('hidden');
+    });
+
+    const exploreMenuBtn = this.menuPanel.querySelector('#explore-levels');
+    exploreMenuBtn?.addEventListener('click', () => {
       callback();
       this.menuPanel.classList.add('hidden');
     });
