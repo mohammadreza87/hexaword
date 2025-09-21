@@ -155,7 +155,7 @@ export class GameUI {
     const btn = document.createElement('button');
     btn.id = 'hw-shuffle-btn';
     btn.className = 'fixed left-2 w-10 h-10 rounded-full text-hw-text-primary backdrop-blur-md border transition-all duration-base flex items-center justify-center pointer-events-auto z-50';
-    btn.style.cssText = 'bottom: 120px; background: rgba(42, 52, 70, 0.8); border-color: rgba(59, 71, 96, 0.3);';
+    btn.style.cssText = 'bottom: 200px; background: rgba(42, 52, 70, 0.8); border-color: rgba(59, 71, 96, 0.3);';
     
     // Just the shuffle emoji
     btn.textContent = '🔀';
@@ -168,7 +168,7 @@ export class GameUI {
     const btn = document.createElement('button');
     btn.id = 'hw-reveal-btn';
     btn.className = 'fixed left-2 w-10 h-10 rounded-full text-hw-text-primary backdrop-blur-md border transition-all duration-base flex items-center justify-center pointer-events-auto z-50';
-    btn.style.cssText = 'bottom: 220px; background: rgba(42, 52, 70, 0.8); border-color: rgba(59, 71, 96, 0.3); position: fixed;';
+    btn.style.cssText = 'bottom: 250px; background: rgba(42, 52, 70, 0.8); border-color: rgba(59, 71, 96, 0.3); position: fixed;';
     
     // Container for icon and badge
     btn.innerHTML = `
@@ -196,7 +196,7 @@ export class GameUI {
     const btn = document.createElement('button');
     btn.id = 'hw-target-btn';
     btn.className = 'fixed right-2 w-10 h-10 rounded-full text-hw-text-primary backdrop-blur-md border transition-all duration-base flex items-center justify-center pointer-events-auto z-50';
-    btn.style.cssText = 'bottom: 220px; background: rgba(42, 52, 70, 0.8); border-color: rgba(59, 71, 96, 0.3); position: fixed;';
+    btn.style.cssText = 'bottom: 250px; background: rgba(42, 52, 70, 0.8); border-color: rgba(59, 71, 96, 0.3); position: fixed;';
     
     // Container for icon and badge
     btn.innerHTML = `
@@ -224,7 +224,7 @@ export class GameUI {
     const btn = document.createElement('button');
     btn.id = 'hw-share-btn';
     btn.className = 'fixed right-2 w-10 h-10 rounded-full text-hw-text-primary backdrop-blur-md border transition-all duration-base flex items-center justify-center pointer-events-auto z-50';
-    btn.style.cssText = 'bottom: 120px; background: rgba(42, 52, 70, 0.8); border-color: rgba(59, 71, 96, 0.3);';
+    btn.style.cssText = 'bottom: 200px; background: rgba(42, 52, 70, 0.8); border-color: rgba(59, 71, 96, 0.3);';
     
     // Share emoji
     btn.textContent = '📤';
