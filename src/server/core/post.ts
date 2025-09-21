@@ -72,6 +72,7 @@ export const createPost = async () => {
   const cycleDay = calculateCycleDay(today);
   const challenge = getChallengeForDay(cycleDay);
 
+
   const heading = formatDayTypeHeading(challenge.dayType);
   const letters = getUniqueLetters(challenge.words);
   const letterPrompt = formatLetterPrompt(letters);
@@ -86,8 +87,8 @@ export const createPost = async () => {
     splash: {
       appDisplayName: "HexaWord",
       heading,
-      description,
-      buttonLabel: "Start today's puzzle",
+      description: `${challenge.clue} · Letters: ${letterPrompt}`,
+      buttonLabel,
       backgroundUri: "/daily-challenge-splash.svg",
       appIconUri: "/hexaword-icon.svg",
       entryUri: "index.html",
