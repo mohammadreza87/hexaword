@@ -119,11 +119,10 @@ class App {
       // Update top-level backgrounds to match theme
       document.documentElement.style.setProperty('background-color', scheme.background, 'important');
       document.body.style.setProperty('background-color', scheme.background, 'important');
-      document.body.style.setProperty('background', scheme.background, 'important');
       const container = document.getElementById('hex-grid-container');
       if (container) {
-        (container as HTMLElement).style.setProperty('background-color', scheme.background, 'important');
-        (container as HTMLElement).style.setProperty('background', scheme.background, 'important');
+        (container as HTMLElement).style.removeProperty('background');
+        (container as HTMLElement).style.removeProperty('background-color');
       }
       
       // Apply clue-like effects to the HEXA WORDS title
@@ -133,7 +132,6 @@ class App {
       const bg = '#0F1115';
       document.documentElement.style.setProperty('background-color', bg, 'important');
       document.body.style.setProperty('background-color', bg, 'important');
-      document.body.style.setProperty('background', bg, 'important');
     }
   }
   

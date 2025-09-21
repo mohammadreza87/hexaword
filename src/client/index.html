@@ -19,24 +19,34 @@
         width: 100%;
         height: 100%;
         overflow: hidden;
-        background-color: var(--hw-bg-primary);
+        background-color: var(--hw-bg-primary, #141511);
         transition: background-color var(--hw-transition-slow);
       }
-      
+
       body {
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        background: var(--hw-bg-primary);
+        background-color: #141511;
+        background-image:
+          radial-gradient(at 47% 33%, hsl(212.37, 72%, 59%) 0, transparent 59%),
+          radial-gradient(at 82% 65%, hsl(166.53, 72%, 60%) 0, transparent 55%);
+        background-repeat: no-repeat;
+        background-size: cover;
         color: var(--hw-text-primary);
         font-family: var(--hw-font-display);
       }
-      
+
+      .card {
+        backdrop-filter: blur(16px) saturate(180%);
+        -webkit-backdrop-filter: blur(16px) saturate(180%);
+        background-color: rgba(17, 25, 40, 0.75);
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.125);
+      }
+
       #hex-grid-container {
-        background: var(--hw-bg-primary);
-        border: none;
-        box-shadow: none;
         display: flex;
         justify-content: center;
         align-items: center;
@@ -68,7 +78,7 @@
     </style>
   </head>
   <body>
-    <div id="hex-grid-container">
+    <div id="hex-grid-container" class="card">
       <!-- Canvas will be inserted here -->
     </div>
     <script type="module" src="main.ts"></script>
