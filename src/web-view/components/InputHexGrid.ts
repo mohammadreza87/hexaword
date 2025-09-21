@@ -8,12 +8,16 @@ interface InputCell {
   letter?: string;
 }
 
+export type InputHexGridLayoutVariant = 'standard' | 'stacked' | 'wide';
+
 export class InputHexGrid {
   private ctx: CanvasRenderingContext2D;
   private cells: InputCell[] = [];
   private hexSize: number = 25;
   private baseHexSize: number = 25;
   private useWideGrid: boolean = false;
+  private layoutVariant: InputHexGridLayoutVariant = 'standard';
+  private currentLetters: string[] = [];
   private typedWord: string = '';  // Track typed letters
   private lastClickedHex: {q: number, r: number} | null = null;
   private animationService: AnimationService;
@@ -29,9 +33,99 @@ export class InputHexGrid {
     this.cells = [];
     this.animationService = AnimationService.getInstance();
     this.colorPaletteService = ColorPaletteService.getInstance();
-    
+
     // Initialize colors
     this.initializeColors();
+  }
+
+  /**
+   * Returns the currently active layout variant.
+   */
+  public getLayoutVariant(): InputHexGridLayoutVariant {
+    return this.layoutVariant;
+  }
+
+  /**
+   * Update the layout variant and rebuild the grid if letters are present.
+   */
+  public setLayoutVariant(variant: InputHexGridLayoutVariant): void {
+    if (this.layoutVariant === variant) {
+      return;
+    }
+
+    this.layoutVariant = variant;
+
+    if (this.currentLetters.length === 0) {
+      return;
+    }
+
+    this.initializeCells(this.currentLetters.length);
+    this.assignLettersToCells(this.currentLetters);
+  }
+
+  /**
+   * Maximum column count (including the clear button column) for the active layout.
+   */
+  public getMaxColumns(): number {
+    switch (this.layoutVariant) {
+      case 'wide':
+        return 11;
+      case 'stacked':
+        return 7;
+      default:
+        return 9;
+    }
+  }
+
+  /**
+   * Get the maximum columns for the provided layout variant.
+   */
+  public getColumnsForVariant(variant: InputHexGridLayoutVariant): number {
+    switch (variant) {
+      case 'wide':
+        return 11;
+      case 'stacked':
+        return 7;
+      default:
+        return 9;
+    }
+  }
+
+  /**
+   * Returns how many letter cells are currently available (excludes the clear button).
+   */
+  public getLetterCount(): number {
+    return this.currentLetters.length;
+  }
+
+  /**
+   * Helper to assign the provided letters to the initialized cells.
+   */
+  private assignLettersToCells(letters: string[]): void {
+    let index = 0;
+    for (let i = 0; i < this.cells.length; i++) {
+      if (this.cells[i].q === 0 && this.cells[i].r === 0) {
+        continue;
+      }
+      this.cells[i].letter = letters[index++] || undefined;
+    }
+    this.syncCurrentLettersFromCells();
+  }
+
+  /**
+   * Ensure the tracked letter ordering stays in sync with the rendered cells.
+   */
+  private syncCurrentLettersFromCells(): void {
+    const letters: string[] = [];
+    this.cells.forEach(cell => {
+      if (cell.q === 0 && cell.r === 0) {
+        return;
+      }
+      if (cell.letter) {
+        letters.push(cell.letter);
+      }
+    });
+    this.currentLetters = letters;
   }
   
   /**
@@ -66,121 +160,125 @@ export class InputHexGrid {
       return;
     }
 
+    // Adjust layout variant automatically when not in stacked mode to handle large sets of letters
+    if (this.layoutVariant !== 'stacked') {
+      if (count > 24 && this.layoutVariant !== 'wide') {
+        this.layoutVariant = 'wide';
+      } else if (count <= 24 && this.layoutVariant === 'wide') {
+        this.layoutVariant = 'standard';
+      }
+    }
+
+    const variant = this.layoutVariant;
+
     // Clear and rebuild cells array
     this.cells = [];
-    
-    // Check if we need to use the wider grid pattern (11-10-9-8) for many letters
-    // 11 + 10 + 9 + 8 = 38 cells max (minus 1 for clear button = 37 letters)
-    if (count > 24) {
-      this.useWideGrid = true;
-      this.hexSize = this.baseHexSize * 0.65; // Make cells 35% smaller to fit in viewport
-      
-      // First, add the clear button at true center (0,0)
-      this.cells.push({ q: 0, r: 0 });
-      
-      let cellsAdded = 0;
-      
-      // Row 1 (r=0): 11 cells total, centered on (0,0)
-      // Clear button is at q=0, so we have 5 cells on each side
+    this.useWideGrid = variant === 'wide';
+    this.hexSize = variant === 'wide' ? this.baseHexSize * 0.65 : this.baseHexSize;
+
+    // First, add the clear button at true center (0,0)
+    this.cells.push({ q: 0, r: 0 });
+
+    let cellsAdded = 0;
+
+    if (variant === 'wide') {
+      // Wide grid pattern (11-10-9-8) for large letter counts
       const row1Positions = [
         {q: -5, r: 0}, {q: -4, r: 0}, {q: -3, r: 0}, {q: -2, r: 0}, {q: -1, r: 0},
         {q: 1, r: 0}, {q: 2, r: 0}, {q: 3, r: 0}, {q: 4, r: 0}, {q: 5, r: 0}
       ];
-      
+
       for (const pos of row1Positions) {
         if (cellsAdded < count) {
           this.cells.push(pos);
           cellsAdded++;
         }
       }
-      
-      // Row 2 (r=-1): 10 cells, offset by -1 from row 1 (starts at -4)
+
       for (let i = 0; i < 10 && cellsAdded < count; i++) {
         this.cells.push({q: -4 + i, r: -1});
         cellsAdded++;
       }
-      
-      // Row 3 (r=-2): 9 cells, offset by -1 from row 2 (starts at -3)
+
       for (let i = 0; i < 9 && cellsAdded < count; i++) {
         this.cells.push({q: -3 + i, r: -2});
         cellsAdded++;
       }
-      
-      // Row 4 (r=-3): 8 cells, offset by -1 from row 3 (starts at -3, shifted for even row)
+
       for (let i = 0; i < 8 && cellsAdded < count; i++) {
         this.cells.push({q: -3 + i, r: -3});
         cellsAdded++;
       }
+    } else if (variant === 'stacked') {
+      const rowConfigs: Array<{ r: number; start: number; length: number; skipZero?: boolean }> = [
+        { r: 0, start: -3, length: 7, skipZero: true },
+        { r: -1, start: -3, length: 6 },
+        { r: -2, start: -2, length: 6 },
+        { r: -3, start: -2, length: 5 },
+        { r: -4, start: -2, length: 5 },
+        { r: -5, start: -1, length: 4 },
+        { r: -6, start: -1, length: 4 },
+        { r: -7, start: -1, length: 3 },
+        { r: -8, start: -1, length: 3 },
+        { r: -9, start: 0, length: 2 },
+        { r: -10, start: 0, length: 2 },
+        { r: -11, start: 0, length: 1 }
+      ];
+
+      rowConfigs.forEach(config => {
+        for (let i = 0; i < config.length && cellsAdded < count; i++) {
+          const q = config.start + i;
+          if (config.skipZero && q === 0) {
+            continue;
+          }
+          this.cells.push({ q, r: config.r });
+          cellsAdded++;
+        }
+      });
     } else {
-      // Use standard grid pattern (9-8-7-6-5-4-3-2) for 24 or fewer letters
-      this.useWideGrid = false;
-      this.hexSize = this.baseHexSize;
-      
-      // First, add the clear button at true center (0,0)
-      this.cells.push({ q: 0, r: 0 });
-      
-      // Now add letter cells in the exact order we want them filled
-      let cellsAdded = 0;
-      
-      // Row 1 (r=0): 9 cells total, centered on (0,0)
-      // Clear button is at q=0, so we have 4 cells on each side
+      // Standard grid pattern (9-8-7-6-5-4-3-2) for typical layouts
       const row1Positions = [
         {q: -4, r: 0}, {q: -3, r: 0}, {q: -2, r: 0}, {q: -1, r: 0},
         {q: 1, r: 0}, {q: 2, r: 0}, {q: 3, r: 0}, {q: 4, r: 0}
       ];
-      
+
       for (const pos of row1Positions) {
         if (cellsAdded < count) {
           this.cells.push(pos);
           cellsAdded++;
         }
       }
-      
-      // Row 2 (r=-1): 8 cells, centered
-      // With hexagonal grid rotation, we need to center properly
-      // 8 cells: centered from -3 to 4 (shifted half cell right from row 1)
+
       for (let i = 0; i < 8 && cellsAdded < count; i++) {
         this.cells.push({q: -3 + i, r: -1});
         cellsAdded++;
       }
-      
-      // Row 3 (r=-2): 7 cells, centered
-      // 7 cells: shift right for better visual centering (-2 to 4)
+
       for (let i = 0; i < 7 && cellsAdded < count; i++) {
         this.cells.push({q: -2 + i, r: -2});
         cellsAdded++;
       }
-      
-      // Row 4 (r=-3): 6 cells, centered
-      // 6 cells: -2 to 3 (shifted half cell right like other even rows)
+
       for (let i = 0; i < 6 && cellsAdded < count; i++) {
         this.cells.push({q: -2 + i, r: -3});
         cellsAdded++;
       }
-      
-      // Row 5 (r=-4): 5 cells, centered
-      // 5 cells: -2 to 2 (odd number, center at 0)
+
       for (let i = 0; i < 5 && cellsAdded < count; i++) {
         this.cells.push({q: -2 + i, r: -4});
         cellsAdded++;
       }
-      
-      // Row 6 (r=-5): 4 cells, centered
-      // 4 cells: -1 to 2 (shifted half cell right like other even rows)
+
       for (let i = 0; i < 4 && cellsAdded < count; i++) {
         this.cells.push({q: -1 + i, r: -5});
         cellsAdded++;
       }
-      
-      // Row 7 (r=-6): 3 cells, centered
-      // 3 cells: -1 to 1 (odd number, center at 0)
+
       for (let i = 0; i < 3 && cellsAdded < count; i++) {
         this.cells.push({q: -1 + i, r: -6});
         cellsAdded++;
       }
-      
-      // Row 8 (r=-7): 2 cells, centered
-      // 2 cells: 0 to 1 (shifted half cell right like other even rows)
+
       for (let i = 0; i < 2 && cellsAdded < count; i++) {
         this.cells.push({q: 0 + i, r: -7});
         cellsAdded++;
@@ -554,6 +652,7 @@ export class InputHexGrid {
   public setLetter(index: number, letter: string): void {
     if (index >= 0 && index < this.cells.length) {
       this.cells[index].letter = letter;
+      this.syncCurrentLettersFromCells();
     }
   }
   
@@ -607,13 +706,16 @@ export class InputHexGrid {
       const j = Math.floor(Math.random() * (i + 1));
       [letters[i], letters[j]] = [letters[j], letters[i]];
     }
-    
+
+    this.currentLetters = [...letters];
+
     // Wait for blur fade out before reassigning letters
     setTimeout(() => {
       // Reassign shuffled letters back to cells
       letterCells.forEach((cell, index) => {
         cell.letter = letters[index];
       });
+      this.syncCurrentLettersFromCells();
     }, 300); // Wait for blur fade out to complete
     
     // Trigger shuffle animation for each cell with staggered delay
@@ -745,6 +847,7 @@ export class InputHexGrid {
     this.cells.forEach(cell => {
       cell.letter = undefined;
     });
+    this.currentLetters = [];
   }
 
   /**
@@ -805,7 +908,9 @@ export class InputHexGrid {
       this.clearTypedWord();
 
       // Rebuild cells to new size and set letters
+      this.currentLetters = [...remaining];
       this.initializeCells(remaining.length);
+      this.assignLettersToCells(this.currentLetters);
       let i = 0;
       const moves: Array<{ key: string; dx0: number; dy0: number; distance: number }> = [];
       const centerX = layout?.centerX ?? 0;
@@ -813,8 +918,7 @@ export class InputHexGrid {
 
       this.cells.forEach(c => {
         if (c.q === 0 && c.r === 0) return;
-        const letter = remaining[i++] || undefined;
-        c.letter = letter;
+        const letter = this.currentLetters[i++] || undefined;
         if (!letter) return;
         // Compute new absolute center
         const size = layout?.size ?? this.hexSize;
@@ -1021,17 +1125,9 @@ export class InputHexGrid {
    */
   public setLetters(letters: string): void {
     const chars = letters.split('');
-    // Rebuild cells to match letter count if needed
-    if (chars.length !== this.cells.length - 1) {  // -1 because center is for clear
-      this.initializeCells(chars.length);
-    }
-    
-    // The cells array has center cell at index 0, then all letter positions
-    // We need to assign letters to non-center cells in order
-    // Since center is at index 0, we start from index 1
-    for (let i = 1; i < this.cells.length && i - 1 < chars.length; i++) {
-      this.cells[i].letter = chars[i - 1];
-    }
+    this.currentLetters = [...chars];
+    this.initializeCells(chars.length);
+    this.assignLettersToCells(this.currentLetters);
   }
   
   /**

@@ -1,6 +1,6 @@
 import { CrosswordGenerator } from './services/CrosswordGenerator';
 import { HexRenderer } from './engine/HexRenderer';
-import { InputHexGrid } from './components/InputHexGrid';
+import { InputHexGrid, InputHexGridLayoutVariant } from './components/InputHexGrid';
 import { HexCell, WordObject } from '../shared/types/hexaword';
 import { createRNG } from '../shared/utils/rng';
 import { AnimationService } from './services/AnimationService';
@@ -585,16 +585,43 @@ export class HexaWordGame {
     const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : canvasHeight;
     const prefersTouchLayout = this.isMobileDevice() || viewportHeight < 760;
 
-    // Dynamically size the input hexes – larger for touch, desktop stays compact
-    let inputHexSize = 20;
+    // Height-driven target for input hex size
+    let targetInputHexSize = 20;
     if (prefersTouchLayout) {
       if (viewportHeight >= 900) {
-        inputHexSize = 32;
+        targetInputHexSize = 32;
       } else if (viewportHeight >= 780) {
-        inputHexSize = 30;
+        targetInputHexSize = 30;
       } else {
-        inputHexSize = 28;
+        targetInputHexSize = 28;
       }
+    }
+
+    const widthAvailable = Math.max(canvasWidth - (paddingSide * 2), 0);
+    const letterCount = this.inputGrid.getLetterCount();
+    let baseVariant: InputHexGridLayoutVariant = letterCount > 24 ? 'wide' : 'standard';
+    let desiredVariant: InputHexGridLayoutVariant = baseVariant;
+
+    const baseColumns = this.inputGrid.getColumnsForVariant(baseVariant);
+    const maxSizeForBase = baseColumns > 0 && widthAvailable > 0
+      ? widthAvailable / (Math.sqrt(3) * baseColumns)
+      : targetInputHexSize;
+
+    if (prefersTouchLayout && maxSizeForBase < targetInputHexSize) {
+      desiredVariant = 'stacked';
+    } else if (!prefersTouchLayout) {
+      desiredVariant = baseVariant;
+    } else if (maxSizeForBase >= targetInputHexSize) {
+      desiredVariant = baseVariant;
+    }
+
+    this.inputGrid.setLayoutVariant(desiredVariant);
+
+    const columns = this.inputGrid.getMaxColumns();
+    let inputHexSize = targetInputHexSize;
+    if (columns > 0 && widthAvailable > 0) {
+      const maxSizeByWidth = widthAvailable / (Math.sqrt(3) * columns);
+      inputHexSize = Math.min(targetInputHexSize, maxSizeByWidth);
     }
 
     // Reserve input area proportionally with sensible bounds that scale with hex size
@@ -610,7 +637,7 @@ export class HexaWordGame {
     const inputTypedBand = Math.max(minTypedBand, Math.floor(canvasHeight * 0.06));
 
     // Calculate space for main grid (leave room for input grid at bottom)
-    const gridWidth = canvasWidth - (paddingSide * 2);
+    const gridWidth = widthAvailable;
     const gridAvailHeight = canvasHeight - paddingTop - inputGridHeight - inputTypedBand - bottomSafe;
     
     // Calculate dynamic hex size for main grid
