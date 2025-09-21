@@ -60,6 +60,82 @@ function getUserKey(username?: string | null): string {
   return username ? `hw:ulevels:user:${username}` : `hw:ulevels:user:anonymous`;
 }
 
+function parseJsonArray<T>(value?: string | null): T[] {
+  if (!value) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    console.warn('Failed to parse JSON array', err);
+    return [];
+  }
+}
+
+async function rebuildGlobalLevelIndex(): Promise<{ ids: string[]; levelMap: Map<string, UserLevelRecord> }> {
+  const discoveredLevels = new Map<string, UserLevelRecord>();
+  const globalIndexKey = 'hw:ulevels:global:index';
+  const userIndexKey = 'hw:ulevels:user:index';
+
+  const usernames = new Set<string>();
+  const userIndex = parseJsonArray<string>(await redis.get(userIndexKey));
+  for (const name of userIndex) {
+    if (typeof name === 'string' && name.trim().length > 0) {
+      usernames.add(name.trim());
+    }
+  }
+
+  // Always consider anonymous levels as a fallback
+  usernames.add('anonymous');
+
+  // Attempt to augment with creator leaderboard entries if available
+  try {
+    const creatorEntries = await redis.zRange('hw:leaderboard:creators', 0, -1);
+    for (const entry of creatorEntries || []) {
+      const creator = typeof entry === 'string' ? entry : entry?.member;
+      if (typeof creator === 'string' && creator.trim().length > 0) {
+        usernames.add(creator.trim());
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to fetch creator leaderboard during global index rebuild', err);
+  }
+
+  for (const username of usernames) {
+    const userKey = getUserKey(username === 'anonymous' ? null : username);
+    const levelIds = parseJsonArray<string>(await redis.get(userKey));
+    for (const id of levelIds) {
+      if (typeof id !== 'string' || id.trim().length === 0) continue;
+      const levelKey = `hw:ulevel:${id}`;
+      const rawLevel = await redis.get(levelKey);
+      if (!rawLevel) continue;
+      try {
+        const record = JSON.parse(rawLevel) as UserLevelRecord;
+        if (record && record.id) {
+          discoveredLevels.set(record.id, record);
+        }
+      } catch (err) {
+        console.warn(`Failed to parse level ${id} while rebuilding global index`, err);
+      }
+    }
+  }
+
+  const orderedLevels = Array.from(discoveredLevels.values()).sort((a, b) => {
+    const aTime = new Date(a.createdAt ?? 0).getTime();
+    const bTime = new Date(b.createdAt ?? 0).getTime();
+    return aTime - bTime;
+  });
+
+  const ids = orderedLevels.map((level) => level.id);
+
+  if (ids.length > 0) {
+    await redis.set(globalIndexKey, JSON.stringify(ids));
+  }
+
+  return { ids, levelMap: new Map(orderedLevels.map((level) => [level.id, level])) };
+}
+
 // Try simple solvability: ensure words share at least one common letter overall
 function basicSolvability(words: string[]): boolean {
   const sets = words.map((w) => new Set(w.split('')));
@@ -170,15 +246,21 @@ router.post('/api/user-levels', async (req: Request, res: Response) => {
       
       // Instead of rpush, use a different approach - store as JSON array
       console.log('Adding to user list:', userKey);
-      const existingIds = await redis.get(userKey);
-      const idList = existingIds ? JSON.parse(existingIds) : [];
+      const idList = parseJsonArray<string>(await redis.get(userKey));
       idList.push(id);
       await redis.set(userKey, JSON.stringify(idList));
 
+      // Track all users with levels so we can rebuild global indices if needed
+      const userIndexKey = 'hw:ulevels:user:index';
+      const userIndex = parseJsonArray<string>(await redis.get(userIndexKey));
+      if (!userIndex.includes(effectiveUsername)) {
+        userIndex.push(effectiveUsername);
+        await redis.set(userIndexKey, JSON.stringify(userIndex));
+      }
+
       // Also add to global index for explore feature
       const globalIndexKey = 'hw:ulevels:global:index';
-      const globalIdsJson = await redis.get(globalIndexKey);
-      const globalIds = globalIdsJson ? JSON.parse(globalIdsJson) : [];
+      const globalIds = parseJsonArray<string>(await redis.get(globalIndexKey));
       globalIds.push(id);
       await redis.set(globalIndexKey, JSON.stringify(globalIds));
 
@@ -214,23 +296,25 @@ router.get('/api/user-levels/explore', async (req: Request, res: Response) => {
   try {
     const { search, filter = 'latest' } = req.query;
 
-    // Get all level keys (we'll need to scan since Redis doesn't support complex queries)
-    // In production, you'd want to use a proper database or maintain indices
-    const allLevelKeys: string[] = [];
-
     // For now, we'll fetch recent levels from a global index
     // First, let's maintain a global index of all levels
     const globalIndexKey = 'hw:ulevels:global:index';
-    const globalIdsJson = await redis.get(globalIndexKey);
-    const globalIds = globalIdsJson ? JSON.parse(globalIdsJson) : [];
+    let globalIds = parseJsonArray<string>(await redis.get(globalIndexKey));
+    let cachedLevels: Map<string, UserLevelRecord> | undefined;
 
     console.log('Global index has', globalIds.length, 'levels');
 
-    // If no global index exists, try to get some sample levels from individual users
     if (globalIds.length === 0) {
-      // For development/testing, return empty or sample data
-      console.log('No levels in global index, returning empty result');
-      return res.json({ levels: [], total: 0 });
+      console.log('Global index empty - attempting rebuild from existing levels');
+      const rebuildResult = await rebuildGlobalLevelIndex();
+      globalIds = rebuildResult.ids;
+      cachedLevels = rebuildResult.levelMap;
+      console.log('Rebuilt global index with', globalIds.length, 'levels');
+
+      if (globalIds.length === 0) {
+        console.log('No levels discovered during rebuild, returning empty result');
+        return res.json({ levels: [], total: 0 });
+      }
     }
 
     // Fetch all levels (limit to 100 for performance)
@@ -240,12 +324,20 @@ router.get('/api/user-levels/explore', async (req: Request, res: Response) => {
     const allLevels: UserLevelRecord[] = [];
     for (const id of recentIds) {
       try {
-        const raw = await redis.get(`hw:ulevel:${id}`);
-        if (raw) {
-          const level = JSON.parse(raw);
+        let levelData: UserLevelRecord | undefined;
+        if (cachedLevels?.has(id)) {
+          levelData = cachedLevels.get(id);
+        } else {
+          const raw = await redis.get(`hw:ulevel:${id}`);
+          if (raw) {
+            levelData = JSON.parse(raw);
+          }
+        }
+
+        if (levelData) {
           // Only include public/active levels
-          if (level.status === 'active') {
-            allLevels.push(level);
+          if (levelData.status === 'active') {
+            allLevels.push(levelData);
           }
         }
       } catch (parseErr) {
