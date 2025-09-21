@@ -31,6 +31,17 @@ type UserLevelRecord = {
   sharedBy?: string[];
 };
 
+type StoredUserLevelRecord = Omit<UserLevelRecord, 'status'> & {
+  status?: UserLevelRecord['status'];
+};
+
+function normalizeLevelRecord(level: StoredUserLevelRecord): UserLevelRecord {
+  return {
+    ...level,
+    status: level.status ?? 'active'
+  };
+}
+
 const router = express.Router();
 
 // ------- Validation Schemas -------
@@ -58,6 +69,82 @@ function buildId(): string {
 
 function getUserKey(username?: string | null): string {
   return username ? `hw:ulevels:user:${username}` : `hw:ulevels:user:anonymous`;
+}
+
+function parseJsonArray<T>(value?: string | null): T[] {
+  if (!value) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    console.warn('Failed to parse JSON array', err);
+    return [];
+  }
+}
+
+async function rebuildGlobalLevelIndex(): Promise<{ ids: string[]; levelMap: Map<string, UserLevelRecord> }> {
+  const discoveredLevels = new Map<string, UserLevelRecord>();
+  const globalIndexKey = 'hw:ulevels:global:index';
+  const userIndexKey = 'hw:ulevels:user:index';
+
+  const usernames = new Set<string>();
+  const userIndex = parseJsonArray<string>(await redis.get(userIndexKey));
+  for (const name of userIndex) {
+    if (typeof name === 'string' && name.trim().length > 0) {
+      usernames.add(name.trim());
+    }
+  }
+
+  // Always consider anonymous levels as a fallback
+  usernames.add('anonymous');
+
+  // Attempt to augment with creator leaderboard entries if available
+  try {
+    const creatorEntries = await redis.zRange('hw:leaderboard:creators', 0, -1);
+    for (const entry of creatorEntries || []) {
+      const creator = typeof entry === 'string' ? entry : entry?.member;
+      if (typeof creator === 'string' && creator.trim().length > 0) {
+        usernames.add(creator.trim());
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to fetch creator leaderboard during global index rebuild', err);
+  }
+
+  for (const username of usernames) {
+    const userKey = getUserKey(username === 'anonymous' ? null : username);
+    const levelIds = parseJsonArray<string>(await redis.get(userKey));
+    for (const id of levelIds) {
+      if (typeof id !== 'string' || id.trim().length === 0) continue;
+      const levelKey = `hw:ulevel:${id}`;
+      const rawLevel = await redis.get(levelKey);
+      if (!rawLevel) continue;
+      try {
+        const record = JSON.parse(rawLevel) as UserLevelRecord;
+        if (record && record.id) {
+          discoveredLevels.set(record.id, record);
+        }
+      } catch (err) {
+        console.warn(`Failed to parse level ${id} while rebuilding global index`, err);
+      }
+    }
+  }
+
+  const orderedLevels = Array.from(discoveredLevels.values()).sort((a, b) => {
+    const aTime = new Date(a.createdAt ?? 0).getTime();
+    const bTime = new Date(b.createdAt ?? 0).getTime();
+    return aTime - bTime;
+  });
+
+  const ids = orderedLevels.map((level) => level.id);
+
+  if (ids.length > 0) {
+    await redis.set(globalIndexKey, JSON.stringify(ids));
+  }
+
+  return { ids, levelMap: new Map(orderedLevels.map((level) => [level.id, level])) };
 }
 
 // Try simple solvability: ensure words share at least one common letter overall
@@ -170,15 +257,21 @@ router.post('/api/user-levels', async (req: Request, res: Response) => {
       
       // Instead of rpush, use a different approach - store as JSON array
       console.log('Adding to user list:', userKey);
-      const existingIds = await redis.get(userKey);
-      const idList = existingIds ? JSON.parse(existingIds) : [];
+      const idList = parseJsonArray<string>(await redis.get(userKey));
       idList.push(id);
       await redis.set(userKey, JSON.stringify(idList));
 
+      // Track all users with levels so we can rebuild global indices if needed
+      const userIndexKey = 'hw:ulevels:user:index';
+      const userIndex = parseJsonArray<string>(await redis.get(userIndexKey));
+      if (!userIndex.includes(effectiveUsername)) {
+        userIndex.push(effectiveUsername);
+        await redis.set(userIndexKey, JSON.stringify(userIndex));
+      }
+
       // Also add to global index for explore feature
       const globalIndexKey = 'hw:ulevels:global:index';
-      const globalIdsJson = await redis.get(globalIndexKey);
-      const globalIds = globalIdsJson ? JSON.parse(globalIdsJson) : [];
+      const globalIds = parseJsonArray<string>(await redis.get(globalIndexKey));
       globalIds.push(id);
       await redis.set(globalIndexKey, JSON.stringify(globalIds));
 
@@ -209,28 +302,85 @@ router.post('/api/user-levels', async (req: Request, res: Response) => {
   }
 });
 
+// Migration helper to backfill missing status properties on stored levels
+router.post('/api/user-levels/migrate-status', async (_req: Request, res: Response) => {
+  try {
+    const globalIndexKey = 'hw:ulevels:global:index';
+    const globalIdsJson = await redis.get(globalIndexKey);
+
+    if (!globalIdsJson) {
+      return res.json({
+        success: true,
+        message: 'No global index found',
+        total: 0,
+        updated: 0
+      });
+    }
+
+    const globalIds: string[] = JSON.parse(globalIdsJson);
+    let processed = 0;
+    let updated = 0;
+
+    for (const id of globalIds) {
+      const levelKey = `hw:ulevel:${id}`;
+      const raw = await redis.get(levelKey);
+      if (!raw) continue;
+
+      try {
+        const storedLevel = JSON.parse(raw) as StoredUserLevelRecord;
+        processed += 1;
+        if (storedLevel.status == null) {
+          const normalized = normalizeLevelRecord(storedLevel);
+          await redis.set(levelKey, JSON.stringify(normalized));
+          updated += 1;
+        }
+      } catch (parseErr) {
+        console.error(`Failed to migrate level ${id}:`, parseErr);
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: 'Migration complete',
+      total: processed,
+      updated
+    });
+  } catch (err) {
+    console.error('Status migration failed:', err);
+    return res.status(500).json({
+      error: {
+        code: 'SERVER_ERROR',
+        message: 'Failed to migrate level statuses',
+        details: err.message
+      }
+    });
+  }
+});
+
 // Explore levels - search and filter functionality
 router.get('/api/user-levels/explore', async (req: Request, res: Response) => {
   try {
     const { search, filter = 'latest' } = req.query;
 
-    // Get all level keys (we'll need to scan since Redis doesn't support complex queries)
-    // In production, you'd want to use a proper database or maintain indices
-    const allLevelKeys: string[] = [];
-
     // For now, we'll fetch recent levels from a global index
     // First, let's maintain a global index of all levels
     const globalIndexKey = 'hw:ulevels:global:index';
-    const globalIdsJson = await redis.get(globalIndexKey);
-    const globalIds = globalIdsJson ? JSON.parse(globalIdsJson) : [];
+    let globalIds = parseJsonArray<string>(await redis.get(globalIndexKey));
+    let cachedLevels: Map<string, UserLevelRecord> | undefined;
 
     console.log('Global index has', globalIds.length, 'levels');
 
-    // If no global index exists, try to get some sample levels from individual users
     if (globalIds.length === 0) {
-      // For development/testing, return empty or sample data
-      console.log('No levels in global index, returning empty result');
-      return res.json({ levels: [], total: 0 });
+      console.log('Global index empty - attempting rebuild from existing levels');
+      const rebuildResult = await rebuildGlobalLevelIndex();
+      globalIds = rebuildResult.ids;
+      cachedLevels = rebuildResult.levelMap;
+      console.log('Rebuilt global index with', globalIds.length, 'levels');
+
+      if (globalIds.length === 0) {
+        console.log('No levels discovered during rebuild, returning empty result');
+        return res.json({ levels: [], total: 0 });
+      }
     }
 
     // Fetch all levels (limit to 100 for performance)
@@ -240,12 +390,23 @@ router.get('/api/user-levels/explore', async (req: Request, res: Response) => {
     const allLevels: UserLevelRecord[] = [];
     for (const id of recentIds) {
       try {
+        let levelData: UserLevelRecord | undefined;
+        if (cachedLevels?.has(id)) {
+          levelData = cachedLevels.get(id);
+        } else {
+          const raw = await redis.get(`hw:ulevel:${id}`);
+          if (raw) {
+            levelData = JSON.parse(raw);
+          }
+        }
+
+        if (levelData) {
         const raw = await redis.get(`hw:ulevel:${id}`);
         if (raw) {
-          const level = JSON.parse(raw);
+          const level = normalizeLevelRecord(JSON.parse(raw));
           // Only include public/active levels
-          if (level.status === 'active') {
-            allLevels.push(level);
+          if (levelData.status === 'active') {
+            allLevels.push(levelData);
           }
         }
       } catch (parseErr) {
@@ -339,7 +500,7 @@ router.get('/api/user-levels/mine', async (_req: Request, res: Response) => {
       try {
         const raw = await redis.get(`hw:ulevel:${id}`);
         if (raw) {
-          const parsed = JSON.parse(raw);
+          const parsed = normalizeLevelRecord(JSON.parse(raw));
           levels.push(parsed);
         }
       } catch (parseErr) {
@@ -357,6 +518,47 @@ router.get('/api/user-levels/mine', async (_req: Request, res: Response) => {
 });
 
 // Get a specific level by ID (for sharing) - MUST BE AFTER /mine route
+router.get('/api/user-levels/:id/preview', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id;
+    const levelKey = `hw:ulevel:${id}`;
+    const raw = await redis.get(levelKey);
+
+    if (!raw) {
+      return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Level not found' } });
+    }
+
+    const level: UserLevelRecord = JSON.parse(raw);
+    const allLetters = (level.words || []).join('').split('');
+    const uniqueLetters = Array.from(new Set(allLetters)).sort();
+
+    return res.json({
+      level: {
+        id: level.id,
+        name: level.name,
+        clue: level.clue,
+        author: level.author,
+        words: level.words || [],
+        shares: level.shares || 0,
+        createdAt: level.createdAt,
+        uniqueLetters,
+        letterBank: allLetters
+      }
+    });
+    
+    const level = normalizeLevelRecord(JSON.parse(raw));
+    
+    // Increment play count when level is accessed
+    level.playCount = (level.playCount || 0) + 1;
+    await redis.set(levelKey, JSON.stringify(level));
+    
+    return res.json({ level });
+  } catch (err) {
+    console.error('Preview user level failed:', err);
+    return res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to preview level' } });
+  }
+});
+
 router.get('/api/user-levels/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id;
@@ -367,7 +569,7 @@ router.get('/api/user-levels/:id', async (req: Request, res: Response) => {
       return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Level not found' } });
     }
     
-    const level: UserLevelRecord = JSON.parse(raw);
+    const level = normalizeLevelRecord(JSON.parse(raw));
     
     // Increment play count when level is accessed
     level.playCount = (level.playCount || 0) + 1;
@@ -381,33 +583,6 @@ router.get('/api/user-levels/:id', async (req: Request, res: Response) => {
 });
 
 // Track share for a user level
-router.post('/api/user-levels/:id/share', async (req: Request, res: Response) => {
-  try {
-    const id = req.params.id;
-    
-    // Get the level
-    const levelKey = `hw:ulevel:${id}`;
-    const raw = await redis.get(levelKey);
-    
-    if (!raw) {
-      return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Level not found' } });
-    }
-    
-    const level: UserLevelRecord = JSON.parse(raw);
-    
-    // Increment share count
-    level.shares = (level.shares || 0) + 1;
-    
-    // Save updated level
-    await redis.set(levelKey, JSON.stringify(level));
-    
-    return res.json({ success: true, shares: level.shares });
-  } catch (err) {
-    console.error('Track share failed:', err);
-    return res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to track share' } });
-  }
-});
-
 // Delete a user level
 router.delete('/api/user-levels/:id', async (req: Request, res: Response) => {
   try {
@@ -426,7 +601,7 @@ router.delete('/api/user-levels/:id', async (req: Request, res: Response) => {
       return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Level not found' } });
     }
     
-    const level: UserLevelRecord = JSON.parse(raw);
+    const level = normalizeLevelRecord(JSON.parse(raw));
     
     // Check if user owns this level
     if (level.author !== username) {
@@ -477,7 +652,7 @@ router.post('/api/user-levels/:id/vote', async (req: Request, res: Response) => 
       return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Level not found' } });
     }
     
-    const level: UserLevelRecord = JSON.parse(raw);
+    const level = normalizeLevelRecord(JSON.parse(raw));
     
     // Initialize arrays if not present
     if (!level.upvotedBy) level.upvotedBy = [];
@@ -565,7 +740,7 @@ router.post('/api/user-levels/:id/share', async (req: Request, res: Response) =>
       return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Level not found' } });
     }
     
-    const level: UserLevelRecord = JSON.parse(raw);
+    const level = normalizeLevelRecord(JSON.parse(raw));
     
     // Initialize array if not present
     if (!level.sharedBy) level.sharedBy = [];
@@ -601,7 +776,7 @@ router.get('/api/user-levels/:id/init', async (req: Request, res: Response) => {
     const levelKey = `hw:ulevel:${id}`;
     const raw = await redis.get(levelKey);
     if (!raw) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Level not found' } });
-    const level: UserLevelRecord = JSON.parse(raw);
+    const level = normalizeLevelRecord(JSON.parse(raw));
     
     // Get username first
     const username = (await reddit.getCurrentUsername()) || 'anonymous';
