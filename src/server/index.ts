@@ -59,7 +59,7 @@ router.get<
   }
 
   logger.debug("Fetching init data", { postId, requestId });
-  
+
   const [count, username] = await Promise.all([
     redis.get("count"),
     reddit.getCurrentUsername(),

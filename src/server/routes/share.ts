@@ -9,7 +9,7 @@ const router = Router();
  */
 router.post('/api/share', asyncHandler(async (req, res) => {
   const { title, text, flair } = req.body;
-  
+
   if (!title || !text) {
     res.status(400).json({
       status: 'error',
@@ -17,11 +17,11 @@ router.post('/api/share', asyncHandler(async (req, res) => {
     });
     return;
   }
-  
+
   try {
     // Get the subreddit from context
     const subredditName = context.subredditName;
-    
+
     if (!subredditName) {
       res.status(400).json({
         status: 'error',
@@ -29,16 +29,19 @@ router.post('/api/share', asyncHandler(async (req, res) => {
       });
       return;
     }
-    
+
     // Create a new post in the subreddit
     const subreddit = await reddit.getSubredditByName(subredditName);
-    const post = await reddit.submitPost({
+    const post = await reddit.submitCustomPost({
       subredditName: subreddit.name,
       title: title,
-      text: text,
-      flairId: flair // Optional flair
+      postData: {
+        shared: true,
+        text: text,
+        flair: flair
+      },
     });
-    
+
     res.json({
       status: 'success',
       postId: post.id,

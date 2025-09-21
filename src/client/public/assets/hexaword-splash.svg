@@ -1,0 +1,30 @@
+<svg width="1600" height="900" viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#764ba2;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#f093fb;stop-opacity:1" />
+    </linearGradient>
+    <filter id="blur" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="20"/>
+    </filter>
+  </defs>
+
+  <!-- Background gradient -->
+  <rect width="1600" height="900" fill="url(#bgGrad)"/>
+
+  <!-- Glowing orbs for depth -->
+  <circle cx="400" cy="300" r="200" fill="rgba(76,224,179,0.3)" filter="url(#blur)"/>
+  <circle cx="1200" cy="600" r="250" fill="rgba(91,159,238,0.3)" filter="url(#blur)"/>
+
+  <!-- Hexagon pattern overlay -->
+  <g opacity="0.1">
+    <path d="M200 100l60 34.6v69.3l-60 34.6-60-34.6v-69.3z" fill="white"/>
+    <path d="M400 200l60 34.6v69.3l-60 34.6-60-34.6v-69.3z" fill="white"/>
+    <path d="M600 150l60 34.6v69.3l-60 34.6-60-34.6v-69.3z" fill="white"/>
+    <path d="M800 250l60 34.6v69.3l-60 34.6-60-34.6v-69.3z" fill="white"/>
+    <path d="M1000 100l60 34.6v69.3l-60 34.6-60-34.6v-69.3z" fill="white"/>
+    <path d="M1200 200l60 34.6v69.3l-60 34.6-60-34.6v-69.3z" fill="white"/>
+    <path d="M1400 150l60 34.6v69.3l-60 34.6-60-34.6v-69.3z" fill="white"/>
+  </g>
+</svg>
