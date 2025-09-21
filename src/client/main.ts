@@ -20,6 +20,19 @@ import { ColorPaletteService } from '../web-view/services/ColorPaletteService';
 import { getPaletteForLevel } from '../web-view/config/ColorPalettes';
 import { shareUserLevelToReddit } from './services/UserLevelShareService';
 
+
+interface SharedLevelPreview {
+  id: string;
+  name?: string;
+  clue?: string;
+  author?: string;
+  words: string[];
+  shares: number;
+  createdAt?: string;
+  uniqueLetters: string[];
+  letterBank?: string[];
+}
+
 // HexaWord Crossword Generator v4.0 - Modular Architecture
 
 /**
@@ -34,6 +47,7 @@ class App {
   private shareService: ShareService;
   private colorPaletteService = ColorPaletteService.getInstance();
   private menuBusy = false;
+  private sharedLevelHandled = false;
   
   constructor() {
     this.shareService = ShareService.getInstance();
@@ -111,6 +125,10 @@ class App {
     // Check for daily wheel on second launch
     await this.checkDailyWheel();
     await this.handleDeepLink();
+
+    // Handle shared level links (e.g. ?level=ID)
+    await this.handleSharedLevelLaunch();
+
   }
 
   // Apply palette/theme for the menu using the player's current level
@@ -1259,6 +1277,183 @@ class App {
     if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
     if (days < 30) return `${days} day${days === 1 ? '' : 's'} ago`;
     return date.toLocaleDateString();
+  }
+
+  private async handleSharedLevelLaunch(): Promise<void> {
+    if (this.sharedLevelHandled) {
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const levelId = params.get('level');
+    if (!levelId) {
+      return;
+    }
+
+    this.sharedLevelHandled = true;
+
+    try {
+      const response = await fetch(`/api/user-levels/${encodeURIComponent(levelId)}/preview`);
+      if (!response.ok) {
+        console.error('Failed to fetch shared level preview:', response.status);
+        this.showToast('Shared level is unavailable', 'error');
+        this.clearSharedLevelQuery();
+        return;
+      }
+
+      const data = await response.json();
+      if (!data?.level) {
+        this.clearSharedLevelQuery();
+        return;
+      }
+
+      this.renderSharedLevelSplash(levelId, data.level as SharedLevelPreview);
+    } catch (error) {
+      console.error('Failed to load shared level preview:', error);
+      this.showToast('Failed to open shared level', 'error');
+      this.clearSharedLevelQuery();
+    }
+  }
+
+  private renderSharedLevelSplash(levelId: string, preview: SharedLevelPreview): void {
+    const displayName = preview.name?.trim() || 'Shared HexaWord Puzzle';
+    const clue = preview.clue?.trim() || 'Solve this custom HexaWord challenge';
+    const author = preview.author ? `@${preview.author}` : 'a HexaWord creator';
+    const wordsCount = preview.words?.length ?? 0;
+    const createdAgo = preview.createdAt ? this.formatRelativeTime(preview.createdAt) : undefined;
+    const letterSource = (preview.letterBank && preview.letterBank.length > 0) ? preview.letterBank : preview.uniqueLetters;
+    const letterBadges = letterSource.length > 0
+      ? letterSource.map(letter => {
+          const rendered = this.escapeHtml((letter || '').toUpperCase());
+          return `<span class="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/10 text-lg font-semibold tracking-wide text-white shadow-lg shadow-purple-500/10">${rendered}</span>`;
+        }).join('')
+      : '<span class="text-white/60">No letters available</span>';
+    const stats: string[] = [];
+    if (wordsCount > 0) {
+      stats.push(`${wordsCount} hidden word${wordsCount === 1 ? '' : 's'}`);
+    }
+    if (preview.shares > 0) {
+      stats.push(`${preview.shares} share${preview.shares === 1 ? '' : 's'}`);
+    }
+    if (createdAgo) {
+      stats.push(`Created ${createdAgo}`);
+    }
+
+    const overlay = document.createElement('div');
+    overlay.id = 'shared-level-splash';
+    overlay.className = 'fixed inset-0 z-[10002] flex items-center justify-center px-4 py-10';
+    overlay.innerHTML = `
+      <div class="absolute inset-0 bg-gradient-to-br from-[#1c0f3c]/95 via-[#0b101f]/92 to-black/95 backdrop-blur-2xl"></div>
+      <div class="relative w-full max-w-2xl overflow-hidden rounded-3xl border border-white/10 bg-white/5 shadow-[0_25px_120px_rgba(96,76,255,0.45)]">
+        <div class="absolute -top-40 -right-24 h-80 w-80 rounded-full bg-purple-500/30 blur-3xl"></div>
+        <div class="absolute -bottom-52 -left-36 h-80 w-80 rounded-full bg-sky-500/20 blur-3xl"></div>
+        <div class="relative space-y-8 p-8 md:p-10 text-white">
+          <div class="space-y-3 text-center">
+            <span class="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-white/70">
+              <span>Shared Level</span>
+            </span>
+            <h2 class="text-3xl font-bold leading-tight md:text-4xl">${this.escapeHtml(displayName)}</h2>
+            <p class="text-base text-white/80 md:text-lg">“${this.escapeHtml(clue)}”</p>
+            <p class="text-sm text-white/60">Created by <span class="text-white/80">${this.escapeHtml(author)}</span></p>
+          </div>
+
+          <div class="rounded-2xl border border-white/10 bg-black/30 p-6 shadow-inner shadow-purple-900/20">
+            <div class="mb-3 flex items-center justify-between text-sm uppercase tracking-wide text-white/60">
+              <span>Letter Bank</span>
+              <span>${letterSource.length} tiles</span>
+            </div>
+            <div class="flex flex-wrap justify-center gap-2 text-lg font-semibold">
+              ${letterBadges}
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-white/5 bg-white/5 p-5 text-sm text-white/70">
+            <div class="font-semibold text-white/90">What to expect</div>
+            <div class="mt-2 flex flex-wrap gap-3">
+              ${stats.length > 0 ? stats.map(item => `<span class=\"rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white/70\">${this.escapeHtml(item)}</span>`).join('') : '<span class="text-white/60">Fresh puzzle data incoming</span>'}
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-center">
+            <button id="shared-level-play" class="flex-1 rounded-full bg-gradient-to-r from-purple-500 via-fuchsia-500 to-indigo-500 px-6 py-3 text-base font-semibold text-white shadow-lg shadow-purple-500/30 transition-transform duration-200 hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-purple-200/70 md:flex-none md:px-10">
+              Start Playing
+            </button>
+            <button id="shared-level-dismiss" class="rounded-full border border-white/20 px-6 py-3 text-base font-semibold text-white/80 transition-colors duration-200 hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/40">
+              Maybe Later
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    overlay.style.opacity = '0';
+    overlay.style.transition = 'opacity 220ms ease-out';
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => {
+      overlay.style.opacity = '1';
+    });
+
+    const closeSplash = () => {
+      overlay.style.opacity = '0';
+      overlay.addEventListener('transitionend', () => overlay.remove(), { once: true });
+      this.clearSharedLevelQuery();
+    };
+
+    overlay.addEventListener('click', (event) => {
+      if (event.target === overlay) {
+        closeSplash();
+      }
+    });
+
+    const dismissBtn = overlay.querySelector<HTMLButtonElement>('#shared-level-dismiss');
+    dismissBtn?.addEventListener('click', () => {
+      closeSplash();
+    });
+
+    const playBtn = overlay.querySelector<HTMLButtonElement>('#shared-level-play');
+    playBtn?.addEventListener('click', async () => {
+      if (!playBtn || playBtn.disabled) {
+        return;
+      }
+
+      playBtn.disabled = true;
+      playBtn.textContent = 'Loading…';
+
+      try {
+        await blurTransition.transitionWithBlur(async () => {
+          await this.playUserLevel(levelId);
+          this.hideMainMenu();
+        }, { blurIntensity: 'lg', inDuration: 200, outDuration: 250 });
+
+        closeSplash();
+      } catch (error) {
+        console.error('Failed to start shared level:', error);
+        this.showToast('Failed to load shared level', 'error');
+        playBtn.disabled = false;
+        playBtn.textContent = 'Start Playing';
+      }
+    });
+  }
+
+  private clearSharedLevelQuery(): void {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('level')) {
+      url.searchParams.delete('level');
+      window.history.replaceState({}, '', url.toString());
+    }
+  }
+
+  private escapeHtml(value?: string): string {
+    if (!value) {
+      return '';
+    }
+
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   }
   
   private async shareLevelInline(levelId: string, levelName: string, levelClue: string): Promise<void> {
