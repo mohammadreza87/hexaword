@@ -581,10 +581,33 @@ export class HexaWordGame {
     const paddingTop = unit * 10;   // 80px top spacing for UI elements and clue
     const paddingSide = unit * 2;   // 16px safe side margins
     const bottomSafe = unit * 2;    // 16px bottom safe area
-    // Reserve input area proportionally with sensible bounds
-    const inputGridHeight = Math.max(112, Math.min(168, Math.floor(canvasHeight * 0.2)));
+    // Determine if we should favor a touch layout with larger input hexes
+    const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : canvasHeight;
+    const prefersTouchLayout = this.isMobileDevice() || viewportHeight < 760;
+
+    // Dynamically size the input hexes – larger for touch, desktop stays compact
+    let inputHexSize = 20;
+    if (prefersTouchLayout) {
+      if (viewportHeight >= 900) {
+        inputHexSize = 32;
+      } else if (viewportHeight >= 780) {
+        inputHexSize = 30;
+      } else {
+        inputHexSize = 28;
+      }
+    }
+
+    // Reserve input area proportionally with sensible bounds that scale with hex size
+    const minInputHeight = inputHexSize * 5;
+    const maxInputHeight = inputHexSize * 6.5;
+    const inputGridHeight = Math.max(
+      Math.round(minInputHeight),
+      Math.min(Math.round(maxInputHeight), Math.floor(canvasHeight * 0.24))
+    );
+
     // Additional reserved band above input grid for typed text and breathing room
-    const inputTypedBand = Math.max(48, Math.floor(canvasHeight * 0.06));
+    const minTypedBand = Math.round(inputHexSize * 1.8);
+    const inputTypedBand = Math.max(minTypedBand, Math.floor(canvasHeight * 0.06));
 
     // Calculate space for main grid (leave room for input grid at bottom)
     const gridWidth = canvasWidth - (paddingSide * 2);
@@ -600,7 +623,6 @@ export class HexaWordGame {
     );
     
     // Input grid settings - position at very bottom of canvas
-    const inputHexSize = 20; // Input tiles size; independent from main grid spacing
     // The input grid render method now handles positioning relative to its bottom edge
     // We pass the Y coordinate where we want the bottom of the grid to be
     const inputGridY = canvasHeight - bottomSafe; // Bottom edge aligned to safe area
