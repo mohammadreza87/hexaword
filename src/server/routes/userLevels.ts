@@ -401,12 +401,10 @@ router.get('/api/user-levels/explore', async (req: Request, res: Response) => {
         }
 
         if (levelData) {
-        const raw = await redis.get(`hw:ulevel:${id}`);
-        if (raw) {
-          const level = normalizeLevelRecord(JSON.parse(raw));
+          const level = normalizeLevelRecord(levelData);
           // Only include public/active levels
-          if (levelData.status === 'active') {
-            allLevels.push(levelData);
+          if (level.status === 'active') {
+            allLevels.push(level);
           }
         }
       } catch (parseErr) {
@@ -528,7 +526,7 @@ router.get('/api/user-levels/:id/preview', async (req: Request, res: Response) =
       return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Level not found' } });
     }
 
-    const level: UserLevelRecord = JSON.parse(raw);
+    const level = normalizeLevelRecord(JSON.parse(raw));
     const allLetters = (level.words || []).join('').split('');
     const uniqueLetters = Array.from(new Set(allLetters)).sort();
 
@@ -545,14 +543,6 @@ router.get('/api/user-levels/:id/preview', async (req: Request, res: Response) =
         letterBank: allLetters
       }
     });
-    
-    const level = normalizeLevelRecord(JSON.parse(raw));
-    
-    // Increment play count when level is accessed
-    level.playCount = (level.playCount || 0) + 1;
-    await redis.set(levelKey, JSON.stringify(level));
-    
-    return res.json({ level });
   } catch (err) {
     console.error('Preview user level failed:', err);
     return res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to preview level' } });
