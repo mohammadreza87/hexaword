@@ -41,17 +41,18 @@ export const createPost = async () => {
   const cycleDay = calculateCycleDay(today);
   const challenge = getChallengeForDay(cycleDay);
 
-  const heading = formatDayTypeHeading(challenge.dayType);
+  const heading = `${formatDayTypeHeading(challenge.dayType)} · Day ${cycleDay}`;
   const letterPrompt = extractLetterSet(challenge.words);
+  const buttonLabel = challenge.dayType === "supreme" ? "Begin the Supreme Run" : "Play Today's Challenge";
 
   return await reddit.submitCustomPost({
     splash: {
       appDisplayName: "HexaWord",
       heading,
-      description: `${challenge.clue} - Find ${challenge.words.length} words`,
-      buttonLabel: "Play",
-      backgroundUri: "splash-background.svg",
-      appIconUri: "hexaword-icon.svg",
+      description: `${challenge.clue} · Letters: ${letterPrompt}`,
+      buttonLabel,
+      backgroundUri: "/daily-challenge-splash.svg",
+      appIconUri: "/hexaword-icon.svg",
       entryUri: "index.html",
     },
     subredditName: subredditName,
@@ -59,6 +60,8 @@ export const createPost = async () => {
     postData: {
       cycleDay,
       clue: challenge.clue,
+      letters: challenge.words,
+      heading,
     },
   });
 };
