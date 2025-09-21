@@ -1,3 +1,4 @@
+
 import express from 'express';
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -81,5 +82,6 @@ describe('GET /api/user-levels/explore', () => {
 
     const warmedIndex = await redis.get('hw:ulevels:global:index');
     expect(JSON.parse(warmedIndex ?? '[]')).toEqual([levelId]);
+
   });
 });
