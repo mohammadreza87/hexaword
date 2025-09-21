@@ -1,0 +1,84 @@
+<svg width="1600" height="900" viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Main radial gradients matching the CSS -->
+    <radialGradient id="blueGlow" cx="47%" cy="33%" r="59%">
+      <stop offset="0%" stop-color="#5B9FEE" stop-opacity="1" />
+      <stop offset="100%" stop-color="#5B9FEE" stop-opacity="0" />
+    </radialGradient>
+
+    <radialGradient id="greenGlow" cx="82%" cy="65%" r="55%">
+      <stop offset="0%" stop-color="#4CE0B3" stop-opacity="1" />
+      <stop offset="100%" stop-color="#4CE0B3" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Glassmorphic overlay gradient -->
+    <linearGradient id="glassOverlay" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.1)" />
+      <stop offset="100%" stop-color="rgba(255,255,255,0.05)" />
+    </linearGradient>
+
+    <!-- Blur filters for glassmorphic effects -->
+    <filter id="blur" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="8" />
+    </filter>
+
+    <filter id="softBlur" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="20" />
+    </filter>
+
+    <!-- Hexagon pattern for texture -->
+    <pattern id="hexPattern" width="60" height="52" patternUnits="userSpaceOnUse">
+      <path d="M30 0l26 15v30l-26 15-26-15V15z"
+            fill="none"
+            stroke="rgba(255,255,255,0.03)"
+            stroke-width="1" />
+    </pattern>
+  </defs>
+
+  <!-- Dark background matching #141511 -->
+  <rect width="1600" height="900" fill="#141511" />
+
+  <!-- Radial gradient glows -->
+  <rect width="1600" height="900" fill="url(#blueGlow)" opacity="0.6" />
+  <rect width="1600" height="900" fill="url(#greenGlow)" opacity="0.5" />
+
+  <!-- Hexagon pattern overlay for texture -->
+  <rect width="1600" height="900" fill="url(#hexPattern)" opacity="0.5" />
+
+  <!-- Glassmorphic card areas with blur effect -->
+  <g opacity="0.75">
+    <!-- Main card area -->
+    <rect x="400" y="200" width="800" height="500"
+          rx="12"
+          fill="rgba(17, 25, 40, 0.75)"
+          filter="url(#blur)"
+          stroke="rgba(255,255,255,0.125)"
+          stroke-width="1" />
+
+    <!-- Glass reflection overlay -->
+    <rect x="400" y="200" width="800" height="250"
+          rx="12"
+          fill="url(#glassOverlay)"
+          opacity="0.3" />
+  </g>
+
+  <!-- Additional floating glass elements -->
+  <g opacity="0.5">
+    <circle cx="300" cy="750" r="120"
+            fill="rgba(92, 159, 238, 0.2)"
+            filter="url(#softBlur)" />
+    <circle cx="1300" cy="150" r="100"
+            fill="rgba(76, 224, 179, 0.2)"
+            filter="url(#softBlur)" />
+  </g>
+
+  <!-- Hexagonal accent elements -->
+  <g opacity="0.15">
+    <path d="M100 100l52 30v60l-52 30-52-30v-60z"
+          fill="rgba(92, 159, 238, 0.5)" />
+    <path d="M1450 700l52 30v60l-52 30-52-30v-60z"
+          fill="rgba(76, 224, 179, 0.5)" />
+    <path d="M800 50l26 15v30l-26 15-26-15v-30z"
+          fill="rgba(255, 255, 255, 0.1)" />
+  </g>
+</svg>
