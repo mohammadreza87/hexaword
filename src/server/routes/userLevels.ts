@@ -31,6 +31,17 @@ type UserLevelRecord = {
   sharedBy?: string[];
 };
 
+type StoredUserLevelRecord = Omit<UserLevelRecord, 'status'> & {
+  status?: UserLevelRecord['status'];
+};
+
+function normalizeLevelRecord(level: StoredUserLevelRecord): UserLevelRecord {
+  return {
+    ...level,
+    status: level.status ?? 'active'
+  };
+}
+
 const router = express.Router();
 
 // ------- Validation Schemas -------
@@ -209,6 +220,61 @@ router.post('/api/user-levels', async (req: Request, res: Response) => {
   }
 });
 
+// Migration helper to backfill missing status properties on stored levels
+router.post('/api/user-levels/migrate-status', async (_req: Request, res: Response) => {
+  try {
+    const globalIndexKey = 'hw:ulevels:global:index';
+    const globalIdsJson = await redis.get(globalIndexKey);
+
+    if (!globalIdsJson) {
+      return res.json({
+        success: true,
+        message: 'No global index found',
+        total: 0,
+        updated: 0
+      });
+    }
+
+    const globalIds: string[] = JSON.parse(globalIdsJson);
+    let processed = 0;
+    let updated = 0;
+
+    for (const id of globalIds) {
+      const levelKey = `hw:ulevel:${id}`;
+      const raw = await redis.get(levelKey);
+      if (!raw) continue;
+
+      try {
+        const storedLevel = JSON.parse(raw) as StoredUserLevelRecord;
+        processed += 1;
+        if (storedLevel.status == null) {
+          const normalized = normalizeLevelRecord(storedLevel);
+          await redis.set(levelKey, JSON.stringify(normalized));
+          updated += 1;
+        }
+      } catch (parseErr) {
+        console.error(`Failed to migrate level ${id}:`, parseErr);
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: 'Migration complete',
+      total: processed,
+      updated
+    });
+  } catch (err) {
+    console.error('Status migration failed:', err);
+    return res.status(500).json({
+      error: {
+        code: 'SERVER_ERROR',
+        message: 'Failed to migrate level statuses',
+        details: err.message
+      }
+    });
+  }
+});
+
 // Explore levels - search and filter functionality
 router.get('/api/user-levels/explore', async (req: Request, res: Response) => {
   try {
@@ -242,7 +308,7 @@ router.get('/api/user-levels/explore', async (req: Request, res: Response) => {
       try {
         const raw = await redis.get(`hw:ulevel:${id}`);
         if (raw) {
-          const level = JSON.parse(raw);
+          const level = normalizeLevelRecord(JSON.parse(raw));
           // Only include public/active levels
           if (level.status === 'active') {
             allLevels.push(level);
@@ -339,7 +405,7 @@ router.get('/api/user-levels/mine', async (_req: Request, res: Response) => {
       try {
         const raw = await redis.get(`hw:ulevel:${id}`);
         if (raw) {
-          const parsed = JSON.parse(raw);
+          const parsed = normalizeLevelRecord(JSON.parse(raw));
           levels.push(parsed);
         }
       } catch (parseErr) {
@@ -384,6 +450,14 @@ router.get('/api/user-levels/:id/preview', async (req: Request, res: Response) =
         letterBank: allLetters
       }
     });
+    
+    const level = normalizeLevelRecord(JSON.parse(raw));
+    
+    // Increment play count when level is accessed
+    level.playCount = (level.playCount || 0) + 1;
+    await redis.set(levelKey, JSON.stringify(level));
+    
+    return res.json({ level });
   } catch (err) {
     console.error('Preview user level failed:', err);
     return res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to preview level' } });
@@ -400,7 +474,7 @@ router.get('/api/user-levels/:id', async (req: Request, res: Response) => {
       return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Level not found' } });
     }
     
-    const level: UserLevelRecord = JSON.parse(raw);
+    const level = normalizeLevelRecord(JSON.parse(raw));
     
     // Increment play count when level is accessed
     level.playCount = (level.playCount || 0) + 1;
@@ -432,7 +506,7 @@ router.delete('/api/user-levels/:id', async (req: Request, res: Response) => {
       return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Level not found' } });
     }
     
-    const level: UserLevelRecord = JSON.parse(raw);
+    const level = normalizeLevelRecord(JSON.parse(raw));
     
     // Check if user owns this level
     if (level.author !== username) {
@@ -483,7 +557,7 @@ router.post('/api/user-levels/:id/vote', async (req: Request, res: Response) => 
       return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Level not found' } });
     }
     
-    const level: UserLevelRecord = JSON.parse(raw);
+    const level = normalizeLevelRecord(JSON.parse(raw));
     
     // Initialize arrays if not present
     if (!level.upvotedBy) level.upvotedBy = [];
@@ -571,7 +645,7 @@ router.post('/api/user-levels/:id/share', async (req: Request, res: Response) =>
       return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Level not found' } });
     }
     
-    const level: UserLevelRecord = JSON.parse(raw);
+    const level = normalizeLevelRecord(JSON.parse(raw));
     
     // Initialize array if not present
     if (!level.sharedBy) level.sharedBy = [];
@@ -607,7 +681,7 @@ router.get('/api/user-levels/:id/init', async (req: Request, res: Response) => {
     const levelKey = `hw:ulevel:${id}`;
     const raw = await redis.get(levelKey);
     if (!raw) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Level not found' } });
-    const level: UserLevelRecord = JSON.parse(raw);
+    const level = normalizeLevelRecord(JSON.parse(raw));
     
     // Get username first
     const username = (await reddit.getCurrentUsername()) || 'anonymous';
