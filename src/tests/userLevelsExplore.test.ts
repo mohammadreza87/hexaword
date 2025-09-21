@@ -1,90 +1,87 @@
+
+import express from 'express';
+import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@devvit/web/server', () => {
-  const store = new Map<string, string>();
-
-  const redisMock = {
-    get: vi.fn(async (key: string) => (store.has(key) ? store.get(key)! : null)),
-    set: vi.fn(async (key: string, value: string) => {
-      store.set(key, value);
-      return 'OK';
-    }),
-    del: vi.fn(async (key: string) => {
-      const existed = store.delete(key);
-      return existed ? 1 : 0;
-    }),
-    zAdd: vi.fn(),
-    __reset: () => store.clear()
-  };
+  const globalAny = globalThis as Record<string, unknown>;
+  const storeKey = '__hexawordTestRedisStore__';
+  const store = (globalAny[storeKey] as Map<string, string> | undefined) ?? new Map<string, string>();
+  globalAny[storeKey] = store;
 
   return {
     reddit: {
-      getCurrentUsername: vi.fn(async () => 'test-user')
+      getCurrentUsername: vi.fn()
     },
-    redis: redisMock,
-    context: {}
+    context: {},
+    redis: {
+      get: vi.fn(async (key: string) => store.get(key)),
+      set: vi.fn(async (key: string, value: string) => {
+        store.set(key, value);
+        return 'OK';
+      }),
+      del: vi.fn(async (...keys: string[]) => {
+        let removed = 0;
+        for (const key of keys) {
+          if (store.delete(key)) {
+            removed++;
+          }
+        }
+        return removed;
+      }),
+      zRange: vi.fn(async () => [])
+    }
   };
 });
 
-import router from '../server/routes/userLevels';
+import userLevelsRouter from '../server/routes/userLevels';
 import { redis } from '@devvit/web/server';
 
-type RouterLayer = {
-  route?: {
-    path: string;
-    methods: Record<string, boolean>;
-    stack: Array<{ handle: (req: unknown, res: unknown, next: () => void) => unknown }>;
-  };
-};
-
-function getRouteHandler(path: string, method: string) {
-  const stack = (router as unknown as { stack: RouterLayer[] }).stack;
-  for (const layer of stack) {
-    if (layer.route?.path === path && layer.route.methods?.[method.toLowerCase()]) {
-      return layer.route.stack[0].handle;
-    }
-  }
-  throw new Error(`Route handler not found for ${method.toUpperCase()} ${path}`);
+function getRedisStore(): Map<string, string> {
+  return (globalThis as Record<string, unknown>)['__hexawordTestRedisStore__'] as Map<string, string>;
 }
 
-describe('user level explore route', () => {
-  const exploreHandler = getRouteHandler('/api/user-levels/explore', 'get');
-
-  beforeEach(async () => {
-    (redis as unknown as { __reset: () => void }).__reset();
-    await redis.set('hw:ulevels:global:index', JSON.stringify([]));
+describe('GET /api/user-levels/explore', () => {
+  beforeEach(() => {
+    getRedisStore().clear();
   });
 
-  it('treats missing status as active when returning explore results', async () => {
+  it('returns levels when global index is empty but level records exist', async () => {
     const levelId = 'ul_test_level';
-    const levelData = {
+    const createdAt = new Date().toISOString();
+    const levelRecord = {
       id: levelId,
-      author: 'alice',
-      clue: 'Sample clue',
-      words: ['alpha', 'beta'],
-      seed: 'seed',
+      author: 'test-user',
+      name: 'Test Level',
+      clue: 'Guess me',
+      words: ['APPLE'],
+      seed: 'seed:test-user',
       generatorVersion: '1',
-      createdAt: new Date().toISOString(),
-      visibility: 'public'
+      createdAt,
+      visibility: 'public',
+      status: 'active',
+      playCount: 0,
+      upvotes: 0,
+      downvotes: 0,
+      shares: 0
     };
 
-    await redis.set('hw:ulevels:global:index', JSON.stringify([levelId]));
-    await redis.set(`hw:ulevel:${levelId}`, JSON.stringify(levelData));
+    await redis.set(`hw:ulevel:${levelId}`, JSON.stringify(levelRecord));
+    await redis.set('hw:ulevels:user:index', JSON.stringify(['test-user']));
+    await redis.set('hw:ulevels:user:test-user', JSON.stringify([levelId]));
+    await redis.set('hw:ulevels:global:index', JSON.stringify([]));
 
-    const req = { query: {} };
-    const json = vi.fn((payload) => payload);
-    const res = { json };
+    const app = express();
+    app.use(express.json());
+    app.use(userLevelsRouter);
 
-    await exploreHandler(req, res, () => {
-      throw new Error('next should not be called');
-    });
+    const response = await request(app).get('/api/user-levels/explore');
+    expect(response.status).toBe(200);
+    expect(response.body.levels).toHaveLength(1);
+    expect(response.body.levels[0].id).toBe(levelId);
 
-    expect(json).toHaveBeenCalledTimes(1);
-    const payload = json.mock.calls[0][0];
+    const warmedIndex = await redis.get('hw:ulevels:global:index');
+    expect(JSON.parse(warmedIndex ?? '[]')).toEqual([levelId]);
 
-    expect(payload.total).toBe(1);
-    expect(payload.levels).toHaveLength(1);
-    expect(payload.levels[0].status).toBe('active');
-    expect(payload.levels[0].id).toBe(levelId);
   });
 });
