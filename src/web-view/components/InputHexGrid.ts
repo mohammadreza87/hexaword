@@ -497,12 +497,19 @@ export class InputHexGrid {
             // Used letters have very subtle dark fill
             this.ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
             this.ctx.fill();
-            
+
             // Subtle stroke
             this.ctx.strokeStyle = this.currentColors?.inputCellStroke || 'rgba(255, 255, 255, 0.04)';
             this.ctx.lineWidth = 1;
             this.ctx.stroke();
-            
+
+            // Prominent red outline to indicate used cells
+            this.ctx.save();
+            this.ctx.strokeStyle = 'rgba(255, 64, 64, 0.85)';
+            this.ctx.lineWidth = 2;
+            this.ctx.stroke();
+            this.ctx.restore();
+
           } else {
             // Normal input cells - darker fill
             this.ctx.fillStyle = this.currentColors?.inputCellFill || 'rgba(0, 0, 0, 0.2)';

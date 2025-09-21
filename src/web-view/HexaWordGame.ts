@@ -36,6 +36,7 @@ export interface GameConfig {
 }
 
 export class HexaWordGame {
+  private static readonly TOUCH_CLICK_SUPPRESSION_MS = 400;
   private container: HTMLElement;
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -67,6 +68,7 @@ export class HexaWordGame {
   private isTargetHintMode: boolean = false;  // Track target hint mode
   private targetHintOverlay: HTMLElement | null = null;  // Blur overlay element
   private targetHintInstruction: HTMLElement | null = null;  // Instruction text element
+  private lastTouchTimestamp: number = 0;  // Track last touch to suppress duplicate clicks
   
   // User level specific
   private isUserLevel: boolean = false;
@@ -676,6 +678,13 @@ export class HexaWordGame {
    * Handles canvas click events
    */
   private handleClick(event: MouseEvent): void {
+    if (this.lastTouchTimestamp > 0) {
+      const now = performance.now();
+      if (now - this.lastTouchTimestamp < HexaWordGame.TOUCH_CLICK_SUPPRESSION_MS) {
+        return;
+      }
+    }
+
     // Don't handle clicks until game is initialized
     if (!this.isInitialized) {
       console.warn('Game not yet initialized');
@@ -736,14 +745,18 @@ export class HexaWordGame {
    */
   private handleTouch(event: TouchEvent): void {
     event.preventDefault();
-    
+    this.lastTouchTimestamp = performance.now();
+
     // Don't handle touches until game is initialized
     if (!this.isInitialized) {
       console.warn('Game not yet initialized');
       return;
     }
-    
-    const touch = event.touches[0];
+
+    const touch = event.changedTouches[0] || event.touches[0];
+    if (!touch) {
+      return;
+    }
     const rect = this.canvas.getBoundingClientRect();
     const x = touch.clientX - rect.left;
     const y = touch.clientY - rect.top;
