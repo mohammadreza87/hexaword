@@ -373,10 +373,17 @@ class App {
           <span id="menu-coin-amount" class="text-hw-text-primary font-bold">0</span>
         </div>
         
-        <!-- Settings Button (right) -->
-        <button id="hw-settings-btn" class="bg-black/20 backdrop-blur-sm rounded-full p-2 hover:bg-black/30 transition-colors">
-          <span class="text-xl">⚙️</span>
-        </button>
+        <!-- Settings and Explore Buttons (right) -->
+        <div class="flex items-center gap-2">
+          <!-- Explore Button -->
+          <button id="hw-explore-btn" class="bg-black/20 backdrop-blur-sm rounded-full p-2 hover:bg-black/30 transition-colors">
+            <span class="text-xl">🔍</span>
+          </button>
+          <!-- Settings Button -->
+          <button id="hw-settings-btn" class="bg-black/20 backdrop-blur-sm rounded-full p-2 hover:bg-black/30 transition-colors">
+            <span class="text-xl">⚙️</span>
+          </button>
+        </div>
       </div>
       
       <!-- Main Content Area -->
@@ -448,50 +455,87 @@ class App {
     // Update coin display
     this.updateMenuCoinDisplay();
 
-    // Wire buttons
+    // Wire buttons with proper null checks
     const levelBtn = el.querySelector('#hw-level') as HTMLButtonElement;
     const settingsButton = el.querySelector('#hw-settings-btn') as HTMLButtonElement;
+    const exploreButton = el.querySelector('#hw-explore-btn') as HTMLButtonElement;
     const createBtn = el.querySelector('#hw-create') as HTMLButtonElement;
 
-    levelBtn.onclick = async () => {
-      if (this.menuBusy) return;
-      this.menuBusy = true;
-      // Immediately disable all interactive controls in the menu to prevent double clicks
-      try {
-        const disableAll = () => {
-          // Disable all buttons within the menu
-          el.querySelectorAll('button').forEach((b) => {
-            const btn = b as HTMLButtonElement;
-            btn.disabled = true;
-            btn.style.pointerEvents = 'none';
-            btn.classList.add('opacity-50', 'cursor-not-allowed');
-          });
-        };
-        disableAll();
-      } catch {}
-      // Apply layered blur for depth effect during transition
-      blurTransition.applyLayeredBlur([
-        { elementId: 'hw-main-menu', level: 'xl', delay: 0 },
-        { elementId: 'hex-grid-container', level: 'lg', delay: 50 }
-      ]);
-      
-      await this.fadeTransition(async () => {
-        await this.loadLevelFromServer(this.currentLevel);
-        this.hideMainMenu();
-        this.menuBusy = false; // clear busy once menu is hidden
+    // Debug to check if buttons are found
+    console.log('Menu buttons found:', {
+      level: !!levelBtn,
+      settings: !!settingsButton,
+      explore: !!exploreButton,
+      create: !!createBtn
+    });
+
+    if (levelBtn) {
+      levelBtn.addEventListener('click', async () => {
+        console.log('Play button clicked');
+        if (this.menuBusy) return;
+        this.menuBusy = true;
+        // Immediately disable all interactive controls in the menu to prevent double clicks
+        try {
+          const disableAll = () => {
+            // Disable all buttons within the menu
+            el.querySelectorAll('button').forEach((b) => {
+              const btn = b as HTMLButtonElement;
+              btn.disabled = true;
+              btn.style.pointerEvents = 'none';
+              btn.classList.add('opacity-50', 'cursor-not-allowed');
+            });
+          };
+          disableAll();
+        } catch {}
+        // Apply layered blur for depth effect during transition
+        blurTransition.applyLayeredBlur([
+          { elementId: 'hw-main-menu', level: 'xl', delay: 0 },
+          { elementId: 'hex-grid-container', level: 'lg', delay: 50 }
+        ]);
+
+        await this.fadeTransition(async () => {
+          await this.loadLevelFromServer(this.currentLevel);
+          this.hideMainMenu();
+          this.menuBusy = false; // clear busy once menu is hidden
+        });
       });
-    };
-    
+    }
+
     // Settings button handler
-    settingsButton.onclick = () => {
-      this.showSettingsPanel();
-    };
+    if (settingsButton) {
+      settingsButton.addEventListener('click', () => {
+        console.log('Settings button clicked');
+        this.showSettingsPanel();
+      });
+      // Also ensure the button has proper z-index
+      settingsButton.style.position = 'relative';
+      settingsButton.style.zIndex = '100';
+    } else {
+      console.error('Settings button not found!');
+    }
+
+    // Explore button handler
+    if (exploreButton) {
+      exploreButton.addEventListener('click', async () => {
+        console.log('Explore button clicked');
+        if (this.menuBusy) return;
+        await this.showExploreLevelsView();
+      });
+      // Also ensure the button has proper z-index
+      exploreButton.style.position = 'relative';
+      exploreButton.style.zIndex = '100';
+    } else {
+      console.error('Explore button not found!');
+    }
 
     // My Levels flow (shows inline like leaderboard)
-    createBtn.onclick = async () => {
-      if (this.menuBusy) return;
-      await this.showMyLevelsView();
-    };
+    if (createBtn) {
+      createBtn.addEventListener('click', async () => {
+        console.log('My Levels button clicked');
+        if (this.menuBusy) return;
+        await this.showMyLevelsView();
+      });
+    }
     
     // Daily Challenge button handler
     const dailyChallengeBtn = el.querySelector('#hw-daily-challenge') as HTMLButtonElement;
@@ -542,6 +586,133 @@ class App {
     });
   }
   
+  private async showExploreLevelsView(): Promise<void> {
+    // Remove any existing views
+    const existingView = document.getElementById('explore-levels-view');
+    if (existingView) existingView.remove();
+
+    // Create Explore Levels container
+    const exploreLevelsContainer = document.createElement('div');
+    exploreLevelsContainer.id = 'explore-levels-view';
+    exploreLevelsContainer.className = 'absolute inset-0 z-10 pointer-events-none';
+
+    // Build full Explore Levels UI
+    exploreLevelsContainer.innerHTML = `
+      <div class="absolute inset-0 top-16 bottom-16 bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 overflow-hidden pointer-events-auto">
+        <!-- Header with gradient background -->
+        <div class="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4 shadow-xl">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-sm font-bold text-white flex items-center gap-1">
+                <span class="text-base">🔍</span>
+                <span>Explore Levels</span>
+              </h2>
+              <p class="text-indigo-200 text-[10px] mt-0.5">Discover amazing levels created by the community</p>
+            </div>
+            <button id="explore-back" class="text-white/80 hover:text-white transition-all transform hover:scale-110 p-1">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Search Bar -->
+        <div class="bg-black/40 backdrop-blur-md border-b border-white/10 p-2">
+          <div class="max-w-2xl mx-auto">
+            <div class="relative">
+              <input
+                id="explore-search-input"
+                type="text"
+                placeholder="Search by username, level name, clue, or code..."
+                class="w-full px-6 py-1.5 text-xs bg-white/10 backdrop-blur-sm border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:border-purple-400 focus:bg-white/15 transition-all"
+              />
+              <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+              </svg>
+              <button id="explore-search-btn" class="absolute right-1 top-1/2 -translate-y-1/2 px-2 py-0.5 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white text-[10px] font-semibold rounded-md transition-all transform hover:scale-105">
+                Search
+              </button>
+            </div>
+
+            <!-- Filter Tabs -->
+            <div class="flex gap-1 mt-2">
+              <button class="explore-filter-tab active px-2 py-0.5 text-[10px] font-medium text-white/90 bg-white/20 rounded-md transition-all" data-filter="latest">
+                Latest
+              </button>
+              <button class="explore-filter-tab px-2 py-0.5 text-[10px] font-medium text-white/60 hover:text-white/90 hover:bg-white/10 rounded-md transition-all" data-filter="popular">
+                Popular
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Content Area -->
+        <div class="overflow-y-auto" style="height: calc(100% - 120px);">
+          <div id="explore-levels-list" class="p-3">
+            <!-- Loading state -->
+            <div class="flex flex-col items-center justify-center py-16">
+              <div class="relative">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500"></div>
+                <span class="absolute inset-0 flex items-center justify-center text-base">🔍</span>
+              </div>
+              <div class="text-[10px] text-white/60 mt-3">Discovering amazing levels...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Add to main menu
+    const mainMenu = document.getElementById('hw-main-menu');
+    if (!mainMenu) return;
+
+    // Hide main content
+    const mainContent = mainMenu.querySelector('.relative.h-full');
+    if (mainContent) {
+      (mainContent as HTMLElement).style.display = 'none';
+    }
+
+    mainMenu.appendChild(exploreLevelsContainer);
+
+    // Animate entrance with GSAP
+    const timeline = gsap.timeline();
+    timeline.fromTo(exploreLevelsContainer.querySelector('.bg-gradient-to-r'),
+      { y: -100, opacity: 0 },
+      { y: 0, opacity: 1, duration: 0.5, ease: "power3.out" }
+    );
+    timeline.fromTo(exploreLevelsContainer.querySelector('.bg-black\\/40'),
+      { y: -50, opacity: 0 },
+      { y: 0, opacity: 1, duration: 0.4, ease: "power3.out" },
+      "-=0.3"
+    );
+    timeline.fromTo(exploreLevelsContainer.querySelector('#explore-levels-list'),
+      { opacity: 0, scale: 0.95 },
+      { opacity: 1, scale: 1, duration: 0.4, ease: "power3.out" },
+      "-=0.2"
+    );
+
+    // Setup Explore Levels functionality
+    await this.setupExploreLevels();
+
+    // Setup back button
+    const backBtn = exploreLevelsContainer.querySelector('#explore-back');
+    if (backBtn) {
+      backBtn.addEventListener('click', () => {
+        // Animate exit
+        gsap.to(exploreLevelsContainer, {
+          opacity: 0,
+          scale: 0.95,
+          duration: 0.3,
+          ease: "power2.in",
+          onComplete: () => {
+            this.activateTab('home');
+          }
+        });
+      });
+    }
+  }
+
   private async showMyLevelsView(): Promise<void> {
     // Remove any existing views
     const existingView = document.getElementById('my-levels-view');
@@ -621,17 +792,23 @@ class App {
       const { LevelManager } = await import('./features/LevelManager');
       
       // Fetch user levels
+      console.log('Fetching user levels from /api/user-levels/mine');
       const response = await fetch('/api/user-levels/mine', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json'
         }
       });
-      
+
+      console.log('My Levels API response status:', response.status);
       let levels: any[] = [];
       if (response.ok) {
         const data = await response.json();
+        console.log('My Levels API data:', data);
         levels = data.levels || [];
+      } else {
+        const errorData = await response.json();
+        console.error('My Levels API Error:', errorData);
       }
       
       // Render levels
@@ -811,6 +988,260 @@ class App {
       console.error('Failed to open level explorer:', error);
       this.showToast('Failed to open level explorer', 'error');
     }
+  }
+
+  private async setupExploreLevels(): Promise<void> {
+    let currentFilter = 'latest';
+    let searchQuery = '';
+
+    const loadLevels = async (filter: string = 'latest', search: string = '') => {
+      const listContainer = document.getElementById('explore-levels-list');
+      if (!listContainer) return;
+
+      // Show loading state
+      listContainer.innerHTML = `
+        <div class="flex flex-col items-center justify-center py-12">
+          <div class="relative">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500"></div>
+            <span class="absolute inset-0 flex items-center justify-center text-base">🔍</span>
+          </div>
+          <div class="text-[10px] text-white/60 mt-3">Searching for levels...</div>
+        </div>
+      `;
+
+      try {
+        // Construct query params
+        const params = new URLSearchParams();
+        if (search) params.append('search', search);
+        params.append('filter', filter);
+
+        console.log('Fetching explore levels with params:', params.toString());
+        const response = await fetch(`/api/user-levels/explore?${params}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+
+        console.log('Explore API response status:', response.status);
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error('API Error:', errorData);
+          throw new Error(errorData?.error?.message || 'Failed to fetch levels');
+        }
+
+        const data = await response.json();
+        console.log('Explore API data:', data);
+        const levels = data.levels || [];
+
+        if (levels.length === 0) {
+          listContainer.innerHTML = `
+            <div class="text-center py-12">
+              <div class="text-4xl mb-3 opacity-30">🔍</div>
+              <div class="text-sm text-white/80 mb-1">No levels found</div>
+              <div class="text-[10px] text-white/50">
+                ${search ? 'Try adjusting your search terms' : 'Be the first to create a level!'}
+              </div>
+            </div>
+          `;
+        } else {
+          // Create level cards with enhanced styling
+          listContainer.innerHTML = `
+            <div class="grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+              ${levels.map((level: any) => `
+                <div class="level-explore-card group relative overflow-hidden rounded-lg bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-sm border border-white/10 hover:border-purple-400/50 transition-all duration-300 hover:scale-[1.02] hover:shadow-lg hover:shadow-purple-500/10">
+                  <div class="p-2">
+                    <!-- Header -->
+                    <div class="flex items-start justify-between mb-1.5">
+                      <div class="flex-1">
+                        <h3 class="font-semibold text-white text-[10px] mb-0.5 truncate">${level.name || 'Untitled Level'}</h3>
+                        <div class="flex items-center gap-1 text-[9px] text-white/60">
+                          <span>by ${level.author || 'Anonymous'}</span>
+                          <span>•</span>
+                          <span>${this.formatRelativeTime(level.createdAt)}</span>
+                        </div>
+                      </div>
+                      ${level.difficulty ? `
+                        <span class="px-1 py-0.5 rounded-full text-[9px] font-semibold ${
+                          level.difficulty === 'easy' ? 'bg-green-500/20 text-green-300' :
+                          level.difficulty === 'medium' ? 'bg-yellow-500/20 text-yellow-300' :
+                          'bg-red-500/20 text-red-300'
+                        }">
+                          ${level.difficulty}
+                        </span>
+                      ` : ''}
+                    </div>
+
+                    <!-- Clue -->
+                    <div class="mb-1.5 p-1.5 rounded bg-black/20 border border-white/5">
+                      <div class="text-[9px] text-purple-300">Clue:</div>
+                      <div class="text-[10px] text-white/90">${level.clue}</div>
+                    </div>
+
+                    <!-- Words preview -->
+                    <div class="mb-1.5">
+                      <div class="flex flex-wrap gap-0.5">
+                        ${level.words.slice(0, 3).map((word: string) => `
+                          <span class="px-1 py-0.5 rounded bg-purple-500/20 text-purple-300 text-[9px] font-mono uppercase">
+                            ${word}
+                          </span>
+                        `).join('')}
+                        ${level.words.length > 3 ? `
+                          <span class="px-1 py-0.5 rounded bg-white/10 text-white/50 text-[9px]">
+                            +${level.words.length - 3}
+                          </span>
+                        ` : ''}
+                      </div>
+                    </div>
+
+                    <!-- Stats -->
+                    <div class="flex items-center justify-between text-[9px] text-white/50 mb-1.5">
+                      <div class="flex items-center gap-2">
+                        <span class="flex items-center gap-0.5">
+                          <span class="text-[8px]">🎮</span>
+                          <span>${level.playCount || 0}</span>
+                        </span>
+                        <span class="flex items-center gap-0.5">
+                          <span class="text-[8px]">👍</span>
+                          <span>${level.upvotes || 0}</span>
+                        </span>
+                        <span class="flex items-center gap-0.5">
+                          <span class="text-[8px]">✅</span>
+                          <span>${level.completions || 0}</span>
+                        </span>
+                      </div>
+                      ${level.code ? `
+                        <span class="px-1 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-mono text-[8px]">
+                          #${level.code}
+                        </span>
+                      ` : ''}
+                    </div>
+
+                    <!-- Action buttons -->
+                    <div class="flex gap-1">
+                      <button class="explore-play-btn flex-1 px-1.5 py-0.5 rounded bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-semibold text-[9px] transition-all transform hover:scale-105 flex items-center justify-center gap-0.5" data-level-id="${level.id}">
+                        <span class="text-[10px]">▶️</span>
+                        <span>Play</span>
+                      </button>
+                      <button class="explore-share-btn px-1.5 py-0.5 rounded bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white font-semibold text-[9px] transition-all transform hover:scale-105" data-level-id="${level.id}" data-level-name="${level.name || 'Custom Level'}" data-level-clue="${level.clue}">
+                        <span class="text-[10px]">📤</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Decorative gradient overlay -->
+                  <div class="absolute inset-0 bg-gradient-to-t from-purple-500/10 to-transparent pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                </div>
+              `).join('')}
+            </div>
+          `;
+
+          // Animate cards entrance with GSAP
+          const cards = listContainer.querySelectorAll('.level-explore-card');
+          gsap.fromTo(cards,
+            { opacity: 0, y: 20, scale: 0.95 },
+            {
+              opacity: 1,
+              y: 0,
+              scale: 1,
+              duration: 0.4,
+              stagger: 0.05,
+              ease: "power2.out"
+            }
+          );
+
+          // Wire up play buttons
+          listContainer.querySelectorAll('.explore-play-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+              e.stopPropagation();
+              const levelId = (btn as HTMLElement).dataset.levelId;
+              if (!levelId) return;
+
+              // Animate button click
+              gsap.to(btn, {
+                scale: 0.95,
+                duration: 0.1,
+                yoyo: true,
+                repeat: 1
+              });
+
+              // Close explore view and start level
+              await this.playUserLevel(levelId);
+              this.hideMainMenu();
+            });
+          });
+
+          // Wire up share buttons
+          listContainer.querySelectorAll('.explore-share-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+              e.stopPropagation();
+              const levelId = (btn as HTMLElement).dataset.levelId;
+              const levelName = (btn as HTMLElement).dataset.levelName;
+              const levelClue = (btn as HTMLElement).dataset.levelClue;
+
+              if (!levelId || !levelName || !levelClue) return;
+
+              await this.shareLevelInline(levelId, levelName, levelClue);
+            });
+          });
+        }
+      } catch (error) {
+        console.error('Failed to load levels:', error);
+        listContainer.innerHTML = `
+          <div class="text-center py-12">
+            <div class="text-3xl mb-3 opacity-30">❌</div>
+            <div class="text-sm text-red-400 mb-1">Failed to load levels</div>
+            <div class="text-[10px] text-white/50">Please try again later</div>
+          </div>
+        `;
+      }
+    };
+
+    // Initial load
+    await loadLevels(currentFilter, searchQuery);
+
+    // Setup filter tabs
+    const filterTabs = document.querySelectorAll('.explore-filter-tab');
+    filterTabs.forEach(tab => {
+      tab.addEventListener('click', async () => {
+        const filter = (tab as HTMLElement).dataset.filter || 'latest';
+
+        // Update active state
+        filterTabs.forEach(t => {
+          t.classList.remove('active', 'bg-white/20', 'text-white/90');
+          t.classList.add('text-white/60', 'hover:text-white/90', 'hover:bg-white/10');
+        });
+        tab.classList.add('active', 'bg-white/20', 'text-white/90');
+        tab.classList.remove('text-white/60', 'hover:text-white/90', 'hover:bg-white/10');
+
+        currentFilter = filter;
+        await loadLevels(currentFilter, searchQuery);
+      });
+    });
+
+    // Setup search
+    const searchInput = document.getElementById('explore-search-input') as HTMLInputElement;
+    const searchBtn = document.getElementById('explore-search-btn');
+
+    const performSearch = async () => {
+      searchQuery = searchInput.value.trim();
+      await loadLevels(currentFilter, searchQuery);
+    };
+
+    searchBtn?.addEventListener('click', performSearch);
+    searchInput?.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        performSearch();
+      }
+    });
+
+    // Clear search on input clear
+    searchInput?.addEventListener('input', () => {
+      if (searchInput.value === '' && searchQuery !== '') {
+        searchQuery = '';
+        loadLevels(currentFilter, searchQuery);
+      }
+    });
   }
 
   private formatRelativeTime(dateString: string): string {
@@ -1279,15 +1710,18 @@ class App {
     
     if (tabName === 'home') {
       // Show main content
-      const mainContent = mainMenu.querySelector('.flex.flex-col.items-center.justify-center.h-full') as HTMLElement;
+      const mainContent = mainMenu.querySelector('.relative.h-full') as HTMLElement;
       if (mainContent) mainContent.style.display = '';
       
       // Remove any inline views
       const leaderboardView = document.getElementById('leaderboard-view');
       if (leaderboardView) leaderboardView.remove();
-      
+
       const myLevelsView = document.getElementById('my-levels-view');
       if (myLevelsView) myLevelsView.remove();
+
+      const exploreLevelsView = document.getElementById('explore-levels-view');
+      if (exploreLevelsView) exploreLevelsView.remove();
       
       // Update tab styles
       if (homeTab) {

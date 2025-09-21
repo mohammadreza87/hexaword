@@ -174,7 +174,14 @@ router.post('/api/user-levels', async (req: Request, res: Response) => {
       const idList = existingIds ? JSON.parse(existingIds) : [];
       idList.push(id);
       await redis.set(userKey, JSON.stringify(idList));
-      
+
+      // Also add to global index for explore feature
+      const globalIndexKey = 'hw:ulevels:global:index';
+      const globalIdsJson = await redis.get(globalIndexKey);
+      const globalIds = globalIdsJson ? JSON.parse(globalIdsJson) : [];
+      globalIds.push(id);
+      await redis.set(globalIndexKey, JSON.stringify(globalIds));
+
       console.log('Level saved successfully');
       
       // Update creator stats
@@ -199,6 +206,109 @@ router.post('/api/user-levels', async (req: Request, res: Response) => {
   } catch (err) {
     console.error('Create user level failed:', err);
     return res.status(500).json({ error: { code: 'SERVER_ERROR', message: 'Failed to create level', details: err.message } });
+  }
+});
+
+// Explore levels - search and filter functionality
+router.get('/api/user-levels/explore', async (req: Request, res: Response) => {
+  try {
+    const { search, filter = 'latest' } = req.query;
+
+    // Get all level keys (we'll need to scan since Redis doesn't support complex queries)
+    // In production, you'd want to use a proper database or maintain indices
+    const allLevelKeys: string[] = [];
+
+    // For now, we'll fetch recent levels from a global index
+    // First, let's maintain a global index of all levels
+    const globalIndexKey = 'hw:ulevels:global:index';
+    const globalIdsJson = await redis.get(globalIndexKey);
+    const globalIds = globalIdsJson ? JSON.parse(globalIdsJson) : [];
+
+    console.log('Global index has', globalIds.length, 'levels');
+
+    // If no global index exists, try to get some sample levels from individual users
+    if (globalIds.length === 0) {
+      // For development/testing, return empty or sample data
+      console.log('No levels in global index, returning empty result');
+      return res.json({ levels: [], total: 0 });
+    }
+
+    // Fetch all levels (limit to 100 for performance)
+    const maxLevels = 100;
+    const recentIds = globalIds.slice(-maxLevels).reverse(); // Most recent first
+
+    const allLevels: UserLevelRecord[] = [];
+    for (const id of recentIds) {
+      try {
+        const raw = await redis.get(`hw:ulevel:${id}`);
+        if (raw) {
+          const level = JSON.parse(raw);
+          // Only include public/active levels
+          if (level.status === 'active') {
+            allLevels.push(level);
+          }
+        }
+      } catch (parseErr) {
+        console.error(`Failed to parse level ${id}:`, parseErr);
+      }
+    }
+
+    // Apply search filter if provided
+    let filteredLevels = allLevels;
+    if (search && typeof search === 'string') {
+      const searchLower = search.toLowerCase();
+      filteredLevels = allLevels.filter(level => {
+        // Search in username, level name, clue, words, and code
+        const nameMatch = level.name?.toLowerCase().includes(searchLower);
+        const authorMatch = level.author?.toLowerCase().includes(searchLower);
+        const clueMatch = level.clue?.toLowerCase().includes(searchLower);
+        const wordsMatch = level.words.some(word => word.toLowerCase().includes(searchLower));
+        const codeMatch = level.id?.toLowerCase().includes(searchLower);
+
+        return nameMatch || authorMatch || clueMatch || wordsMatch || codeMatch;
+      });
+    }
+
+    // Apply sorting based on filter
+    switch (filter) {
+      case 'popular':
+        // Sort by play count and upvotes
+        filteredLevels.sort((a, b) => {
+          const scoreA = (a.playCount || 0) + (a.upvotes || 0) * 2;
+          const scoreB = (b.playCount || 0) + (b.upvotes || 0) * 2;
+          return scoreB - scoreA;
+        });
+        break;
+      case 'latest':
+      default:
+        // Already sorted by most recent
+        filteredLevels.sort((a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+        break;
+    }
+
+    // Add computed fields
+    const levelsWithStats = filteredLevels.map(level => ({
+      ...level,
+      code: level.id.slice(-6), // Show last 6 chars as code
+      completions: Math.floor((level.playCount || 0) * 0.7), // Estimate completions
+      difficulty: level.words.length <= 3 ? 'easy' : level.words.length <= 4 ? 'medium' : 'hard'
+    }));
+
+    return res.json({
+      levels: levelsWithStats.slice(0, 50), // Limit response to 50 levels
+      total: levelsWithStats.length
+    });
+  } catch (err) {
+    console.error('Explore levels failed:', err);
+    return res.status(500).json({
+      error: {
+        code: 'SERVER_ERROR',
+        message: 'Failed to fetch levels',
+        details: err.message
+      }
+    });
   }
 });
 
