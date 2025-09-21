@@ -1,7 +1,9 @@
 import { context, reddit } from "@devvit/web/server";
 import { calculateCycleDay, getChallengeForDay } from "../data/dailyChallenges";
 
-const formatDayTypeHeading = (dayType: string): string => {
+const LETTER_SEPARATOR = " · ";
+
+export const formatDayTypeHeading = (dayType: string): string => {
   const formatted = dayType
     .split(" ")
     .map((segment) =>
@@ -14,7 +16,7 @@ const formatDayTypeHeading = (dayType: string): string => {
   return `${formatted} Daily Challenge`;
 };
 
-const extractLetterSet = (words: string[]): string => {
+export const getUniqueLetters = (words: string[]): string[] => {
   const seen = new Set<string>();
   const orderedLetters: string[] = [];
 
@@ -28,7 +30,36 @@ const extractLetterSet = (words: string[]): string => {
     }
   }
 
-  return orderedLetters.join(" · ");
+  return orderedLetters;
+};
+
+export const formatLetterPrompt = (letters: string[]): string =>
+  letters.join(LETTER_SEPARATOR);
+
+export const buildSplashDescription = (
+  clue: string,
+  letterPrompt: string,
+  wordCount: number
+): string => {
+  const parts = [`Clue: ${clue}`];
+
+  if (letterPrompt) {
+    parts.push(`Letters: ${letterPrompt}`);
+  }
+
+  const wordLabel = wordCount === 1 ? "word" : "words";
+  parts.push(`Find ${wordCount} ${wordLabel}`);
+
+  return parts.join(" • ");
+};
+
+export const buildPostTitle = (
+  cycleDay: number,
+  clue: string,
+  letterPrompt: string
+): string => {
+  const titleBase = `HexaWord Daily Challenge #${cycleDay}: ${clue}`;
+  return letterPrompt ? `${titleBase} (${letterPrompt})` : titleBase;
 };
 
 export const createPost = async () => {
@@ -42,23 +73,34 @@ export const createPost = async () => {
   const challenge = getChallengeForDay(cycleDay);
 
   const heading = formatDayTypeHeading(challenge.dayType);
-  const letterPrompt = extractLetterSet(challenge.words);
+  const letters = getUniqueLetters(challenge.words);
+  const letterPrompt = formatLetterPrompt(letters);
+  const description = buildSplashDescription(
+    challenge.clue,
+    letterPrompt,
+    challenge.words.length
+  );
+  const title = buildPostTitle(cycleDay, challenge.clue, letterPrompt);
 
   return await reddit.submitCustomPost({
     splash: {
       appDisplayName: "HexaWord",
       heading,
-      description: `${challenge.clue} - Find ${challenge.words.length} words`,
-      buttonLabel: "Play",
-      backgroundUri: "splash-background.svg",
-      appIconUri: "hexaword-icon.svg",
+      description,
+      buttonLabel: "Start today's puzzle",
+      backgroundUri: "/daily-challenge-splash.svg",
+      appIconUri: "/hexaword-icon.svg",
       entryUri: "index.html",
     },
     subredditName: subredditName,
-    title: "hexaword",
+    title,
     postData: {
       cycleDay,
       clue: challenge.clue,
+      dayType: challenge.dayType,
+      letters,
+      letterPrompt,
+      words: challenge.words,
     },
   });
 };
