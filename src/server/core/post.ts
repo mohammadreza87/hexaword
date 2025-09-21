@@ -58,6 +58,11 @@ export const createPost = async () => {
       buttonLabel: "Play the Daily Challenge",
       backgroundUri: SPLASH_BACKGROUND_URI,
       appIconUri: SPLASH_ICON_URI,
+
+      description: `Today's clue: ${challenge.clue}. Use these letters to uncover ${challenge.words.length} themed words and keep your streak alive: ${letterPrompt}. Share your daily run, conquer curated levels, and compare progress with friends.`,
+      buttonLabel: "Play the Daily Challenge",
+      backgroundUri: "/daily-challenge-splash.svg",
+      appIconUri: "/hexaword-icon.svg",
       entryUri: "index.html",
     },
     subredditName: subredditName,
