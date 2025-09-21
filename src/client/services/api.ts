@@ -136,8 +136,14 @@ export async function fetchGameDataWithFallback(
   seed: string;
   words: string[];
   postId: string;
-  level: number;
+  level: number | string;
   clue?: string;
+  name?: string;
+  author?: string;
+  levelId?: string;
+  shareType?: string;
+  letters?: string[];
+  palette?: string;
 }> {
   const defaultWords = [
     'GOLFER', 'ATHLETE', 'CAPTAIN', 'PAINTER', 'DESIGNER',
@@ -150,8 +156,14 @@ export async function fetchGameDataWithFallback(
       seed: init.seed || getLocalSeed(),
       words: init.words?.length ? init.words : defaultWords,
       postId: init.postId || 'unknown',
-      level: init.level ?? level,
+      level: (init.level as number | string) ?? level,
       clue: init.clue,
+      name: init.name,
+      author: init.author,
+      levelId: init.levelId,
+      shareType: init.shareType,
+      letters: init.letters,
+      palette: init.palette,
     };
   } catch (error) {
     // Log error for debugging
@@ -172,6 +184,7 @@ export async function fetchGameDataWithFallback(
       postId: 'local',
       level,
       clue: 'RANDOM MIX',
+      shareType: undefined,
     };
   }
 }
