@@ -1280,7 +1280,12 @@ class App {
   }
 
   private async handleSharedLevelLaunch(): Promise<void> {
+    console.log('[Splash Debug] handleSharedLevelLaunch called');
+    console.log('[Splash Debug] URL params:', window.location.search);
+    console.log('[Splash Debug] sharedLevelHandled:', this.sharedLevelHandled);
+
     if (this.sharedLevelHandled) {
+      console.log('[Splash Debug] Level already handled, returning');
       return;
     }
 
@@ -1339,14 +1344,20 @@ class App {
       stats.push(`Created ${createdAgo}`);
     }
 
+    console.log('[Splash Debug] Creating shared level splash screen');
+    console.log('[Splash Debug] Background SVG path: /assets/shared-level-splash.svg');
+
     const overlay = document.createElement('div');
     overlay.id = 'shared-level-splash';
     overlay.className = 'fixed inset-0 z-[10002] flex items-center justify-center px-4 py-10';
     overlay.innerHTML = `
-      <div class="absolute inset-0 bg-gradient-to-br from-[#1c0f3c]/95 via-[#0b101f]/92 to-black/95 backdrop-blur-2xl"></div>
+      <div class="absolute inset-0 overflow-hidden">
+        <img src="/assets/shared-level-splash.svg" alt="" class="h-full w-full object-cover"
+             onerror="console.error('[Splash Debug] Failed to load SVG:', this.src); this.style.display='none';"
+             onload="console.log('[Splash Debug] SVG loaded successfully:', this.src);" />
+        <div class="absolute inset-0 bg-gradient-to-br from-[#1c0f3c]/90 via-[#0b101f]/88 to-black/90 backdrop-blur-2xl"></div>
+      </div>
       <div class="relative w-full max-w-2xl overflow-hidden rounded-3xl border border-white/10 bg-white/5 shadow-[0_25px_120px_rgba(96,76,255,0.45)]">
-        <div class="absolute -top-40 -right-24 h-80 w-80 rounded-full bg-purple-500/30 blur-3xl"></div>
-        <div class="absolute -bottom-52 -left-36 h-80 w-80 rounded-full bg-sky-500/20 blur-3xl"></div>
         <div class="relative space-y-8 p-8 md:p-10 text-white">
           <div class="space-y-3 text-center">
             <span class="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-white/70">
@@ -1388,9 +1399,19 @@ class App {
 
     overlay.style.opacity = '0';
     overlay.style.transition = 'opacity 220ms ease-out';
+
+    console.log('[Splash Debug] Appending overlay to body');
+    console.log('[Splash Debug] Current body children before append:', document.body.children.length);
+
     document.body.appendChild(overlay);
+
+    console.log('[Splash Debug] Body children after append:', document.body.children.length);
+    console.log('[Splash Debug] Overlay element added:', document.getElementById('shared-level-splash'));
+    console.log('[Splash Debug] Checking SVG img element:', overlay.querySelector('img[src*="shared-level-splash"]'));
+
     requestAnimationFrame(() => {
       overlay.style.opacity = '1';
+      console.log('[Splash Debug] Splash screen now visible');
     });
 
     const closeSplash = () => {

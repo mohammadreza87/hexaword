@@ -3,7 +3,6 @@ import {
   buildSplashConfig,
   buildSplashDescription,
   computeUniqueLetters,
-  createGradientBackground,
   createSharedLevelRecord
 } from '../server/utils/levelShare';
 
@@ -15,21 +14,16 @@ describe('level share utilities', () => {
 
   it('builds descriptive splash content with author and letters', () => {
     const description = buildSplashDescription('Test clue', ['A', 'B', 'C'], 'creator');
-    expect(description).toContain('Test clue');
-    expect(description).toContain('creator');
-    expect(description).toContain('A • B • C');
+    expect(description).toContain('**Test clue**');
+    expect(description).toContain('By creator');
+    expect(description).toContain('A B C');
   });
 
-  it('creates splash configuration with gradient background', () => {
+  it('creates splash configuration with data URI background', () => {
     const splash = buildSplashConfig({ clue: 'Ocean breeze', words: ['wave', 'coral', 'tide'], author: 'u/tester' });
     expect(splash.backgroundUri.startsWith('data:image/svg+xml;base64,')).toBe(true);
-    expect(splash.heading).toBe('Community Challenge');
+    expect(splash.heading).toBe('🎯 HexaWord Challenge');
     expect(splash.letters.length).toBeGreaterThan(0);
-  });
-
-  it('generates gradient backgrounds for palette colors', () => {
-    const uri = createGradientBackground('#000000', '#ffffff', '#123456', ['A', 'B']);
-    expect(uri.startsWith('data:image/svg+xml;base64,')).toBe(true);
   });
 
   it('creates shared level records using provided letters', () => {

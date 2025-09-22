@@ -5,7 +5,8 @@ import {
   SHARED_LEVEL_REDIS_KEY_PREFIX,
   buildSplashConfig,
   createSharedLevelRecord,
-  defaultShareTitle
+  defaultShareTitle,
+  createHexagonIcon
 } from '../utils/levelShare';
 
 type UserLevelRecord = {
@@ -117,7 +118,7 @@ router.post('/api/share/user-level', asyncHandler(async (req, res) => {
         description: splash.description,
         entryUri: 'index.html',
         heading: splash.heading,
-        appIconUri: '/hexaword-icon.svg'
+        appIconUri: createHexagonIcon()
       },
       postData: {
         shared: true,
