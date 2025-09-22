@@ -1312,7 +1312,14 @@ class App {
         return;
       }
 
-      this.renderSharedLevelSplash(levelId, data.level as SharedLevelPreview);
+      const menuWasVisible = !!(this.mainMenuEl && !this.mainMenuEl.classList.contains('hidden'));
+      if (menuWasVisible) {
+        await this.hideMainMenu();
+      }
+
+      this.renderSharedLevelSplash(levelId, data.level as SharedLevelPreview, {
+        restoreMenuOnDismiss: menuWasVisible
+      });
     } catch (error) {
       console.error('Failed to load shared level preview:', error);
       this.showToast('Failed to open shared level', 'error');
@@ -1320,7 +1327,12 @@ class App {
     }
   }
 
-  private renderSharedLevelSplash(levelId: string, preview: SharedLevelPreview): void {
+  private renderSharedLevelSplash(
+    levelId: string,
+    preview: SharedLevelPreview,
+    options?: { restoreMenuOnDismiss?: boolean }
+  ): void {
+    const restoreMenuOnDismiss = options?.restoreMenuOnDismiss === true;
     const displayName = preview.name?.trim() || 'Shared HexaWord Puzzle';
     const clue = preview.clue?.trim() || 'Solve this custom HexaWord challenge';
     const author = preview.author ? `@${preview.author}` : 'a HexaWord creator';
@@ -1414,21 +1426,32 @@ class App {
       console.log('[Splash Debug] Splash screen now visible');
     });
 
-    const closeSplash = () => {
+    const closeSplash = ({ restoreMenu = false }: { restoreMenu?: boolean } = {}) => {
       overlay.style.opacity = '0';
-      overlay.addEventListener('transitionend', () => overlay.remove(), { once: true });
+      let removed = false;
+      const handleRemoval = () => {
+        if (removed) return;
+        removed = true;
+        overlay.remove();
+        if (restoreMenu && restoreMenuOnDismiss) {
+          this.showMainMenu();
+        }
+      };
+
+      overlay.addEventListener('transitionend', handleRemoval, { once: true });
+      setTimeout(handleRemoval, 250);
       this.clearSharedLevelQuery();
     };
 
     overlay.addEventListener('click', (event) => {
       if (event.target === overlay) {
-        closeSplash();
+        closeSplash({ restoreMenu: true });
       }
     });
 
     const dismissBtn = overlay.querySelector<HTMLButtonElement>('#shared-level-dismiss');
     dismissBtn?.addEventListener('click', () => {
-      closeSplash();
+      closeSplash({ restoreMenu: true });
     });
 
     const playBtn = overlay.querySelector<HTMLButtonElement>('#shared-level-play');
@@ -1443,10 +1466,10 @@ class App {
       try {
         await blurTransition.transitionWithBlur(async () => {
           await this.playUserLevel(levelId);
-          this.hideMainMenu();
+          await this.hideMainMenu();
         }, { blurIntensity: 'lg', inDuration: 200, outDuration: 250 });
 
-        closeSplash();
+        closeSplash({ restoreMenu: false });
       } catch (error) {
         console.error('Failed to start shared level:', error);
         this.showToast('Failed to load shared level', 'error');
@@ -2810,8 +2833,9 @@ class App {
         return;
       }
 
-      await this.playUserLevel(levelParam);
-      this.hideMainMenu();
+      // Non-numeric level params correspond to shared/user-created levels.
+      // These are handled by the shared level splash flow so we can return early here.
+      return;
     } catch (err) {
       console.error('Failed to process deep link:', err);
     }
