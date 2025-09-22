@@ -19,6 +19,7 @@ import { HintStorageService } from './services/HintStorageService';
 import { ColorPaletteService } from '../web-view/services/ColorPaletteService';
 import { getPaletteForLevel } from '../web-view/config/ColorPalettes';
 import { shareUserLevelToReddit } from './services/UserLevelShareService';
+import { getLevelQuery, hasLevelQuery, isUserLevelId } from './utils/levelLinks';
 
 
 interface SharedLevelPreview {
@@ -120,13 +121,29 @@ class App {
         await this.applyMenuTheme(1);
       }
     } catch {}
-    this.showMainMenu();
+    const hasLevelParam = hasLevelQuery(window.location.search);
+
+    if (!hasLevelParam) {
+      this.showMainMenu();
+    } else if (this.mainMenuEl) {
+      this.mainMenuEl.classList.add('hidden');
+    }
 
     // Check for daily wheel on second launch
     await this.checkDailyWheel();
-    await this.handleDeepLink();
 
-    // Handle shared level links (e.g. ?level=ID)
+    const deepLinkLaunched = await this.handleDeepLink();
+    if (deepLinkLaunched) {
+      return;
+    }
+
+    if (!hasLevelParam) {
+      await this.handleSharedLevelLaunch();
+      return;
+    }
+
+    this.showMainMenu();
+
     await this.handleSharedLevelLaunch();
 
   }
@@ -599,8 +616,10 @@ class App {
       const levelId = customEvent.detail?.levelId;
       if (levelId) {
         await blurTransition.transitionWithBlur(async () => {
-          await this.playUserLevel(levelId);
-          this.hideMainMenu();
+          const success = await this.playUserLevel(levelId);
+          if (success) {
+            await this.hideMainMenu();
+          }
         }, { blurIntensity: 'lg', inDuration: 200, outDuration: 250 });
       }
     });
@@ -906,8 +925,10 @@ class App {
             const levelId = (e.currentTarget as HTMLElement).dataset.levelId;
             if (levelId) {
               await blurTransition.transitionWithBlur(async () => {
-                await this.playUserLevel(levelId);
-                this.hideMainMenu();
+                const success = await this.playUserLevel(levelId);
+                if (success) {
+                  await this.hideMainMenu();
+                }
               }, { blurIntensity: 'lg', inDuration: 200, outDuration: 250 });
             }
           });
@@ -1002,7 +1023,10 @@ class App {
       const result = await manager.show();
 
       if (result?.action === 'play' && result.levelId) {
-        await this.playUserLevel(result.levelId);
+        const success = await this.playUserLevel(result.levelId);
+        if (success) {
+          await this.hideMainMenu();
+        }
       }
     } catch (error) {
       console.error('Failed to open level explorer:', error);
@@ -1186,8 +1210,10 @@ class App {
               });
 
               // Close explore view and start level
-              await this.playUserLevel(levelId);
-              this.hideMainMenu();
+              const success = await this.playUserLevel(levelId);
+              if (success) {
+                await this.hideMainMenu();
+              }
             });
           });
 
@@ -1289,9 +1315,8 @@ class App {
       return;
     }
 
-    const params = new URLSearchParams(window.location.search);
-    const levelId = params.get('level');
-    if (!levelId) {
+    const levelId = getLevelQuery(window.location.search);
+    if (!isUserLevelId(levelId)) {
       return;
     }
 
@@ -1441,12 +1466,20 @@ class App {
       playBtn.textContent = 'Loading…';
 
       try {
-        await blurTransition.transitionWithBlur(async () => {
-          await this.playUserLevel(levelId);
-          this.hideMainMenu();
+        const played = await blurTransition.transitionWithBlur(async () => {
+          const success = await this.playUserLevel(levelId);
+          if (success) {
+            await this.hideMainMenu();
+          }
+          return success;
         }, { blurIntensity: 'lg', inDuration: 200, outDuration: 250 });
 
-        closeSplash();
+        if (played) {
+          closeSplash();
+        } else {
+          playBtn.disabled = false;
+          playBtn.textContent = 'Start Playing';
+        }
       } catch (error) {
         console.error('Failed to start shared level:', error);
         this.showToast('Failed to load shared level', 'error');
@@ -2740,7 +2773,7 @@ class App {
   }
 
   // Load and play a specific user-created level by id
-  private async playUserLevel(id: string): Promise<void> {
+  private async playUserLevel(id: string): Promise<boolean> {
     loadingOverlay.show('Loading level...');
 
     try {
@@ -2758,8 +2791,10 @@ class App {
         seed: d.seed,
         author: d.author
       });
+      return true;
     } catch (e) {
       this.showToast('Failed to load user level', 'error');
+      return false;
     } finally {
       loadingOverlay.hide();
     }
@@ -2797,23 +2832,37 @@ class App {
     }
   }
 
-  private async handleDeepLink(): Promise<void> {
+  private async handleDeepLink(): Promise<boolean> {
     try {
-      const params = new URLSearchParams(window.location.search);
-      const levelParam = params.get('level');
+      const levelParam = getLevelQuery(window.location.search);
       if (!levelParam) {
-        return;
+        return false;
       }
 
-      if (/^\d+$/.test(levelParam)) {
+      if (!isUserLevelId(levelParam)) {
         this.currentLevel = Math.max(1, parseInt(levelParam, 10));
-        return;
+        return false;
       }
 
-      await this.playUserLevel(levelParam);
-      this.hideMainMenu();
+      const success = await this.playUserLevel(levelParam);
+      if (success) {
+        await this.hideMainMenu();
+        this.sharedLevelHandled = true;
+        this.clearSharedLevelQuery();
+        return true;
+      }
+
+      if (this.mainMenuEl) {
+        this.mainMenuEl.classList.remove('hidden');
+      }
+
+      return false;
     } catch (err) {
       console.error('Failed to process deep link:', err);
+      if (this.mainMenuEl) {
+        this.mainMenuEl.classList.remove('hidden');
+      }
+      return false;
     }
   }
   
