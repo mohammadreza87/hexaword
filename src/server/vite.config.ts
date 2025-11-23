@@ -12,7 +12,10 @@ export default defineConfig({
     target: "node22",
     sourcemap: true,
     rollupOptions: {
-      external: [...builtinModules],
+      external: [
+        ...builtinModules,
+        ...builtinModules.map(m => `node:${m}`),
+      ],
       output: {
         format: "cjs",
         entryFileNames: "index.cjs",

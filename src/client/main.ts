@@ -21,6 +21,7 @@ import { getPaletteForLevel } from '../web-view/config/ColorPalettes';
 import { shareUserLevelToReddit } from './services/UserLevelShareService';
 import { getLevelQuery, hasLevelQuery, isUserLevelId } from './utils/levelLinks';
 
+type GameData = Awaited<ReturnType<typeof fetchGameDataWithFallback>>;
 
 interface SharedLevelPreview {
   id: string;
@@ -49,6 +50,8 @@ class App {
   private colorPaletteService = ColorPaletteService.getInstance();
   private menuBusy = false;
   private sharedLevelHandled = false;
+  private preloadedGameData: GameData | null = null;
+  private preloadedLevelKey: string | null = null;
   
   constructor() {
     this.shareService = ShareService.getInstance();
@@ -135,6 +138,13 @@ class App {
     const deepLinkLaunched = await this.handleDeepLink();
     if (deepLinkLaunched) {
       return;
+    }
+
+    if (!hasLevelParam) {
+      const sharedAutoLaunched = await this.tryAutoLaunchSharedLevel();
+      if (sharedAutoLaunched) {
+        return;
+      }
     }
 
     if (!hasLevelParam) {
@@ -1352,6 +1362,78 @@ class App {
     }
   }
 
+  private async tryAutoLaunchSharedLevel(options?: { force?: boolean; levelId?: string }): Promise<boolean> {
+    if (this.sharedLevelHandled && !options?.force) {
+      return false;
+    }
+
+    try {
+      let data = this.preloadedGameData;
+
+      if (data && options?.levelId && data.levelId && data.levelId !== options.levelId) {
+        data = null;
+      }
+
+      if (!data) {
+        data = await fetchGameDataWithFallback(this.currentLevel);
+      }
+
+      if (!data) {
+        return false;
+      }
+
+      if (options?.levelId && data.levelId && data.levelId !== options.levelId) {
+        return false;
+      }
+
+      this.preloadedGameData = data;
+      this.preloadedLevelKey = String(typeof data.level !== 'undefined' ? data.level : this.currentLevel);
+
+      const isSharedLevel = data.shareType === 'user-level' && typeof data.levelId === 'string';
+      const hasWords = Array.isArray(data.words) && data.words.length > 0;
+      if (isSharedLevel && hasWords) {
+        this.sharedLevelHandled = true;
+        const words = data.words as string[];
+        const seed = data.seed || data.levelId || `shared:${Date.now()}`;
+        await this.startSharedUserLevel({
+          levelId: data.levelId!,
+          name: data.name,
+          clue: data.clue || 'CUSTOM',
+          words,
+          seed,
+          author: data.author,
+          letters: data.letters,
+          palette: data.palette
+        });
+        await this.hideMainMenu();
+        this.preloadedGameData = null;
+        this.preloadedLevelKey = null;
+        if (options?.levelId) {
+          this.clearSharedLevelQuery();
+        }
+        return true;
+      }
+
+      if (options?.levelId) {
+        const fallbackSuccess = await this.playUserLevel(options.levelId);
+        if (fallbackSuccess) {
+          this.sharedLevelHandled = true;
+          await this.hideMainMenu();
+          this.clearSharedLevelQuery();
+          this.preloadedGameData = null;
+          this.preloadedLevelKey = null;
+          return true;
+        }
+      }
+    } catch (error) {
+      console.error('Failed to auto-launch shared level from server:', error);
+      this.preloadedGameData = null;
+      this.preloadedLevelKey = null;
+    }
+
+    return false;
+  }
+
   private renderSharedLevelSplash(
     levelId: string,
     preview: SharedLevelPreview,
@@ -1523,6 +1605,21 @@ class App {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
+  }
+
+  private takePreloadedGameData(level: number): GameData | null {
+    if (!this.preloadedGameData || !this.preloadedLevelKey) {
+      return null;
+    }
+
+    if (this.preloadedLevelKey !== String(level)) {
+      return null;
+    }
+
+    const data = this.preloadedGameData;
+    this.preloadedGameData = null;
+    this.preloadedLevelKey = null;
+    return data;
   }
   
   private async shareLevelInline(levelId: string, levelName: string, levelClue: string): Promise<void> {
@@ -2116,10 +2213,19 @@ class App {
   }
 
   private async loadLevelFromServer(level: number): Promise<void> {
-    const d = await fetchGameDataWithFallback(level, (error) => {
+    const cached = this.takePreloadedGameData(level);
+    const d = cached ?? await fetchGameDataWithFallback(level, (error) => {
       this.showToast(error.message, 'warning');
     });
+    console.log('[Client Main Debug] loadLevelFromServer received:', {
+      shareType: d.shareType,
+      levelId: d.levelId,
+      hasShareType: !!d.shareType,
+      isUserLevel: d.shareType === 'user-level',
+      hasLevelId: typeof d.levelId === 'string'
+    });
     if (d.shareType === 'user-level' && typeof d.levelId === 'string') {
+      console.log('[Client Main Debug] Starting shared user level:', d.levelId);
       await this.startSharedUserLevel({
         levelId: d.levelId,
         name: d.name,
@@ -2859,9 +2965,12 @@ class App {
         return false;
       }
 
-      // Non-numeric level params correspond to shared/user-created levels.
-      // These are handled by the shared level splash flow so we can return early here.
-      return;
+      const launched = await this.tryAutoLaunchSharedLevel({ force: true, levelId: levelParam });
+      if (launched) {
+        return true;
+      }
+
+      return false;
     } catch (err) {
       console.error('Failed to process deep link:', err);
       if (this.mainMenuEl) {

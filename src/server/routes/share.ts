@@ -75,6 +75,8 @@ router.post('/api/share', asyncHandler(async (req, res) => {
 router.post('/api/share/user-level', asyncHandler(async (req, res) => {
   const { levelId, title } = req.body as { levelId?: string; title?: string };
 
+  console.log('[Share Debug] Sharing user level:', { levelId, title });
+
   if (!levelId) {
     res.status(400).json({
       status: 'error',
@@ -84,6 +86,8 @@ router.post('/api/share/user-level', asyncHandler(async (req, res) => {
   }
 
   const { subredditName } = context;
+  console.log('[Share Debug] Subreddit context:', subredditName);
+
   if (!subredditName) {
     res.status(400).json({
       status: 'error',
@@ -95,6 +99,7 @@ router.post('/api/share/user-level', asyncHandler(async (req, res) => {
   const levelKey = `hw:ulevel:${levelId}`;
   const rawLevel = await redis.get(levelKey);
   if (!rawLevel) {
+    console.log('[Share Debug] Level not found:', levelKey);
     res.status(404).json({
       status: 'error',
       message: 'Level not found'
@@ -103,9 +108,18 @@ router.post('/api/share/user-level', asyncHandler(async (req, res) => {
   }
 
   const level = JSON.parse(rawLevel) as UserLevelRecord;
+  console.log('[Share Debug] Level data:', { name: level.name, clue: level.clue, words: level.words });
+
   const splash = buildSplashConfig(level);
   const sharedRecord = createSharedLevelRecord(level, splash.paletteName, splash.letters);
   const postTitle = title?.trim() || defaultShareTitle(level);
+
+  console.log('[Share Debug] Creating post with:', {
+    title: postTitle,
+    levelId: sharedRecord.levelId,
+    entryUri: `index.html?level=${encodeURIComponent(levelId)}`,
+    palette: splash.paletteName
+  });
 
   try {
     const post = await reddit.submitCustomPost({
@@ -116,7 +130,7 @@ router.post('/api/share/user-level', asyncHandler(async (req, res) => {
         backgroundUri: splash.backgroundUri,
         buttonLabel: splash.buttonLabel,
         description: splash.description,
-        entryUri: 'index.html',
+        entryUri: `index.html?level=${encodeURIComponent(levelId)}`,
         heading: splash.heading,
         appIconUri: createHexagonIcon()
       },
@@ -132,6 +146,11 @@ router.post('/api/share/user-level', asyncHandler(async (req, res) => {
         sharedAt: sharedRecord.sharedAt,
         palette: sharedRecord.palette
       }
+    });
+
+    console.log('[Share Debug] Post created successfully:', {
+      postId: post.id,
+      url: post.url
     });
 
     await redis.set(

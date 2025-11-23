@@ -152,6 +152,15 @@ export async function fetchGameDataWithFallback(
 
   try {
     const init = await getGameInit(level);
+    console.log('[Client API Debug] Game init response:', {
+      shareType: init.shareType,
+      levelId: init.levelId,
+      name: init.name,
+      clue: init.clue,
+      hasWords: !!init.words?.length,
+      wordCount: init.words?.length,
+      level: init.level
+    });
     return {
       seed: init.seed || getLocalSeed(),
       words: init.words?.length ? init.words : defaultWords,

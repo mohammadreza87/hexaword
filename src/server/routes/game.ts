@@ -59,7 +59,16 @@ gameRouter.get<unknown, GameInitResponse | ApiErrorResponse>(
   asyncHandler(async (req, res): Promise<void> => {
     const requestId = (req as any).requestId;
     const { postId } = context;
-    
+
+    // Debug: Log full context to see what's available
+    console.log('[Game Init Debug] Full context:', {
+      postId,
+      subredditName: context.subredditName,
+      userId: context.userId,
+      // Try to access postData if available
+      contextKeys: Object.keys(context)
+    });
+
     // Validate context
     if (!postId) {
       logger.error('Missing postId in context', undefined, { requestId });
@@ -85,9 +94,19 @@ gameRouter.get<unknown, GameInitResponse | ApiErrorResponse>(
 
     // Check if this post is a shared user level
     const sharedKey = `${SHARED_LEVEL_REDIS_KEY_PREFIX}${postId}`;
+    console.log('[Game Init Debug] Checking for shared level with key:', sharedKey);
     const sharedData = await redis.get(sharedKey);
+    console.log('[Game Init Debug] Shared level data found:', !!sharedData);
+
     if (sharedData) {
       const record = JSON.parse(sharedData) as SharedLevelPostRecord;
+      console.log('[Game Init Debug] Returning shared level:', {
+        levelId: record.levelId,
+        name: record.name,
+        clue: record.clue,
+        shareType: 'user-level'
+      });
+
       const sharedResponse: GameInitResponse = {
         type: 'game_init',
         postId,
